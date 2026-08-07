@@ -4,33 +4,31 @@
 
 ## 1. 기본 원칙
 
-- `main` 브랜치에 직접 commit하거나 push하지 않는다.
-- 모든 작업은 Issue를 기준으로 시작하고 별도 branch에서 진행한다.
-- 하나의 branch와 Pull Request는 하나의 목적만 가진다.
+- 기본 작업은 로컬 `main` 브랜치에서 진행한다.
 - 변경은 기능, 테스트, 문서, 리팩터링처럼 논리적인 작업 단위로 commit한다.
+- 완료하고 검증한 작업 단위는 로컬 `main`에 직접 commit한다.
+- branch, Pull Request 또는 별도 리뷰 흐름은 사용자가 요청하거나 팀에서 별도로 합의한 경우에만 사용한다.
 - 코드 변경에는 필요한 테스트와 문서 변경을 함께 포함한다.
 - 다른 사람의 작업이나 기존 미커밋 변경을 임의로 수정하거나 되돌리지 않는다.
 - API key, token, 실제 `.env` 및 개인정보는 commit하지 않는다.
-- merge 전에 필수 검사와 리뷰를 통과해야 한다.
+- `push`, merge, rebase 및 PR 생성은 사용자의 명시적 요청이 있을 때만 수행한다.
 
 ## 2. 작업 흐름
 
 ```text
-Issue 생성
-  → 담당자와 범위 확정
-  → 최신 main에서 branch 생성
-  → 작은 작업 단위로 구현 및 commit
+작업 범위 확인
+  → local main과 기존 변경 확인
+  → 작은 작업 단위로 구현
   → 로컬 검증
-  → remote branch push
-  → Pull Request 생성
-  → CI와 코드 리뷰
-  → 승인 후 merge
-  → 작업 branch 삭제
+  → 관련 파일만 staging
+  → local main에 작업 단위 commit
+  → 결과와 commit 해시 보고
+  → 사용자가 요청한 경우에만 push
 ```
 
 ## 3. Issue 규칙
 
-코드나 문서를 변경하기 전에 Issue에 작업 목적과 완료 조건을 기록한다.
+협업 추적이 필요한 작업은 구현 전에 Issue에 작업 목적과 완료 조건을 기록한다. 작은 로컬 작업은 사용자 요청 자체를 작업 범위로 사용할 수 있다.
 
 Issue에는 다음 내용을 포함한다.
 
@@ -53,17 +51,22 @@ Issue에는 다음 내용을 포함한다.
 
 작업 중 범위가 크게 달라지면 기존 Issue를 조용히 확장하지 않는다. Issue 설명을 갱신하거나 별도 Issue로 분리한다.
 
-## 4. Branch 규칙
+## 4. Main 및 Branch 규칙
 
-branch는 최신 `main`에서 생성한다.
+별도 지시가 없으면 현재 작업을 로컬 `main`에서 수행한다.
 
 ```bash
 git switch main
-git pull --ff-only origin main
+git status --short --branch
+```
+
+원격 변경을 가져오거나 push하는 작업은 사용자 요청이 있을 때만 수행한다. 현재 작업을 별도 branch에서 진행하라는 요청이 있을 때는 최신 `main`을 기준으로 branch를 생성한다.
+
+```bash
 git switch -c feat/12-health-check
 ```
 
-branch 이름은 다음 형식을 사용한다.
+별도 branch를 사용하는 경우 다음 이름 형식을 사용한다.
 
 ```text
 <type>/<issue-number>-<short-description>
@@ -80,7 +83,7 @@ branch 이름은 다음 형식을 사용한다.
 | `refactor` | 동작 변경 없는 구조 개선 | `refactor/17-prompt-router` |
 | `chore` | 설정, 의존성, 도구 변경 | `chore/5-ruff-config` |
 
-branch 이름은 영문 소문자와 숫자, 하이픈을 사용한다. 여러 작업을 하나의 장기 branch에 누적하지 않는다.
+branch 이름은 영문 소문자와 숫자, 하이픈을 사용한다. 명시적으로 branch 흐름을 선택한 경우에도 여러 작업을 하나의 장기 branch에 누적하지 않는다.
 
 ## 5. Commit 규칙
 
@@ -121,13 +124,13 @@ chore: Ruff 검사 규칙 설정
 
 - `수정`, `작업`, `update`처럼 목적을 알 수 없는 메시지
 - 기능 구현과 무관한 포맷 변경을 섞은 commit
-- 테스트가 실패하는 중간 상태를 공유 branch에 남기는 commit
+- 테스트가 실패하는 중간 상태를 완료 commit으로 남기는 것
 - 다른 작업자의 파일이나 개인 설정을 포함한 commit
 - 비밀값을 삭제했다는 이유만으로 해당 비밀값이 포함된 이력을 push하는 것
 
 ## 6. Pull Request 규칙
 
-Pull Request는 가능한 한 작게 유지한다. 리뷰어가 한 가지 목적과 데이터 흐름을 이해할 수 있는 크기가 기준이다.
+Pull Request는 사용자가 요청하거나 팀이 별도 branch 기반 협업을 선택한 경우에만 생성한다. 생성하는 경우 가능한 한 작게 유지하며, 리뷰어가 한 가지 목적과 데이터 흐름을 이해할 수 있는 크기를 기준으로 한다.
 
 PR 제목은 Issue 또는 commit과 동일한 type을 사용한다.
 
@@ -194,8 +197,9 @@ PR 본문에는 다음 내용을 포함한다.
 
 작성자는 리뷰 의견에 수정 commit 또는 설명으로 응답한다. 해결하지 않은 `blocking` 의견이 남아 있으면 merge하지 않는다.
 
-## 8. Merge 규칙
+## 8. Branch와 Pull Request 사용 시 Merge 규칙
 
+- 이 절은 사용자가 별도 branch 또는 PR 흐름을 명시적으로 요청한 경우에만 적용한다.
 - CI가 모두 통과하고 최소 1명의 승인을 받은 뒤 merge한다.
 - 작성자가 단독으로 작성하고 승인한 PR을 바로 merge하지 않는다.
 - 기본 방식은 Squash merge를 사용하여 `main`에 PR 단위의 명확한 이력을 남긴다.
@@ -218,7 +222,9 @@ PR 본문에는 다음 내용을 포함한다.
 
 - AI 에이전트는 작업 시작 전 `README.md`, `AGENTS.md` 및 관련 `docs/` 문서를 확인한다.
 - AI 에이전트가 생성한 코드도 사람이 작성한 코드와 동일한 리뷰와 테스트 기준을 적용한다.
-- 에이전트는 사용자가 요청하거나 현재 작업에서 허용한 경우에만 commit한다.
+- 에이전트는 별도 지시가 없으면 로컬 `main`에서 작업한다.
+- 에이전트는 완료하고 검증한 변경을 논리적 작업 단위별로 로컬 `main`에 commit한다.
+- 에이전트는 사용자의 명시적 요청 없이 branch를 생성하거나 전환하지 않는다.
 - 에이전트는 사용자의 명시적 요청 없이 `push`, merge, rebase, PR 생성 또는 branch 삭제를 수행하지 않는다.
 - 에이전트는 기존 미커밋 변경을 임의로 staging하거나 자신의 commit에 포함하지 않는다.
 - 작업 완료 시 변경 파일, commit 여부, 검증 결과 및 남은 변경을 보고한다.
@@ -227,13 +233,10 @@ PR 본문에는 다음 내용을 포함한다.
 
 GitHub의 `main` branch에 다음 보호 규칙을 설정하는 것을 권장한다.
 
-- Pull Request를 통한 변경만 허용
-- merge 전 승인 최소 1명 요구
-- 새로운 commit이 추가되면 기존 승인 무효화
-- 필수 CI 검사 통과 요구
-- unresolved conversation이 있으면 merge 차단
 - force push 및 branch 삭제 금지
-- 관리자도 가능하면 동일한 보호 규칙 적용
+- push 권한을 필요한 팀원으로 제한
+- `main` push 시 CI 검사 실행
+- 관리자도 force push와 branch 삭제 제한 적용
 
 초기 필수 CI 검사는 다음과 같이 구성한다.
 
@@ -252,6 +255,5 @@ pytest
 - 구현과 테스트 작성 완료
 - formatter, lint, type check 및 test 통과
 - 관련 문서와 API 계약 갱신
-- PR 리뷰 의견 해결
-- CI 통과 및 승인 후 merge
-- merge 후 작업 branch 정리
+- 작업 단위의 local `main` commit 생성
+- push를 요청받은 경우 원격 반영과 CI 결과 확인
