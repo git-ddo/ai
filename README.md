@@ -38,6 +38,6 @@ Spring Boot Backend
 - Python 3.12+
 - FastAPI, Uvicorn
 - Pydantic v2
-- OpenAI Structured Outputs
+- Google Gen AI SDK와 Gemini Structured Output
 - pytest, Ruff, type checker
 - Docker, GitHub Actions

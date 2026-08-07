@@ -2,7 +2,7 @@
 
 GitHub Repository의 구조화된 근거와 사용자 입력을 바탕으로 취업용 포트폴리오 코칭 리포트를 생성하는 AI 서버이다.
 
-전체 서비스 기획은 루트 [`README.md`](../README.md), 상세 AI 개발 명세는 [`guide.md`](../guide.md), AI 에이전트 작업 규칙은 [`AGENTS.md`](../AGENTS.md)를 참고한다.
+전체 서비스 기획은 루트 [`README.md`](../README.md), 상세 AI 개발 명세는 [`guide.md`](../docs/guide.md), AI 에이전트 작업 규칙은 [`AGENTS.md`](../AGENTS.md)를 참고한다.
 
 > 현재는 AI 서버 구현 전 단계이다. 아래 내용은 개발 목표와 예정된 실행 구조를 설명한다.
 
@@ -61,7 +61,7 @@ AI가 만든 해석과 추천은 입력에서 확인된 사실로 표현하지 �
 | API | FastAPI, Uvicorn |
 | Schema | Pydantic v2 |
 | Settings | pydantic-settings |
-| LLM | OpenAI Python SDK, Structured Outputs |
+| LLM | Google Gen AI SDK (`google-genai`), Gemini Structured Output |
 | Retry | tenacity |
 | Criteria | PyYAML |
 | Test | pytest, pytest-asyncio |
@@ -124,7 +124,7 @@ Content-Type: application/json
 - 최대 5개의 `repositories`
 - Repository별 GitHub 근거, 백엔드 계산 지표 및 사용자 역할
 
-응답은 자유 형식 Markdown이 아닌 Pydantic 모델로 검증된 JSON이다. 상세 요청·응답 예시는 루트 [`guide.md`](../guide.md)를 참고한다.
+응답은 자유 형식 Markdown이 아닌 Pydantic 모델로 검증된 JSON이다. 상세 요청·응답 예시는 [`guide.md`](../docs/guide.md)를 참고한다.
 
 ## 개발 순서
 
@@ -132,7 +132,7 @@ Content-Type: application/json
 2. 요청·응답 Pydantic 모델 및 API 계약 확정
 3. LLM 없이 고정 응답을 반환하는 Mock API 구현
 4. 직무별 Criteria와 분석 목적별 Prompt Routing 구현
-5. LLM Provider 및 OpenAI Structured Outputs 연동
+5. LLM Provider 및 Gemini Structured Output 연동
 6. Repository별 분석과 전체 포트폴리오 종합 구현
 7. Evidence Validator와 실패 정책 구현
 8. 백엔드 통합 및 품질 평가
@@ -148,9 +148,9 @@ APP_ENV=local
 APP_HOST=0.0.0.0
 APP_PORT=8000
 
-LLM_PROVIDER=openai
-LLM_API_KEY=
-LLM_MODEL=
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.6-flash
 LLM_TIMEOUT_SECONDS=60
 LLM_MAX_RETRIES=2
 

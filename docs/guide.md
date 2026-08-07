@@ -67,8 +67,8 @@ README·파일·Commit·PR 수집
 | Server | Uvicorn | ASGI 서버 |
 | Schema | Pydantic v2 | 요청·응답 검증 |
 | Settings | pydantic-settings | 환경변수 관리 |
-| LLM | OpenAI Python SDK | LLM 호출 |
-| Output | Structured Outputs | JSON Schema 기반 출력 |
+| LLM | Google Gen AI SDK (`google-genai`) | Gemini API 호출 |
+| Output | Gemini Structured Output | JSON Schema 기반 출력 |
 | HTTP | httpx | 외부 HTTP 통신 |
 | Retry | tenacity | 제한적인 LLM 재시도 |
 | Criteria | PyYAML | 직무별 평가 기준 관리 |
@@ -122,7 +122,7 @@ ai/
 │   │   └── interview.py
 │   ├── llm/
 │   │   ├── provider.py
-│   │   └── openai_provider.py
+│   │   └── gemini_provider.py
 │   ├── services/
 │   │   ├── normalization_service.py
 │   │   ├── repository_service.py
@@ -772,10 +772,10 @@ TargetJob과 AnalysisPurpose에 따라
 ### Phase 5. LLM Provider 연동
 
 - [ ] 공통 `LLMProvider` 인터페이스 정의
-- [ ] OpenAI Provider 구현
+- [ ] Google Gen AI SDK 기반 Gemini Provider 구현
 - [ ] Timeout 설정
 - [ ] 제한적인 Retry 설정
-- [ ] Structured Outputs 적용
+- [ ] Gemini Structured Output과 Pydantic 응답 모델 연결
 - [ ] 모델명 환경변수화
 - [ ] API 오류 변환
 - [ ] 사용량 및 처리 시간 로그 기록
@@ -935,9 +935,9 @@ APP_ENV=local
 APP_HOST=0.0.0.0
 APP_PORT=8000
 
-LLM_PROVIDER=openai
-LLM_API_KEY=
-LLM_MODEL=
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.6-flash
 LLM_TIMEOUT_SECONDS=60
 LLM_MAX_RETRIES=2
 
