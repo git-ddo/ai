@@ -204,6 +204,9 @@ contractVersion: "1.0"
 snapshotSchemaVersion: 1
 백엔드가 생성한 저장소 Snapshot 구조 버전
 
+snapshotHashAlgorithm: "SHA1" 또는 "SHA256"
+snapshotSha 해석과 길이 검증에 사용하는 Git 객체 해시 알고리즘
+
 extractorVersion: "p0-collector-1.0"
 백엔드 Evidence 수집기 버전
 
@@ -224,6 +227,8 @@ claimId: claim_001 형식
 itemId: item_001 형식
 contentHash: SHA-256 lowercase hex
 ```
+
+`snapshotSha`는 Repository에 함께 전달된 `snapshotHashAlgorithm`을 기준으로 검증한다. SHA-1은 40자리, SHA-256은 64자리 hex 문자열을 사용한다. 대소문자와 Git object format 세부 규칙은 공용 JSON Schema 확정 시 백엔드와 최종 확인한다.
 
 ID 문자열 패턴은 다음을 기준으로 한다.
 
@@ -259,6 +264,7 @@ contractVersion: "1.0"
 JSON Schema: Draft 2020-12
 JSON 필드명: camelCase
 enum: UPPER_SNAKE_CASE
+날짜: ISO 8601 full-date (`YYYY-MM-DD`)
 날짜·시간: ISO 8601 UTC
 빈 목록: []
 선택 값 없음: null
@@ -335,6 +341,22 @@ Priority
 - HIGH
 - MEDIUM
 - LOW
+
+StatementType
+- RESUME
+- PORTFOLIO
+- INTERVIEW
+
+SnapshotHashAlgorithm
+- SHA1
+- SHA256
+
+EvidenceValueType
+- STRING
+- BOOLEAN
+- INTEGER
+- DECIMAL
+- STRING_LIST
 ```
 
 ### 9.2 MVP 런타임 허용 조합
@@ -397,6 +419,7 @@ Evidence는 `evidenceType`을 discriminator로 사용하는 모델로 구현한�
 ```text
 GitHubStaticEvidence
 - factKey
+- valueType
 - value
 - path(optional)
 
@@ -415,12 +438,23 @@ CodeEvidence
 
 BackendDerivedEvidence
 - metricKey
+- valueType
 - value
 - sourceEvidenceRefs
 - derivedFromLevel
 ```
 
-`value`는 JSON Schema에서 허용 범위를 명시한다. 임의 객체 전체를 허용하지 않고 문자열·숫자·불리언·문자열 배열처럼 실제로 필요한 타입만 사용한다.
+Evidence `value`는 `EvidenceValueType`에 따라 다음 값만 허용한다.
+
+```text
+STRING      → JSON string
+BOOLEAN     → JSON boolean
+INTEGER     → JSON integer
+DECIMAL     → JSON decimal 표현
+STRING_LIST → JSON string array
+```
+
+자유 형식 object, 중첩 object, 임의 배열은 허용하지 않는다. `DECIMAL`의 JSON number 또는 string 표현, `valueType` 필드의 최종 명칭과 각 값의 길이·범위는 공용 JSON Schema 작성 전에 백엔드와 확정한다.
 
 `contentHash`는 다음 규칙으로 생성한다.
 
@@ -445,6 +479,8 @@ participationEndedAt
 relatedEvidenceRefs
 ```
 
+`participationStartedAt`과 `participationEndedAt`은 ISO 8601 full-date(`YYYY-MM-DD`) 또는 `null`을 사용한다. 시작일·종료일의 필수 여부와 기간 역전 검증 규칙은 공용 계약에서 확정한다.
+
 ### 10.3 UserClaim 연결 상태
 
 ```text
@@ -468,7 +504,21 @@ CONFLICTING
 
 README 섹션, 테스트, 배포 설정 등의 누락 기반 사실은 AI가 직접 만들지 않는다. 백엔드가 수집 범위와 규칙을 적용하여 `BACKEND_DERIVED` Evidence로 전달한다.
 
-### 10.4 ReportItem
+### 10.4 GroundedItem과 ReportItem
+
+`GroundedItem`은 Evidence와 UserClaim 참조를 유지하는 응답 항목의 공통 기반이다. `jobAppeal`과 `portfolioStatements`는 `GroundedItem` 기반 배열로 반환한다.
+
+공통 기반에 필요한 의미는 다음과 같다.
+
+```text
+itemId
+content
+repositoryRefs
+evidenceRefs
+claimRefs
+```
+
+`analysisDepth`, `confidence`, `supportStatus`를 `GroundedItem` 공통 필드에 둘지 각 하위 모델에 둘지는 백엔드의 최종 정상 응답 JSON을 기준으로 확정한다.
 
 AI 결과는 다음 유형으로 구분한다.
 
@@ -574,6 +624,7 @@ repositoryId
 repositoryFullName
 defaultBranch
 snapshotSha
+snapshotHashAlgorithm
 snapshotSchemaVersion
 extractorVersion
 completedEvidenceLevels
@@ -597,7 +648,8 @@ evidence
       "repositoryId": 123456789,
       "repositoryFullName": "git-ddo/backend",
       "defaultBranch": "main",
-      "snapshotSha": "snapshot-commit-sha",
+      "snapshotSha": "0123456789abcdef0123456789abcdef01234567",
+      "snapshotHashAlgorithm": "SHA1",
       "snapshotSchemaVersion": 1,
       "extractorVersion": "p0-collector-1.0",
       "completedEvidenceLevels": ["P0"],
@@ -609,7 +661,7 @@ evidence
           "evidenceType": "GITHUB_STATIC",
           "analysisDepth": "P0",
           "repositoryFullName": "git-ddo/backend",
-          "snapshotSha": "snapshot-commit-sha",
+          "snapshotSha": "0123456789abcdef0123456789abcdef01234567",
           "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "summary": "README 파일이 존재합니다.",
           "factKey": "README_EXISTS",
@@ -650,7 +702,22 @@ validationWarnings
 provider
 model
 promptVersion
+generatedAt
+durationMs
+attemptCount
+tokenUsage
 ```
+
+확정된 의미는 다음과 같다.
+
+```text
+generatedAt  → 생성 완료 시각
+durationMs   → AI 요청 전체 처리 시간
+attemptCount → 최초 호출을 포함한 provider 시도 횟수
+tokenUsage   → 입력·출력 및 합계 토큰 사용량
+```
+
+`generatedAt`은 ISO 8601 UTC를 사용하고 `durationMs`는 0 이상의 정수, `attemptCount`는 1 이상의 정수로 정의한다. `tokenUsage`의 정확한 하위 필드와 Gemini의 cached/thought token 포함 여부는 공용 JSON Schema 작성 전에 백엔드와 확정한다.
 
 저장소별 리포트 필수 필드:
 
@@ -665,6 +732,8 @@ limitations
 ### 13.1 `jobAppeal`
 
 `jobAppeal`은 GitHub 및 백엔드에서 수집한 공개 Evidence를 기반으로 확인되는 직무 어필 포인트이다. UserClaim만으로 직무 역량을 단정하지 않는다.
+
+`jobAppeal`은 `GroundedItem` 기반 배열로 반환한다.
 
 각 항목의 최소 필드는 다음과 같다.
 
@@ -687,28 +756,59 @@ confidence
 
 `portfolioStatements`는 실제 이력서·포트폴리오·면접 답변에 사용할 수 있는 문장 초안이다.
 
-기존의 단순 문자열 대신 각 문장을 참조 가능한 객체로 반환한다.
+기존의 단순 문자열 대신 `statementType`을 포함한 `GroundedItem` 기반 배열로 반환한다.
 
 ```text
 itemId
+statementType
 content
+repositoryRefs
 evidenceRefs
 claimRefs
 ```
 
 각 문장은 `evidenceRefs` 또는 `claimRefs` 중 최소 하나를 포함해야 한다. 사용자 역할을 포함한 문장은 UserClaim에 근거했다는 사실을 유지하고 GitHub에서 검증된 사실처럼 표현하지 않는다.
 
-권장 하위 구분은 다음과 같다.
+`statementType`은 다음 값만 허용한다.
 
 ```text
-resume
-portfolio
-interview
+RESUME
+PORTFOLIO
+INTERVIEW
 ```
 
 `itemId`는 `overallDiagnosis`, `repositoryReports`, `representativeProjects`, `jobAppeal`, `roadmap`, `interviewQuestions`, `portfolioStatements` 전체에서 중복되면 안 된다.
 
 `overallDiagnosis`의 개선 항목, Repository별 개선 항목, `roadmap`처럼 행동을 권하는 모든 항목은 동일한 Recommendation 계약을 사용하며 `itemId`와 `evidenceRefs`를 반드시 포함한다.
+
+### 13.3 `validationWarnings`
+
+`validationWarnings`는 응답 전체를 실패시킬 정도가 아닌 비치명적 제한만 표현한다.
+
+```text
+제한된 Evidence 범위
+수집 경고로 인한 분석 범위 축소
+응답을 사용할 수는 있지만 함께 표시해야 하는 한계
+```
+
+잘못된 참조, 분석 깊이 위반, 필수 필드 누락, 근거 없는 Recommendation처럼 계약 신뢰성을 깨뜨리는 문제는 warning으로 낮추지 않고 Error Envelope로 전체 실패 처리한다. Warning 객체의 정확한 code, message, JSON Pointer 또는 Repository 참조 필드는 백엔드 정상 응답 JSON을 기준으로 확정한다.
+
+### 13.4 공용 JSON Schema 작성 전 추가 확정 항목
+
+다음 항목은 의미는 합의되었지만 JSON 필드 수준의 계약이 남아 있다. 백엔드의 정상 요청·응답·오류 JSON을 받은 뒤 공용 Fixture와 JSON Schema에 반영한다.
+
+- `GroundedItem`의 정확한 필드, 필수 여부, null 허용 여부
+- `repositoryRefs`가 `repositoryId`와 `repositoryFullName` 중 무엇을 참조하는지
+- `portfolioStatements`에 `analysisDepth`, `confidence`, `supportStatus`를 포함할지
+- `tokenUsage`의 정확한 하위 필드와 Gemini cached/thought token 표현
+- `validationWarnings` 항목의 code, message, JSON Pointer 및 Repository 참조 필드
+- 오류 `details` 항목의 정확한 필드명과 여러 오류의 정렬·중복 규칙
+- Evidence의 타입 구분 필드명과 `DECIMAL`의 JSON 직렬화 방식
+- `snapshotSha`의 대소문자와 `snapshotHashAlgorithm`의 적용 범위
+- 참여 시작일·종료일의 필수 여부와 날짜 선후 관계
+- `BACKEND_DERIVED.sourceEvidenceRefs`의 최소 개수와 관측값 부재 표현
+
+이 항목을 임의로 추정해 Schema를 만들지 않는다.
 
 AI는 백엔드가 계산하지 않은 역량 점수, 기여율 또는 취업 가능성을 새로 생성하지 않는다.
 
@@ -728,6 +828,8 @@ AI는 백엔드가 계산하지 않은 역량 점수, 기여율 또는 취업 �
   "details": []
 }
 ```
+
+`details`는 JSON Pointer 기반 배열로 반환한다. 각 항목은 최소한 오류 위치를 나타내는 JSON Pointer와 기계 판독 가능한 code, 사용자 또는 개발자가 이해할 수 있는 message를 제공한다. 정확한 필드명과 동일 위치에 여러 오류가 있을 때의 표현 방식은 공용 오류 Fixture에서 확정한다.
 
 오류 코드:
 
@@ -987,10 +1089,13 @@ mypy app
 
 - [ ] `docs/contracts/README.md` 생성
 - [ ] Evidence, UserClaim, ReportItem 의미 작성
+- [ ] GroundedItem과 `statementType` 의미 작성
 - [ ] API 경로와 버전 정책 작성
 - [ ] 분석 깊이 허용 판단표 작성
 - [ ] enum 전체와 MVP 허용값 작성
 - [ ] 오류 코드 작성
+- [ ] 생성 메타데이터, 비치명적 Warning, JSON Pointer 오류 상세 규칙 작성
+- [ ] Snapshot hash 알고리즘, 참여 기간, Evidence value 타입 규칙 작성
 - [ ] 보안과 입력 제한 작성
 - [ ] `docs/guide.md`의 기존 대형 계약 예시를 공용 계약 문서 링크로 교체
 - [ ] Phase 2 완료 체크를 재설계 상태로 변경
@@ -1038,11 +1143,16 @@ ai/app/schemas/error.py
 - [ ] Evidence 모델 구현
 - [ ] UserClaim 모델 구현
 - [ ] 저장소 Snapshot 및 수집 범위 모델 구현
+- [ ] Snapshot hash 알고리즘과 hash 길이 제약 구현
+- [ ] 참여 기간 ISO date 및 null 제약 구현
+- [ ] Evidence value 타입별 제약과 자유 형식 object 거절 구현
 - [ ] UUID 기반 요청 모델 구현
-- [ ] ReportItem 기반 응답 모델 구현
+- [ ] ReportItem 및 GroundedItem 기반 응답 모델 구현
 - [ ] `jobAppeal` Evidence 기반 응답 모델 구현
-- [ ] 참조를 포함하는 `portfolioStatements` 모델 구현
+- [ ] `statementType`과 참조를 포함하는 `portfolioStatements` 모델 구현
+- [ ] `generationMetadata`, `tokenUsage`, `validationWarnings` 모델 구현
 - [ ] Error Envelope 구현
+- [ ] JSON Pointer 기반 오류 `details` 모델 구현
 - [ ] 저장소 1~5개 제한 적용
 - [ ] 알 수 없는 필드 거절 유지
 - [ ] 기존 계약 테스트를 새 계약에 맞게 교체
@@ -1075,7 +1185,9 @@ mypy app
 완료 조건:
 
 - 정상 요청·응답·오류 Fixture 검증 성공
-- 잘못된 UUID, enum, 필수 필드, 저장소 개수 검증 실패
+- 잘못된 UUID, enum, 필수 필드, 저장소 개수, Evidence value 검증 실패
+- `jobAppeal`과 `portfolioStatements`가 합의된 GroundedItem 계약을 따름
+- 생성 메타데이터와 Warning 및 오류 상세가 합의된 wire format을 따름
 - 기존 계약을 참조하는 테스트가 남아 있지 않음
 
 권장 커밋:
@@ -1097,7 +1209,10 @@ feat: 평가 API 계약 v1.0 재설계
 - [ ] `docs/contracts/fixtures` 생성
 - [ ] 정상 요청 Fixture 작성
 - [ ] 정상 응답 Fixture 작성
+- [ ] 비치명적 `validationWarnings`를 포함한 정상 응답 Fixture 작성
+- [ ] JSON Pointer `details`를 포함한 오류 Fixture 작성
 - [ ] 잘못된 Evidence 참조 Fixture 작성
+- [ ] 잘못된 Evidence value와 Snapshot hash 조합 Fixture 작성
 - [ ] 지원하지 않는 깊이 Fixture 작성
 - [ ] `ai/scripts/export_contracts.py` 작성
 - [ ] Pydantic 모델에서 Draft 2020-12 JSON Schema 생성
@@ -1140,7 +1255,11 @@ build: 평가 계약 JSON Schema 생성 체계 추가
 - [ ] `sourceEvidenceRefs` 존재 검증
 - [ ] `relatedEvidenceRefs` 존재 검증
 - [ ] Snapshot SHA 일치 검증
+- [ ] `snapshotHashAlgorithm`과 Snapshot SHA 길이 일치 검증
 - [ ] `contentHash` SHA-256 형식 검증
+- [ ] Evidence `valueType`과 실제 value 타입 일치 검증
+- [ ] Evidence 자유 형식 object value 거절
+- [ ] 참여 기간 날짜 선후 관계 검증
 - [ ] `completedEvidenceLevels`와 Evidence 깊이 일치 검증
 - [ ] MVP 지원 조합 검증
 - [ ] `repositoryId` 양의 정수 검증
@@ -1159,6 +1278,8 @@ Validator
 완료 조건:
 
 - 존재하지 않는 참조와 Snapshot 불일치를 거절
+- hash 알고리즘과 길이가 다르거나 Evidence value 타입이 다르면 거절
+- 참여 종료일이 시작일보다 빠르면 거절
 - P0 요청에 P1/P2 Evidence가 들어오면 거절
 - P1/P2 요청을 `UNSUPPORTED_COMBINATION`으로 변환
 - `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 이외 조합을 거절
@@ -1189,6 +1310,9 @@ feat: 평가 요청 의미 검증 추가
 - [ ] 모든 Recommendation의 Evidence 최소 1개 규칙 구현
 - [ ] `jobAppeal`의 Evidence 최소 1개 및 Claim 단독 사용 금지 구현
 - [ ] `portfolioStatements`의 Evidence 또는 Claim 최소 1개 규칙 구현
+- [ ] `portfolioStatements.statementType` 허용값 검증
+- [ ] `validationWarnings`에 비치명적 제한만 포함되는지 검증
+- [ ] `generationMetadata`의 시각·처리 시간·시도 횟수·tokenUsage 검증
 - [ ] 응답 전체 `itemId` 중복 검출
 - [ ] `NOT_OBSERVED` 의미 위반 검출
 - [ ] 개인 실력·취업 가능성·기여율 단정 검출
@@ -1201,6 +1325,7 @@ feat: 평가 요청 의미 검증 추가
 - P0 저장소에 대한 P1/P2 판단 거절
 - 근거 없는 Recommendation과 `jobAppeal` 거절
 - 참조 없는 포트폴리오 문장 거절
+- 치명적 계약 위반을 Warning으로 낮춘 응답 거절
 
 권장 커밋:
 
@@ -1364,6 +1489,9 @@ docs: 평가 계약 구현 상태와 개발 가이드 동기화
 - [ ] 알 수 없는 필드 거절
 - [ ] 현재 미지원 enum 조합 거절
 - [ ] `PORTFOLIO_ANALYSIS` 이외 분석 목적 거절
+- [ ] `snapshotHashAlgorithm`은 `SHA1`, `SHA256`만 허용
+- [ ] 알고리즘에 따라 Snapshot SHA 길이 검증
+- [ ] 참여 기간은 ISO date 또는 null만 허용
 
 ### 20.2 Evidence 테스트
 
@@ -1374,6 +1502,9 @@ docs: 평가 계약 구현 상태와 개발 가이드 동기화
 - [ ] 존재하지 않는 Evidence 참조 거절
 - [ ] Snapshot SHA 불일치 거절
 - [ ] `BACKEND_DERIVED` 원본 근거 누락 거절
+- [ ] Evidence value는 `STRING`, `BOOLEAN`, `INTEGER`, `DECIMAL`, `STRING_LIST`만 허용
+- [ ] Evidence value와 `valueType` 불일치 거절
+- [ ] 자유 형식 object 및 중첩 object value 거절
 
 ### 20.3 분석 깊이 테스트
 
@@ -1390,6 +1521,8 @@ docs: 평가 계약 구현 상태와 개발 가이드 동기화
 - [ ] `jobAppeal`은 Evidence 최소 1개 필수
 - [ ] UserClaim만 참조한 `jobAppeal` 거절
 - [ ] 모든 `portfolioStatements` 항목은 Evidence 또는 Claim 최소 1개 필수
+- [ ] `portfolioStatements.statementType`의 잘못된 enum 거절
+- [ ] `jobAppeal`과 `portfolioStatements`가 GroundedItem 공통 계약을 따름
 - [ ] 응답 전체 Item ID 중복 거절
 - [ ] 프로젝트 기반 InterviewQuestion은 근거 또는 Claim 필수
 - [ ] `NOT_OBSERVED`를 거짓으로 표현하면 거절
@@ -1398,8 +1531,11 @@ docs: 평가 계약 구현 상태와 개발 가이드 동기화
 
 - [ ] 모든 오류가 공통 Envelope 사용
 - [ ] `analysisId`를 알 수 없는 경우 `null` 허용
+- [ ] 오류 `details`가 유효한 JSON Pointer 기반 배열인지 검증
 - [ ] `retryable`과 HTTP 상태 조합 검증
 - [ ] 검증 실패 리포트를 부분 저장하지 않음
+- [ ] `validationWarnings`에는 비치명적 제한만 허용
+- [ ] `generationMetadata`의 생성 시각, 처리 시간, 시도 횟수, tokenUsage 검증
 
 ### 20.6 보안 테스트
 
@@ -1486,10 +1622,17 @@ Pydantic 직렬화 결과가 camelCase 계약과 일치하는가
 - [ ] `analysisId`가 UUID v4이며 Repository·Evidence·Claim·Item ID 규칙이 적용됨
 - [ ] Evidence, UserClaim, ReportItem이 분리됨
 - [ ] `contractVersion`과 Snapshot·Extractor·Prompt 버전이 분리됨
+- [ ] `snapshotHashAlgorithm`과 Snapshot SHA 형식이 일치함
+- [ ] 참여 기간이 ISO date 또는 null로 직렬화됨
+- [ ] Evidence value가 합의된 다섯 타입으로 제한되고 자유 형식 object가 거절됨
 - [ ] 저장소별 `completedEvidenceLevels`와 `limitations`가 존재함
 - [ ] `jobAppeal`이 공개 Evidence만을 기반으로 함
 - [ ] 모든 Recommendation이 Evidence를 참조함
-- [ ] 모든 포트폴리오 문장이 Evidence 또는 Claim을 참조함
+- [ ] `jobAppeal`과 `portfolioStatements`가 GroundedItem 기반 배열임
+- [ ] 모든 포트폴리오 문장이 유효한 `statementType`과 Evidence 또는 Claim을 포함함
+- [ ] `generationMetadata`에 provider, model, promptVersion, 생성 시각, 처리 시간, 시도 횟수, tokenUsage가 포함됨
+- [ ] `validationWarnings`가 비치명적 제한만 표현함
+- [ ] 오류 `details`가 JSON Pointer 기반 배열임
 - [ ] AI 서버가 DB, Redis, Job Lock 없이 stateless로 동작함
 - [ ] P0 판단 범위를 넘는 결과를 Validator가 차단함
 - [ ] AI와 Spring Boot의 이중 검증 경계가 문서화됨
