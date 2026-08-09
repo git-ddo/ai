@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0",
+  "analysisId": 123,
+  "targetJob": "BACKEND",
+  "analysisPurpose": "INTERVIEW_PREPARATION",
+  "repositories": [
+    {
+      "repositoryId": 1001,
+      "name": "festival-order-service",
+      "fullName": "kang-dev/festival-order-service",
+      "description": "축제 부스 주문 관리 서비스",
+      "githubEvidence": {
+        "languages": [
+          {
+            "name": "Java",
+            "percentage": 88.5
+          }
+        ],
+        "techStacks": [
+          {
+            "name": "Spring Boot",
+            "confidence": "HIGH",
+            "evidence": [
+              {
+                "type": "GITHUB",
+                "path": "build.gradle",
+                "description": "Spring Boot 플러그인과 의존성이 확인됨"
+              }
+            ]
+          }
+        ],
+        "readme": {
+          "exists": true,
+          "hasIntroduction": true,
+          "hasFeatures": true,
+          "hasRunGuide": false,
+          "hasEnvironmentVariables": false,
+          "hasTechStack": true,
+          "hasApiExamples": false,
+          "hasTestingGuide": false,
+          "hasDeploymentGuide": false,
+          "hasTroubleshooting": false
+        },
+        "testing": {
+          "exists": true,
+          "fileCount": 4
+        },
+        "docker": {
+          "dockerfile": true,
+          "compose": false
+        },
+        "ci": {
+          "githubActions": false,
+          "runsBuild": false,
+          "runsTests": false
+        },
+        "activity": {
+          "recentCommitCount": 12,
+          "userCommitCount": 7,
+          "userPullRequestCount": 2,
+          "activityAreaCandidates": [
+            "CONTROLLER",
+            "SERVICE",
+            "SECURITY"
+          ]
+        }
+      },
+      "backendMetrics": {
+        "portfolioReadinessScore": 68,
+        "readmeReadinessScore": 45,
+        "evidenceClarityScore": 80
+      },
+      "userProvidedRole": {
+        "projectType": "TEAM",
+        "role": "Backend",
+        "implementedFeatures": [
+          "주문 생성 API",
+          "운영자 주문 상태 변경 API"
+        ],
+        "relatedFiles": [
+          "src/main/java/example/order/OrderController.java",
+          "src/main/java/example/order/OrderService.java"
+        ],
+        "relatedPullRequests": [],
+        "relatedCommits": []
+      }
+    }
+  ]
+}

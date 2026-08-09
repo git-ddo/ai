@@ -713,9 +713,9 @@ Docker 실행 성공
 
 - [ ] 백엔드 팀과 Request JSON 확정
 - [ ] 백엔드 팀과 Response JSON 확정
-- [ ] 공통 Enum 확정
-- [ ] `schemaVersion` 정책 확정
-- [ ] Pydantic Request 모델 작성
+- [x] 공통 Enum 확정
+- [x] `schemaVersion` 정책 확정
+- [x] Pydantic Request 모델 작성
 - [ ] Pydantic Response 모델 작성
 - [ ] 정상·경계·실패 예시 JSON 작성
 - [ ] OpenAPI 문서 확인
