@@ -74,6 +74,7 @@ git status --short --branch
 평가 저장소: 1~5개
 지원 직무: BACKEND
 목표 경력: ENTRY
+분석 목적: PORTFOLIO_ANALYSIS
 지원 분석 깊이: P0
 계약 버전: 1.0
 ```
@@ -84,7 +85,7 @@ Schema에는 확장 예정 enum을 포함할 수 있지만, 현재 지원하지 
 
 ```text
 MVP 1
-BACKEND × ENTRY × P0
+BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0
 
 MVP 2
 P1 커밋·PR 활동 근거와 사용자 진술 연결
@@ -128,13 +129,17 @@ snippet당 최대 120줄
 - GitHub API를 직접 호출하지 않음
 - 저장소 전체 코드와 GitHub raw response를 받지 않음
 - 전달된 Evidence와 UserClaim만 해석
-- 직무·목적별 코칭 리포트 생성
+- 합의된 직무·분석 목적에 맞는 코칭 리포트 생성
 - Pydantic 요청·응답 검증
 - Evidence 참조와 분석 깊이 검증
+- 모든 Recommendation의 Evidence 참조 검증
+- `jobAppeal`과 `portfolioStatements`의 참조 규칙 검증
 - README·코드·사용자 입력을 신뢰할 수 없는 데이터로 처리
 - 외부 입력에 포함된 지시문을 따르지 않음
 - 전달된 코드를 실행하지 않음
 - 분석 결과를 직접 DB에 저장하지 않음
+- Job, 결과, 멱등성 정보를 저장하지 않음
+- DB, Redis, in-memory Job Lock을 사용하지 않는 stateless 서버로 유지
 
 ---
 
@@ -212,17 +217,34 @@ AI Prompt 버전
 
 ```text
 DB PK: Long 사용 가능
-외부 analysisId: UUID
-evidenceId: 하나의 analysis 안에서 유일한 문자열
-claimId: 하나의 analysis 안에서 유일한 문자열
+외부 analysisId: UUID v4
+repositoryId: GitHub Repository numeric ID
+evidenceId: ev_001 형식
+claimId: claim_001 형식
+itemId: item_001 형식
 contentHash: SHA-256 lowercase hex
+```
+
+ID 문자열 패턴은 다음을 기준으로 한다.
+
+```text
+evidenceId: ^ev_[0-9]{3,}$
+claimId: ^claim_[0-9]{3,}$
+itemId: ^item_[0-9]{3,}$
+```
+
+`evidenceId`, `claimId`, `itemId`는 각각 하나의 `analysisId` 전체에서 유일해야 한다. Repository가 달라져도 번호를 다시 시작하지 않는다.
+
+```text
+repo1: ev_001, ev_002
+repo2: ev_003, ev_004
 ```
 
 Evidence 참조는 토큰 절약을 위해 문자열 ID 배열을 사용한다.
 
 ```json
 {
-  "evidenceRefs": ["ev-001", "ev-002"]
+  "evidenceRefs": ["ev_001", "ev_002"]
 }
 ```
 
@@ -269,10 +291,7 @@ TargetCareerLevel
 - SENIOR
 
 AnalysisPurpose
-- GITHUB_DIAGNOSIS
-- PORTFOLIO_ORGANIZATION
-- JOB_PREPARATION
-- INTERVIEW_PREPARATION
+- PORTFOLIO_ANALYSIS
 
 AnalysisDepth
 - P0
@@ -323,6 +342,7 @@ Priority
 ```text
 targetJob: BACKEND
 targetCareerLevel: ENTRY
+analysisPurpose: PORTFOLIO_ANALYSIS
 requestedAnalysisDepth: P0
 ```
 
@@ -444,6 +464,10 @@ CONFLICTING
 
 커밋이나 PR이 없다는 이유만으로 `CONFLICTING`을 사용하지 않는다.
 
+`NOT_OBSERVED`는 수집 범위에서 관련 근거를 확인하지 못했다는 뜻이다. 대상 기능이나 사용자의 기여가 실제로 존재하지 않는다는 뜻이 아니다.
+
+README 섹션, 테스트, 배포 설정 등의 누락 기반 사실은 AI가 직접 만들지 않는다. 백엔드가 수집 범위와 규칙을 적용하여 `BACKEND_DERIVED` Evidence로 전달한다.
+
 ### 10.4 ReportItem
 
 AI 결과는 다음 유형으로 구분한다.
@@ -468,9 +492,19 @@ claimRefs
 confidence
 ```
 
-저장소 상태를 근거로 한 추천에는 `basisEvidenceRefs`를 포함한다.
-
 사용자 진술을 평가하는 ReportItem에만 `supportStatus`를 포함한다.
+
+Recommendation은 일반 추천과 저장소 기반 추천으로 종류를 나누지 않는다. 모든 Recommendation은 `evidenceRefs`를 최소 1개 포함해야 한다.
+
+무언가가 관찰되지 않았다는 사실을 기반으로 Recommendation을 생성해야 한다면 Spring Boot가 다음과 같은 명시적인 `BACKEND_DERIVED` Evidence를 전달해야 한다.
+
+```text
+README_SECTION_MISSING
+TEST_NOT_OBSERVED
+DEPLOYMENT_CONFIG_NOT_OBSERVED
+```
+
+AI는 누락 여부를 직접 추론하지 않는다.
 
 ReportItem 근거 규칙:
 
@@ -478,8 +512,7 @@ ReportItem 근거 규칙:
 |---|---|
 | `OBSERVATION` | `evidenceRefs` 필수 |
 | `INTERPRETATION` | `evidenceRefs` 또는 `claimRefs` 필수 |
-| 일반적인 `RECOMMENDATION` | 근거 생략 가능 |
-| 저장소 상태 기반 `RECOMMENDATION` | `basisEvidenceRefs` 필수 |
+| `RECOMMENDATION` | `evidenceRefs` 최소 1개 필수 |
 | 프로젝트 기반 `INTERVIEW_QUESTION` | `evidenceRefs` 또는 `claimRefs` 필수 |
 
 `Confidence`는 사용자 역량이나 사실일 확률이 아니다. 확보된 근거의 직접성과 범위를 나타낸다.
@@ -508,6 +541,16 @@ ReportItem 근거 규칙:
 
 최상위 응답에는 요약용 `usedEvidenceLevels`만 둔다. 실제 판단 허용 범위는 저장소별 `completedEvidenceLevels`를 기준으로 검증한다.
 
+계약에는 P0, P1, P2를 모두 정의하지만 MVP 런타임에서는 P0만 지원한다.
+
+```text
+P0 요청: 정상 처리
+P1 요청: UNSUPPORTED_COMBINATION
+P2 요청: UNSUPPORTED_COMBINATION
+```
+
+P0 요청과 응답은 `GITHUB_STATIC`, `BACKEND_DERIVED` Evidence만 참조할 수 있다. `GITHUB_ACTIVITY`와 `CODE_EVIDENCE`는 타입만 미리 정의하고 현재 실행하지 않는다.
+
 ---
 
 ## 12. 백엔드 → AI 요청 계약
@@ -527,6 +570,7 @@ repositories
 저장소별 필수 필드:
 
 ```text
+repositoryId
 repositoryFullName
 defaultBranch
 snapshotSha
@@ -546,10 +590,11 @@ evidence
   "analysisId": "86f02adc-9f55-46c7-a498-dc8dca88ef69",
   "targetJob": "BACKEND",
   "targetCareerLevel": "ENTRY",
-  "analysisPurpose": "GITHUB_DIAGNOSIS",
+  "analysisPurpose": "PORTFOLIO_ANALYSIS",
   "requestedAnalysisDepth": "P0",
   "repositories": [
     {
+      "repositoryId": 123456789,
       "repositoryFullName": "git-ddo/backend",
       "defaultBranch": "main",
       "snapshotSha": "snapshot-commit-sha",
@@ -560,7 +605,7 @@ evidence
       "userClaims": [],
       "evidence": [
         {
-          "evidenceId": "ev-001",
+          "evidenceId": "ev_001",
           "evidenceType": "GITHUB_STATIC",
           "analysisDepth": "P0",
           "repositoryFullName": "git-ddo/backend",
@@ -591,8 +636,10 @@ usedEvidenceLevels
 overallDiagnosis
 repositoryReports
 representativeProjects
+jobAppeal
 roadmap
 interviewQuestions
+portfolioStatements
 limitations
 validationWarnings
 ```
@@ -614,6 +661,54 @@ summary
 reportItems
 limitations
 ```
+
+### 13.1 `jobAppeal`
+
+`jobAppeal`은 GitHub 및 백엔드에서 수집한 공개 Evidence를 기반으로 확인되는 직무 어필 포인트이다. UserClaim만으로 직무 역량을 단정하지 않는다.
+
+각 항목의 최소 필드는 다음과 같다.
+
+```text
+itemId
+content
+repositoryRefs
+evidenceRefs
+confidence
+```
+
+규칙:
+
+- `evidenceRefs`를 최소 1개 포함한다.
+- `claimRefs`만 있는 항목은 `jobAppeal`에 포함하지 않는다.
+- P0에서는 `GITHUB_STATIC` 또는 `BACKEND_DERIVED` Evidence만 참조한다.
+- 파일 존재나 기술 의존성을 사용자의 숙련도 또는 직무 합격 가능성으로 표현하지 않는다.
+
+### 13.2 `portfolioStatements`
+
+`portfolioStatements`는 실제 이력서·포트폴리오·면접 답변에 사용할 수 있는 문장 초안이다.
+
+기존의 단순 문자열 대신 각 문장을 참조 가능한 객체로 반환한다.
+
+```text
+itemId
+content
+evidenceRefs
+claimRefs
+```
+
+각 문장은 `evidenceRefs` 또는 `claimRefs` 중 최소 하나를 포함해야 한다. 사용자 역할을 포함한 문장은 UserClaim에 근거했다는 사실을 유지하고 GitHub에서 검증된 사실처럼 표현하지 않는다.
+
+권장 하위 구분은 다음과 같다.
+
+```text
+resume
+portfolio
+interview
+```
+
+`itemId`는 `overallDiagnosis`, `repositoryReports`, `representativeProjects`, `jobAppeal`, `roadmap`, `interviewQuestions`, `portfolioStatements` 전체에서 중복되면 안 된다.
+
+`overallDiagnosis`의 개선 항목, Repository별 개선 항목, `roadmap`처럼 행동을 권하는 모든 항목은 동일한 Recommendation 계약을 사용하며 `itemId`와 `evidenceRefs`를 반드시 포함한다.
 
 AI는 백엔드가 계산하지 않은 역량 점수, 기여율 또는 취업 가능성을 새로 생성하지 않는다.
 
@@ -663,28 +758,49 @@ AI 처리 timeout: 504
 
 ---
 
-## 15. 멱등성과 재시도
+## 15. Job, 중복 실행 및 재시도
 
-### 15.1 클라이언트 → Spring Boot
+### 15.1 Spring Boot 책임
 
-- 클라이언트가 `Idempotency-Key` 헤더를 전달한다.
-- 같은 키는 같은 EvaluationRun을 반환한다.
-- 새로운 재평가는 새로운 키를 사용한다.
-- 키 유효기간 기본값은 24시간이다.
+Spring Boot가 다음을 담당한다.
 
-### 15.2 Spring Boot → AI 서버
+- `analysisId` 생성
+- Evaluation Job 생성과 상태 관리
+- 동일 `analysisId`의 Job 중복 생성 방지
+- 결과 중복 저장 방지
+- AI 서버 재호출 정책
+- 여러 결과 중 최초로 검증에 성공한 결과 저장
 
-- AI 서버 재호출 시 같은 `analysisId`를 사용한다.
-- 연결 실패, `502`, `504`에 한해 최대 1회 재호출한다.
-- `400`, `413`, `422`, 응답 검증 실패는 자동 재호출하지 않는다.
-- 최초로 검증을 통과한 결과만 저장한다.
+클라이언트 요청의 `Idempotency-Key` 처리 여부와 유효기간도 Spring Boot 영역이다. AI 서버 계약이나 저장소에는 멱등성 상태를 추가하지 않는다.
 
-### 15.3 AI 서버 → LLM
+Spring Boot가 AI 서버를 재호출할 때는 동일한 `analysisId`와 동일한 요청 Snapshot을 사용한다.
 
-- `429`, timeout, provider `5xx`만 제한적으로 재시도한다.
-- 구조화 출력 검증 실패 시 최대 1회 재생성한다.
-- 같은 `analysisId`의 동시 실행을 방지한다.
-- 같은 입력의 LLM 출력이 항상 완전히 동일하다고 보장하지 않는다.
+### 15.2 AI 서버 책임
+
+AI 서버는 완전 stateless로 유지한다.
+
+```text
+요청 수신
+→ 요청 검증
+→ 독립적인 LLM 실행
+→ 결과 검증
+→ 응답 반환
+```
+
+AI 서버에는 다음을 구현하지 않는다.
+
+```text
+Evaluation Job DB
+결과 저장소
+Redis
+Idempotency 저장소
+in-memory Job Lock
+동일 analysisId 동시 실행 차단
+```
+
+네트워크 timeout으로 Spring Boot가 동일 요청을 재호출하면 LLM이 중복 실행될 수 있으며 MVP에서는 이를 허용한다. 같은 입력의 결과가 완전히 동일하다고 보장하지 않는다.
+
+하나의 AI 요청 내부에서 provider의 `429`, timeout, `5xx`를 제한적으로 재시도할 수 있지만, 이는 Job 멱등성이나 중복 실행 방지를 의미하지 않는다.
 
 ---
 
@@ -878,13 +994,15 @@ mypy app
 - [ ] 보안과 입력 제한 작성
 - [ ] `docs/guide.md`의 기존 대형 계약 예시를 공용 계약 문서 링크로 교체
 - [ ] Phase 2 완료 체크를 재설계 상태로 변경
-- [ ] MVP 완료 기준을 `BACKEND × ENTRY × P0`로 수정
+- [ ] MVP 완료 기준을 `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0`로 수정
 
 검증:
 
 - 문서 내부 필드명이 `contractVersion`으로 통일됨
 - `schemaVersion`과 정수 `analysisId` 예시가 남아 있지 않음
 - `USER_PROVIDED`, `AI_RECOMMENDATION`이 EvidenceType에 남아 있지 않음
+- AnalysisPurpose가 `PORTFOLIO_ANALYSIS`로 통일됨
+- AI 서버에 Job Lock이나 결과 저장 책임이 남아 있지 않음
 
 권장 커밋:
 
@@ -922,10 +1040,13 @@ ai/app/schemas/error.py
 - [ ] 저장소 Snapshot 및 수집 범위 모델 구현
 - [ ] UUID 기반 요청 모델 구현
 - [ ] ReportItem 기반 응답 모델 구현
+- [ ] `jobAppeal` Evidence 기반 응답 모델 구현
+- [ ] 참조를 포함하는 `portfolioStatements` 모델 구현
 - [ ] Error Envelope 구현
 - [ ] 저장소 1~5개 제한 적용
 - [ ] 알 수 없는 필드 거절 유지
 - [ ] 기존 계약 테스트를 새 계약에 맞게 교체
+- [ ] ID 형식 제약 구현
 
 기존 제거 대상 개념:
 
@@ -937,6 +1058,8 @@ EvidenceType.USER_PROVIDED
 EvidenceType.AI_RECOMMENDATION
 GitHubEvidence에 P0와 P1을 혼합한 구조
 문자열 경로 배열을 직접 evidence로 반환하는 구조
+근거 없는 Recommendation
+단순 문자열 portfolioStatements
 ```
 
 검증:
@@ -1020,7 +1143,8 @@ build: 평가 계약 JSON Schema 생성 체계 추가
 - [ ] `contentHash` SHA-256 형식 검증
 - [ ] `completedEvidenceLevels`와 Evidence 깊이 일치 검증
 - [ ] MVP 지원 조합 검증
-- [ ] P2 전역 예산 검증
+- [ ] `repositoryId` 양의 정수 검증
+- [ ] `evidenceId`와 `claimId`의 analysis 전역 중복 검증
 
 검증 책임 분리:
 
@@ -1029,14 +1153,15 @@ Pydantic
 타입, UUID, enum, 길이, 배열 크기, hash 형식
 
 Validator
-참조 무결성, Snapshot 관계, 분석 깊이, 지원 조합, 전역 예산
+참조 무결성, Snapshot 관계, 분석 깊이, 지원 조합, ID 전역 유일성
 ```
 
 완료 조건:
 
 - 존재하지 않는 참조와 Snapshot 불일치를 거절
 - P0 요청에 P1/P2 Evidence가 들어오면 거절
-- 미래 enum 조합을 `UNSUPPORTED_COMBINATION`으로 변환
+- P1/P2 요청을 `UNSUPPORTED_COMBINATION`으로 변환
+- `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 이외 조합을 거절
 
 권장 커밋:
 
@@ -1061,7 +1186,10 @@ feat: 평가 요청 의미 검증 추가
 - [ ] 저장소별 분석 깊이 검증
 - [ ] Observation Evidence 필수 규칙 구현
 - [ ] Interpretation Evidence 또는 Claim 필수 규칙 구현
-- [ ] 저장소 상태 기반 Recommendation 근거 필수 규칙 구현
+- [ ] 모든 Recommendation의 Evidence 최소 1개 규칙 구현
+- [ ] `jobAppeal`의 Evidence 최소 1개 및 Claim 단독 사용 금지 구현
+- [ ] `portfolioStatements`의 Evidence 또는 Claim 최소 1개 규칙 구현
+- [ ] 응답 전체 `itemId` 중복 검출
 - [ ] `NOT_OBSERVED` 의미 위반 검출
 - [ ] 개인 실력·취업 가능성·기여율 단정 검출
 - [ ] 검증 실패 시 전체 리포트 실패 처리
@@ -1071,6 +1199,8 @@ feat: 평가 요청 의미 검증 추가
 - 잘못된 일부 항목을 제거해 성공 처리하지 않음
 - 존재하지 않는 기술·파일·Evidence를 참조한 리포트 거절
 - P0 저장소에 대한 P1/P2 판단 거절
+- 근거 없는 Recommendation과 `jobAppeal` 거절
+- 참조 없는 포트폴리오 문장 거절
 
 권장 커밋:
 
@@ -1149,12 +1279,9 @@ ai/app/prompts/system.py
 ```env
 MAX_REPOSITORIES=5
 MAX_REQUEST_BYTES=2097152
-MAX_P2_REPOSITORIES=3
-MAX_EVIDENCE_SNIPPETS=24
-MAX_SNIPPETS_PER_REPOSITORY=10
-MAX_SNIPPET_LINES=120
-MAX_TOTAL_EVIDENCE_TOKENS=30000
 ```
+
+P2 예산 관련 환경변수는 P2 런타임 지원을 시작하는 Phase에서 추가한다. 현재는 계약 enum만 정의하고 P2 요청을 거절한다.
 
 작업:
 
@@ -1201,11 +1328,12 @@ docs/github-workflow.md
 - [ ] Evidence, UserClaim, ReportItem 분리 반영
 - [ ] UUID `analysisId` 반영
 - [ ] 네 가지 버전 분리 반영
-- [ ] `BACKEND × ENTRY × P0` 범위 반영
+- [ ] `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 범위 반영
+- [ ] `jobAppeal` 및 `portfolioStatements` 계약 반영
 - [ ] 저장소별 분석 깊이 반영
 - [ ] AI와 Spring Boot 이중 검증 반영
 - [ ] Error Envelope 반영
-- [ ] 멱등성과 재시도 정책 반영
+- [ ] Spring Boot Job 책임과 AI stateless 정책 반영
 - [ ] 보안 제한 반영
 - [ ] 실제 완료된 Phase만 체크
 
@@ -1228,15 +1356,20 @@ docs: 평가 계약 구현 상태와 개발 가이드 동기화
 ### 20.1 계약 테스트
 
 - [ ] `contractVersion`은 `1.0`만 허용
-- [ ] `analysisId`는 UUID만 허용
+- [ ] `analysisId`는 UUID v4만 허용
+- [ ] `repositoryId`는 GitHub numeric ID로 검증
+- [ ] `evidenceId`, `claimId`, `itemId` 형식 검증
 - [ ] 저장소 1개와 5개 허용
 - [ ] 저장소 0개와 6개 거절
 - [ ] 알 수 없는 필드 거절
 - [ ] 현재 미지원 enum 조합 거절
+- [ ] `PORTFOLIO_ANALYSIS` 이외 분석 목적 거절
 
 ### 20.2 Evidence 테스트
 
 - [ ] Evidence ID 중복 거절
+- [ ] Claim ID 중복 거절
+- [ ] Repository가 달라도 Evidence ID와 Claim ID를 다시 사용하면 거절
 - [ ] 잘못된 `contentHash` 거절
 - [ ] 존재하지 않는 Evidence 참조 거절
 - [ ] Snapshot SHA 불일치 거절
@@ -1253,8 +1386,11 @@ docs: 평가 계약 구현 상태와 개발 가이드 동기화
 
 - [ ] Observation에 Evidence가 없으면 거절
 - [ ] Interpretation에 Evidence와 Claim이 모두 없으면 거절
-- [ ] 일반 Recommendation은 근거 없이 허용
-- [ ] 저장소 상태 기반 Recommendation은 근거 필수
+- [ ] 모든 Recommendation은 Evidence 최소 1개 필수
+- [ ] `jobAppeal`은 Evidence 최소 1개 필수
+- [ ] UserClaim만 참조한 `jobAppeal` 거절
+- [ ] 모든 `portfolioStatements` 항목은 Evidence 또는 Claim 최소 1개 필수
+- [ ] 응답 전체 Item ID 중복 거절
 - [ ] 프로젝트 기반 InterviewQuestion은 근거 또는 Claim 필수
 - [ ] `NOT_OBSERVED`를 거짓으로 표현하면 거절
 
@@ -1324,7 +1460,7 @@ Pydantic 직렬화 결과가 camelCase 계약과 일치하는가
 
 - 백엔드 DTO와 본 계약의 필드가 다름
 - `ParticipationLevel` 허용값이 백엔드와 다름
-- `Idempotency-Key` 정책이 확정안과 다름
+- AI 서버에 Job 저장, Redis, 실행 Lock 또는 결과 중복 저장 책임이 요구됨
 - Snapshot SHA 또는 Evidence ID 생성 규칙이 다름
 - P0 요청에 코드 원문 전체가 포함됨
 - JSON Schema와 Pydantic 모델이 다름
@@ -1347,10 +1483,14 @@ Pydantic 직렬화 결과가 camelCase 계약과 일치하는가
 ## 24. 최종 완료 기준
 
 - [ ] 백엔드와 AI가 동일한 JSON Schema와 Fixture를 사용함
-- [ ] 외부 `analysisId`가 UUID임
+- [ ] `analysisId`가 UUID v4이며 Repository·Evidence·Claim·Item ID 규칙이 적용됨
 - [ ] Evidence, UserClaim, ReportItem이 분리됨
 - [ ] `contractVersion`과 Snapshot·Extractor·Prompt 버전이 분리됨
 - [ ] 저장소별 `completedEvidenceLevels`와 `limitations`가 존재함
+- [ ] `jobAppeal`이 공개 Evidence만을 기반으로 함
+- [ ] 모든 Recommendation이 Evidence를 참조함
+- [ ] 모든 포트폴리오 문장이 Evidence 또는 Claim을 참조함
+- [ ] AI 서버가 DB, Redis, Job Lock 없이 stateless로 동작함
 - [ ] P0 판단 범위를 넘는 결과를 Validator가 차단함
 - [ ] AI와 Spring Boot의 이중 검증 경계가 문서화됨
 - [ ] Error Envelope가 모든 AI API 오류에 적용됨
@@ -1359,4 +1499,4 @@ Pydantic 직렬화 결과가 camelCase 계약과 일치하는가
 - [ ] 전체 pytest, Ruff, mypy, Docker 검증이 통과함
 - [ ] 모든 문서가 실제 구현과 일치함
 
-이 완료 기준을 충족한 후에만 Gemini 연동과 실제 P0 리포트 생성 단계로 진행한다.
+이 완료 기준을 충족한 후에만 LLM 연동과 실제 P0 리포트 생성 단계로 진행한다.
