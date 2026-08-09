@@ -1,13 +1,15 @@
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints
+from pydantic import Field
 
-from app.schemas.common import ApiModel, Confidence, EvidenceType, ProjectType
+from app.schemas.common import (
+    ApiModel,
+    Confidence,
+    EvidenceType,
+    NonEmptyString,
+    ProjectType,
+)
 
-type NonEmptyString = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1),
-]
 type Percentage = Annotated[float, Field(ge=0, le=100)]
 type Score = Annotated[int, Field(ge=0, le=100)]
 type NonNegativeInteger = Annotated[int, Field(ge=0)]

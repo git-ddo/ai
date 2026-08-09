@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "2.0",
+  "analysisId": 0,
+  "overallDiagnosis": {
+    "summary": "",
+    "strengths": [],
+    "improvements": []
+  },
+  "representativeProjects": [],
+  "repositoryReports": [],
+  "jobAppeal": {
+    "targetJob": "DATA",
+    "visibleExperiences": [],
+    "experiencesToHighlight": [],
+    "experiencesToImprove": []
+  },
+  "roadmap": [
+    {
+      "priority": "URGENT",
+      "title": "README 작성",
+      "reason": "문서가 부족합니다.",
+      "actions": [],
+      "expectedEffect": "문서가 개선됩니다."
+    }
+  ],
+  "interviewQuestions": [],
+  "portfolioStatements": {
+    "resume": "",
+    "portfolio": "",
+    "interview": ""
+  },
+  "limitations": []
+}

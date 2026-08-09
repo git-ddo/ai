@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0",
+  "analysisId": 123,
+  "overallDiagnosis": {
+    "summary": "백엔드 프로젝트의 도메인과 사용 기술은 확인되지만 문서화와 자동화 경험이 충분히 드러나지 않습니다.",
+    "strengths": [
+      {
+        "content": "Spring Boot 기반 주문 도메인 구현 경험이 드러납니다.",
+        "evidenceType": "GITHUB",
+        "evidence": [
+          "build.gradle",
+          "src/main/java/example/order/OrderController.java"
+        ],
+        "confidence": "HIGH"
+      }
+    ],
+    "improvements": [
+      {
+        "content": "README에 실행 방법과 API 호출 예시를 추가해야 합니다.",
+        "evidenceType": "BACKEND_DERIVED",
+        "evidence": [
+          "README 실행 방법 없음",
+          "README API 예시 없음"
+        ],
+        "confidence": "HIGH"
+      }
+    ]
+  },
+  "representativeProjects": [
+    {
+      "repositoryName": "festival-order-service",
+      "reason": "도메인과 담당 기능이 구체적이고 백엔드 직무와의 연관성이 높습니다.",
+      "evidenceType": "USER_PROVIDED",
+      "evidence": [
+        "주문 생성 API",
+        "운영자 주문 상태 변경 API"
+      ]
+    }
+  ],
+  "repositoryReports": [
+    {
+      "repositoryName": "festival-order-service",
+      "summary": "주문 관리 도메인을 중심으로 구성된 Spring Boot 프로젝트입니다.",
+      "strengths": [],
+      "improvements": [],
+      "interviewPoints": []
+    }
+  ],
+  "jobAppeal": {
+    "targetJob": "BACKEND",
+    "visibleExperiences": [
+      "Spring Boot 기반 API 구현",
+      "주문 도메인 비즈니스 로직 구현"
+    ],
+    "experiencesToHighlight": [
+      "도메인 규칙을 Service 계층에서 처리한 이유"
+    ],
+    "experiencesToImprove": [
+      "테스트 자동화",
+      "CI 구성",
+      "README 실행 가이드"
+    ]
+  },
+  "roadmap": [
+    {
+      "priority": "HIGH",
+      "title": "README 실행 가이드 작성",
+      "reason": "현재 실행 방법과 환경변수 설명이 확인되지 않습니다.",
+      "actions": [
+        "필수 환경변수 목록 작성",
+        "로컬 실행 명령 추가",
+        "API 요청 예시 추가"
+      ],
+      "expectedEffect": "프로젝트 재현 가능성과 설명력이 높아집니다."
+    }
+  ],
+  "interviewQuestions": [
+    {
+      "repositoryName": "festival-order-service",
+      "question": "주문 상태 변경 규칙을 Service 계층에서 처리한 이유는 무엇인가요?",
+      "intent": "비즈니스 로직 분리와 계층별 책임에 대한 이해를 확인하기 위한 질문입니다.",
+      "answerGuide": [
+        "Controller와 Service의 책임 차이",
+        "상태 변경 규칙의 재사용성",
+        "단위 테스트 용이성"
+      ],
+      "followUpQuestions": [
+        "동시에 상태 변경 요청이 발생하면 어떻게 처리할 수 있나요?"
+      ],
+      "evidenceType": "USER_PROVIDED",
+      "evidence": [
+        "운영자 주문 상태 변경 API",
+        "OrderService.java"
+      ]
+    }
+  ],
+  "portfolioStatements": {
+    "resume": "Spring Boot 기반 주문 관리 API와 운영자 주문 상태 변경 기능을 구현했습니다.",
+    "portfolio": "Spring Boot 기반 축제 주문 관리 서비스에서 주문 생성 API와 운영자 주문 상태 변경 기능을 담당했습니다.",
+    "interview": "주문 상태 변경 규칙을 Service 계층에 배치하여 HTTP 요청 처리와 비즈니스 규칙의 책임을 분리했습니다."
+  },
+  "limitations": [
+    "공개 GitHub 데이터와 사용자 입력만을 기준으로 생성된 결과입니다.",
+    "Commit 수만으로 실제 개인 기여도를 판단하지 않았습니다.",
+    "사용자 입력 역할은 GitHub에서 확인된 사실과 구분됩니다."
+  ]
+}
