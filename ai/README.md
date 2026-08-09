@@ -4,7 +4,7 @@ GitHub Repository의 구조화된 근거와 사용자 입력을 바탕으로 취
 
 전체 서비스 기획은 루트 [`README.md`](../README.md), 상세 AI 개발 명세는 [`guide.md`](../docs/guide.md), AI 에이전트 작업 규칙은 [`AGENTS.md`](../AGENTS.md)를 참고한다.
 
-> 현재는 AI 서버 구현 전 단계이다. 아래 내용은 개발 목표와 예정된 실행 구조를 설명한다.
+> Phase 1의 서버 기반 구성이 완료되었으며 현재는 Phase 2의 API 계약을 구현하는 단계이다.
 
 ## 책임 범위
 
@@ -70,7 +70,7 @@ AI가 만든 해석과 추천은 입력에서 확인된 사실로 표현하지 �
 
 MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 및 자체 ML 모델을 사용하지 않는다.
 
-## 예정 디렉토리 구조
+## 디렉토리 구조
 
 ```text
 ai/
@@ -91,6 +91,8 @@ ai/
 ├── pyproject.toml
 └── README.md
 ```
+
+Phase 2 이후에 구현할 모듈은 현재 빈 구조로 유지하며 각 단계에서 테스트와 함께 구현한다.
 
 ## API
 
@@ -163,15 +165,14 @@ LOG_LEVEL=INFO
 
 ## 실행 및 검증
 
-프로젝트 기반 구성이 완료되면 실제 명령을 이 섹션에 추가한다. 최종적으로 다음 항목을 각각 실행할 수 있어야 한다.
+현재 다음 항목을 로컬과 CI에서 검증한다.
 
-```text
-개발 서버 실행
-formatter 검사
-lint 검사
-type check
-unit/integration test
-Docker build 및 실행
+```bash
+pytest
+ruff check .
+ruff format --check .
+mypy app
+docker build -t gitddo-ai .
 ```
 
 ## 핵심 품질 기준

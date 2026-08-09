@@ -688,15 +688,15 @@ JSON Schema 오류
 
 ### Phase 1. 프로젝트 기반 구성
 
-- [ ] Python 3.12 환경 구성
-- [ ] FastAPI 프로젝트 생성
-- [ ] `/health` API 구현
-- [ ] 환경변수 설정
-- [ ] Ruff 설정
-- [ ] 타입 검사 설정
-- [ ] pytest 설정
-- [ ] Dockerfile 작성
-- [ ] GitHub Actions 기본 검사 구성
+- [x] Python 3.12 환경 구성
+- [x] FastAPI 프로젝트 생성
+- [x] `/health` API 구현
+- [x] 환경변수 설정
+- [x] Ruff 설정
+- [x] 타입 검사 설정
+- [x] pytest 설정
+- [x] Dockerfile 작성
+- [x] GitHub Actions 기본 검사 구성
 
 완료 조건:
 
