@@ -1,151 +1,97 @@
 # AI 서버 개발 가이드
 
-## 1. 목표
+이 문서는 최종 평가 계약을 구현하기 위한 작업 순서와 완료 조건을 정리한다. 계약의 전체 의미와 세부 제한은 루트 [`EVALUATION_CONTRACT_MIGRATION_GUIDE.md`](../EVALUATION_CONTRACT_MIGRATION_GUIDE.md)를 기준으로 한다.
 
-백엔드가 전달한 GitHub 근거 데이터와 사용자 입력을 바탕으로 구조화된 포트폴리오 코칭 리포트를 생성한다.
+## 1. 목표와 현재 상태
 
-AI 서버는 다음 작업만 담당한다.
+목표는 Spring Boot가 전달한 Evidence와 UserClaim을 바탕으로 근거가 연결된 포트폴리오 코칭 리포트를 생성하는 stateless FastAPI 서버를 구현하는 것이다.
 
-- 프로젝트별 분석
-- 전체 포트폴리오 종합
-- 대표 프로젝트 추천
-- 직무별 보완 방향 생성
-- GitHub 정리 로드맵 생성
-- 면접 질문과 답변 가이드 생성
-- 포트폴리오 문장 생성
-- LLM 출력 검증
+현재 상태:
 
----
+- [x] FastAPI 기반 환경 구성
+- [x] `/health` 구현
+- [x] pytest, Ruff, mypy, Docker 기반 구성
+- [x] 최종 계약 기준 문서 확정
+- [ ] 최종 계약의 미확정 wire format을 백엔드 Fixture로 확정
+- [ ] `contractVersion = "1.0"` Pydantic 계약 구현
+- [ ] 공용 JSON Schema와 Fixture 생성
+- [ ] 의미·참조·분석 깊이 Validator 구현
+- [ ] Mock 내부 API 구현
+- [ ] Gemini 연동과 실제 리포트 생성
 
-## 2. 아키텍처 경계
+기존 Phase 2 Pydantic 코드는 구 계약 초안이다. reset하지 않고 새 커밋에서 최종 계약으로 교체한다.
+
+## 2. MVP 범위
 
 ```text
-[Spring Boot Backend]
-GitHub API 호출
-사용자·분석 상태 관리
-README·파일·Commit·PR 수집
-기술스택 근거 추출
-규칙 기반 준비도 계산
-사용자 역할 정보 관리
-        ↓ JSON
-[FastAPI AI Server]
-입력 검증 및 정규화
-직무·목적별 분석 기준 적용
-프로젝트별 리포트 생성
-전체 포트폴리오 종합
-근거 및 출력 검증
-        ↓ JSON
-[Spring Boot Backend]
-결과 저장 및 조회
-        ↓
-[React Frontend]
-리포트 시각화
+Repository: 1~5개
+TargetJob: BACKEND
+TargetCareerLevel: ENTRY
+AnalysisPurpose: PORTFOLIO_ANALYSIS
+RequestedAnalysisDepth: P0
+ContractVersion: 1.0
 ```
 
-### AI 서버가 하지 않는 일
+계약 enum에는 확장 값을 정의할 수 있다.
 
-- GitHub OAuth 처리
+```text
+TargetJob: BACKEND, FRONTEND, AI, CLOUD_INFRA
+TargetCareerLevel: ENTRY, MID, SENIOR
+AnalysisDepth: P0, P1, P2
+```
+
+현재 런타임에서 확정 조합 이외의 요청은 `UNSUPPORTED_COMBINATION`으로 거절한다. 네 직무 동시 지원, P1/P2 실행 및 경력 수준 판정은 MVP 완료 기준이 아니다.
+
+## 3. 아키텍처 경계
+
+```text
+Frontend
+  → 평가 Job 생성·상태 조회
+Spring Boot
+  → GitHub 수집, Snapshot 고정, Evidence/UserClaim 구성
+  → 요청 Schema 검증
+  → POST /internal/v1/portfolio-reports
+FastAPI AI Server
+  → Pydantic/의미 검증
+  → Gemini Structured Output
+  → 참조·분석 깊이·응답 검증
+  → JSON 또는 Error Envelope 반환
+Spring Boot
+  → 최종 Schema/allowlist 검증
+  → 최초 검증 성공 결과 저장
+Frontend
+  → 저장된 리포트 조회
+```
+
+### Spring Boot 책임
+
+- GitHub OAuth와 사용자·포트폴리오 소유권 관리
+- `analysisId` UUID v4 생성
+- Evaluation Job과 상태 관리
+- Snapshot SHA 고정과 Evidence ID 발급
+- P0/P1/P2 데이터 수집, Secret 및 불필요 파일 제거
+- UserClaim 저장과 AI 요청 구성
+- 요청 전 Schema 검증, 응답 최종 검증과 결과 저장
+- 클라이언트 `Idempotency-Key`, AI 재호출 및 중복 결과 정책
+
+### AI 서버 책임
+
+- 합의된 요청과 지원 조합 검증
+- 전달된 Evidence와 UserClaim만 해석
+- 구조화된 코칭 리포트 생성
+- Evidence/Claim 참조와 저장소별 분석 깊이 검증
+- 공통 Error Envelope 반환
+
+### AI 서버에서 금지
+
 - GitHub API 직접 호출
-- 사용자 및 세션 관리
-- 분석 상태 DB 관리
-- 원본 Repository 전체 저장
-- 개인 기여율 계산
-- Commit 수를 실력 점수로 변환
-- GitHub에서 확인되지 않은 기술 추정
-- Private Repository 권한 관리
+- 저장소 전체 코드 또는 GitHub raw response 수신
+- 사용자·Job·결과·멱등성 정보 저장
+- DB, Redis, in-memory Job Lock
+- 기여율, 역량 점수, 합격 가능성 생성
+- 전달된 코드 실행
 
----
-
-## 3. 기술 스택
-
-### 필수 기술
-
-| 영역 | 기술 | 용도 |
-|---|---|---|
-| Language | Python 3.12+ | AI 서버 개발 |
-| API | FastAPI | 백엔드 연동 API |
-| Server | Uvicorn | ASGI 서버 |
-| Schema | Pydantic v2 | 요청·응답 검증 |
-| Settings | pydantic-settings | 환경변수 관리 |
-| LLM | Google Gen AI SDK (`google-genai`) | Gemini API 호출 |
-| Output | Gemini Structured Output | JSON Schema 기반 출력 |
-| HTTP | httpx | 외부 HTTP 통신 |
-| Retry | tenacity | 제한적인 LLM 재시도 |
-| Criteria | PyYAML | 직무별 평가 기준 관리 |
-| Test | pytest | 단위·통합 테스트 |
-| Async Test | pytest-asyncio | 비동기 테스트 |
-| Lint/Format | Ruff | 코드 품질 관리 |
-| Type Check | mypy 또는 pyright | 정적 타입 검사 |
-| Infra | Docker | 실행 환경 표준화 |
-| CI | GitHub Actions | 테스트·검사 자동화 |
-
-### MVP에서 사용하지 않는 기술
-
-- LangChain
-- RAG
-- Vector Database
-- Fine-tuning
-- 자체 ML 모델
-- AI Agent
-- Redis
-- AI 서버의 GitHub API 연동
-
----
-
-## 4. 권장 디렉터리 구조
-
-```text
-ai/
-├── app/
-│   ├── main.py
-│   ├── api/
-│   │   ├── health.py
-│   │   └── reports.py
-│   ├── core/
-│   │   ├── config.py
-│   │   ├── exceptions.py
-│   │   └── logging.py
-│   ├── schemas/
-│   │   ├── common.py
-│   │   ├── request.py
-│   │   ├── response.py
-│   │   └── repository.py
-│   ├── criteria/
-│   │   ├── backend.yaml
-│   │   ├── frontend.yaml
-│   │   ├── ai.yaml
-│   │   └── cloud_infra.yaml
-│   ├── prompts/
-│   │   ├── system.py
-│   │   ├── repository.py
-│   │   ├── portfolio.py
-│   │   └── interview.py
-│   ├── llm/
-│   │   ├── provider.py
-│   │   └── gemini_provider.py
-│   ├── services/
-│   │   ├── normalization_service.py
-│   │   ├── repository_service.py
-│   │   ├── portfolio_service.py
-│   │   └── report_service.py
-│   └── validators/
-│       ├── evidence_validator.py
-│       └── report_validator.py
-├── tests/
-│   ├── fixtures/
-│   ├── test_api.py
-│   ├── test_normalization.py
-│   ├── test_prompt_routing.py
-│   └── test_evidence_validator.py
-├── .env.example
-├── Dockerfile
-├── pyproject.toml
-└── README.md
-```
-
----
-
-## 5. API
+## 4. 내부 API
 
 ### Health Check
 
@@ -153,818 +99,405 @@ ai/
 GET /health
 ```
 
-```json
-{
-  "status": "UP"
-}
-```
-
 ### 포트폴리오 리포트 생성
 
 ```http
-POST /ai/v1/portfolio-reports
+POST /internal/v1/portfolio-reports
 Content-Type: application/json
 ```
 
-처음에는 동기 HTTP API로 구현한다. 분석 Job과 상태 관리는 Spring Boot가 담당한다.
+- 동기 HTTP API이다.
+- 정상 응답은 `200 OK`이다.
+- Job 상태는 Spring Boot가 관리한다.
+- 같은 `analysisId`가 재호출되면 AI 서버는 독립적으로 다시 실행할 수 있다.
+- AI 서버는 중복 실행 방지를 위한 저장소나 Lock을 두지 않는다.
 
----
+## 5. 계약 모델
 
-## 6. 공통 Enum
+### Evidence
 
-백엔드와 AI 서버가 동일한 값을 사용해야 한다.
-
-```text
-TargetJob
-- BACKEND
-- FRONTEND
-- AI
-- CLOUD_INFRA
-
-AnalysisPurpose
-- GITHUB_DIAGNOSIS
-- PORTFOLIO_ORGANIZATION
-- JOB_PREPARATION
-- INTERVIEW_PREPARATION
-
-ProjectType
-- PERSONAL
-- TEAM
-
-EvidenceType
-- GITHUB
-- USER_PROVIDED
-- BACKEND_DERIVED
-- AI_RECOMMENDATION
-
-Confidence
-- HIGH
-- MEDIUM
-- LOW
-
-Priority
-- HIGH
-- MEDIUM
-- LOW
-```
-
----
-
-## 7. 요청 스키마 책임
-
-### 백엔드 책임
-
-백엔드는 AI 서버에 원본 Repository 전체가 아니라 구조화된 근거를 전달한다.
-
-- `analysisId` 생성
-- 희망 직무와 분석 목적 검증
-- Repository 개수 검증
-- README 분석 결과 생성
-- 기술스택 후보와 근거 생성
-- 테스트·Docker·CI 존재 여부 계산
-- 제한된 Commit·PR 활동 데이터 생성
-- 사용자 입력 역할을 별도 필드로 전달
-- 정량적인 준비도 점수 계산
-- 파일 경로와 기술 이름 정규화
-- 입력 크기 제한
-
-### AI 서버 책임
-
-- Pydantic 요청 검증
-- Enum 및 필수 필드 검증
-- 데이터 추가 정규화
-- 직무별 분석 기준 선택
-- 분석 목적별 출력 강조점 선택
-- GitHub 근거와 사용자 입력 분리 유지
-- 프로젝트별 분석 생성
-- 전체 포트폴리오 종합
-- 응답 JSON Schema 검증
-- 근거 없는 문장 제거 또는 실패 처리
-
----
-
-## 8. 요청 JSON 예시
-
-```json
-{
-  "schemaVersion": "1.0",
-  "analysisId": 123,
-  "targetJob": "BACKEND",
-  "analysisPurpose": "INTERVIEW_PREPARATION",
-  "repositories": [
-    {
-      "repositoryId": 1001,
-      "name": "festival-order-service",
-      "fullName": "kang-dev/festival-order-service",
-      "description": "축제 부스 주문 관리 서비스",
-      "githubEvidence": {
-        "languages": [
-          {
-            "name": "Java",
-            "percentage": 88.5
-          }
-        ],
-        "techStacks": [
-          {
-            "name": "Spring Boot",
-            "confidence": "HIGH",
-            "evidence": [
-              {
-                "type": "GITHUB",
-                "path": "build.gradle",
-                "description": "Spring Boot 플러그인과 의존성이 확인됨"
-              }
-            ]
-          }
-        ],
-        "readme": {
-          "exists": true,
-          "hasIntroduction": true,
-          "hasFeatures": true,
-          "hasRunGuide": false,
-          "hasEnvironmentVariables": false,
-          "hasTechStack": true,
-          "hasApiExamples": false,
-          "hasTestingGuide": false,
-          "hasDeploymentGuide": false,
-          "hasTroubleshooting": false
-        },
-        "testing": {
-          "exists": true,
-          "fileCount": 4
-        },
-        "docker": {
-          "dockerfile": true,
-          "compose": false
-        },
-        "ci": {
-          "githubActions": false,
-          "runsBuild": false,
-          "runsTests": false
-        },
-        "activity": {
-          "recentCommitCount": 12,
-          "userCommitCount": 7,
-          "userPullRequestCount": 2,
-          "activityAreaCandidates": [
-            "CONTROLLER",
-            "SERVICE",
-            "SECURITY"
-          ]
-        }
-      },
-      "backendMetrics": {
-        "portfolioReadinessScore": 68,
-        "readmeReadinessScore": 45,
-        "evidenceClarityScore": 80
-      },
-      "userProvidedRole": {
-        "projectType": "TEAM",
-        "role": "Backend",
-        "implementedFeatures": [
-          "주문 생성 API",
-          "운영자 주문 상태 변경 API"
-        ],
-        "relatedFiles": [
-          "src/main/java/example/order/OrderController.java",
-          "src/main/java/example/order/OrderService.java"
-        ],
-        "relatedPullRequests": [],
-        "relatedCommits": []
-      }
-    }
-  ]
-}
-```
-
-### 요청 데이터 원칙
+백엔드가 GitHub에서 확인하거나 규칙으로 도출한 사실이다.
 
 ```text
-githubEvidence
-→ GitHub에서 확인된 사실
-
-backendMetrics
-→ 백엔드 규칙으로 계산된 결과
-
-userProvidedRole
-→ 사용자가 직접 입력한 주장
+GITHUB_STATIC    P0
+GITHUB_ACTIVITY  P1
+CODE_EVIDENCE    P2
+BACKEND_DERIVED  P0+
 ```
 
-세 종류의 데이터를 하나의 사실처럼 합치지 않는다.
+P0 런타임에서는 `GITHUB_STATIC`, `BACKEND_DERIVED`만 허용한다.
 
----
+### UserClaim
 
-## 9. 응답 스키마 책임
+사용자가 입력한 역할, 참여 수준, 구현 내용과 참여 기간이다. Evidence로 취급하지 않는다.
 
-AI 서버는 자유 형식 Markdown이 아닌 구조화된 JSON을 반환한다.
+### GroundedItem과 ReportItem
 
-각 핵심 판단은 가능하면 다음 정보를 포함한다.
-
-- 내용
-- 근거 유형
-- 근거
-- 신뢰도
-- 실행 가능한 제안
-
-AI 서버는 점수를 새로 임의 생성하지 않는다. 백엔드가 계산한 준비도 지표를 설명하고 보완 방향을 생성한다.
-
----
-
-## 10. 응답 JSON 예시
-
-```json
-{
-  "schemaVersion": "1.0",
-  "analysisId": 123,
-  "overallDiagnosis": {
-    "summary": "백엔드 프로젝트의 도메인과 사용 기술은 확인되지만 문서화와 자동화 경험이 충분히 드러나지 않습니다.",
-    "strengths": [
-      {
-        "content": "Spring Boot 기반 주문 도메인 구현 경험이 드러납니다.",
-        "evidenceType": "GITHUB",
-        "evidence": [
-          "build.gradle",
-          "src/main/java/example/order/OrderController.java"
-        ],
-        "confidence": "HIGH"
-      }
-    ],
-    "improvements": [
-      {
-        "content": "README에 실행 방법과 API 호출 예시를 추가해야 합니다.",
-        "evidenceType": "BACKEND_DERIVED",
-        "evidence": [
-          "README 실행 방법 없음",
-          "README API 예시 없음"
-        ],
-        "confidence": "HIGH"
-      }
-    ]
-  },
-  "representativeProjects": [
-    {
-      "repositoryName": "festival-order-service",
-      "reason": "도메인과 담당 기능이 구체적이고 백엔드 직무와의 연관성이 높습니다.",
-      "evidenceType": "USER_PROVIDED",
-      "evidence": [
-        "주문 생성 API",
-        "운영자 주문 상태 변경 API"
-      ]
-    }
-  ],
-  "repositoryReports": [
-    {
-      "repositoryName": "festival-order-service",
-      "summary": "주문 관리 도메인을 중심으로 구성된 Spring Boot 프로젝트입니다.",
-      "strengths": [],
-      "improvements": [],
-      "interviewPoints": []
-    }
-  ],
-  "jobAppeal": {
-    "targetJob": "BACKEND",
-    "visibleExperiences": [
-      "Spring Boot 기반 API 구현",
-      "주문 도메인 비즈니스 로직 구현"
-    ],
-    "experiencesToHighlight": [
-      "도메인 규칙을 Service 계층에서 처리한 이유"
-    ],
-    "experiencesToImprove": [
-      "테스트 자동화",
-      "CI 구성",
-      "README 실행 가이드"
-    ]
-  },
-  "roadmap": [
-    {
-      "priority": "HIGH",
-      "title": "README 실행 가이드 작성",
-      "reason": "현재 실행 방법과 환경변수 설명이 확인되지 않습니다.",
-      "actions": [
-        "필수 환경변수 목록 작성",
-        "로컬 실행 명령 추가",
-        "API 요청 예시 추가"
-      ],
-      "expectedEffect": "프로젝트 재현 가능성과 설명력이 높아집니다."
-    }
-  ],
-  "interviewQuestions": [
-    {
-      "repositoryName": "festival-order-service",
-      "question": "주문 상태 변경 규칙을 Service 계층에서 처리한 이유는 무엇인가요?",
-      "intent": "비즈니스 로직 분리와 계층별 책임에 대한 이해를 확인하기 위한 질문입니다.",
-      "answerGuide": [
-        "Controller와 Service의 책임 차이",
-        "상태 변경 규칙의 재사용성",
-        "단위 테스트 용이성"
-      ],
-      "followUpQuestions": [
-        "동시에 상태 변경 요청이 발생하면 어떻게 처리할 수 있나요?"
-      ],
-      "evidenceType": "USER_PROVIDED",
-      "evidence": [
-        "운영자 주문 상태 변경 API",
-        "OrderService.java"
-      ]
-    }
-  ],
-  "portfolioStatements": {
-    "resume": "Spring Boot 기반 주문 관리 API와 운영자 주문 상태 변경 기능을 구현했습니다.",
-    "portfolio": "Spring Boot 기반 축제 주문 관리 서비스에서 주문 생성 API와 운영자 주문 상태 변경 기능을 담당했습니다.",
-    "interview": "주문 상태 변경 규칙을 Service 계층에 배치하여 HTTP 요청 처리와 비즈니스 규칙의 책임을 분리했습니다."
-  },
-  "limitations": [
-    "공개 GitHub 데이터와 사용자 입력만을 기준으로 생성된 결과입니다.",
-    "Commit 수만으로 실제 개인 기여도를 판단하지 않았습니다.",
-    "사용자 입력 역할은 GitHub에서 확인된 사실과 구분됩니다."
-  ]
-}
-```
-
----
-
-## 11. AI 처리 파이프라인
+응답 항목은 문자열 근거 ID를 통해 입력과 연결한다.
 
 ```text
-1. 요청 수신
-2. Pydantic 스키마 검증
-3. 입력 정규화
-4. 직무별 Criteria 선택
-5. 분석 목적별 Prompt 선택
-6. Repository별 분석
-7. 전체 Portfolio 종합
-8. Structured Output 변환
-9. Evidence 검증
-10. Pydantic 응답 검증
-11. 백엔드에 JSON 반환
+evidenceRefs: ["ev_001"]
+claimRefs: ["claim_001"]
 ```
 
-### Repository별 분석
+참조 규칙:
 
-각 Repository를 독립적으로 분석한다.
-
-```text
-Repository A → RepositoryReport A
-Repository B → RepositoryReport B
-Repository C → RepositoryReport C
-```
-
-분석 항목:
-
-- 프로젝트 요약
-- 확인된 강점
-- 부족하게 드러나는 부분
-- README 보완 방향
-- 직무 관련 어필 포인트
-- 면접 소재
-
-### 전체 Portfolio 종합
-
-Repository별 결과를 바탕으로 다음을 생성한다.
-
-- 전체 진단
-- 대표 프로젝트 추천
-- 프로젝트 간 중복성과 차별성
-- 희망 직무 기준 어필 요소
-- 보완할 경험
-- 개선 로드맵
-- 면접 질문
-- 포트폴리오 문장
-
----
-
-## 12. 직무별 Criteria
-
-직무별 기준은 YAML로 관리한다.
-
-### Backend
-
-```yaml
-target_job: BACKEND
-criteria:
-  - domain_and_api_design
-  - database_and_orm
-  - authentication_and_authorization
-  - exception_handling
-  - testing
-  - docker_and_deployment
-  - ci_cd
-  - operations
-  - documentation
-```
-
-### Frontend
-
-```yaml
-target_job: FRONTEND
-criteria:
-  - component_structure
-  - typescript
-  - state_management
-  - api_integration
-  - routing
-  - loading_error_empty_states
-  - accessibility
-  - responsive_design
-  - testing
-  - build_and_deployment
-```
-
-### AI
-
-```yaml
-target_job: AI
-criteria:
-  - problem_definition
-  - data_processing
-  - model_or_llm_selection
-  - training_or_inference_pipeline
-  - evaluation_metrics
-  - experiment_tracking
-  - hallucination_control
-  - reproducibility
-  - cost_and_latency
-  - service_integration
-```
-
-### Cloud/Infra
-
-```yaml
-target_job: CLOUD_INFRA
-criteria:
-  - docker
-  - ci_cd
-  - cloud_deployment
-  - network
-  - secrets_management
-  - logging
-  - monitoring
-  - failure_recovery
-  - automation
-  - scalability
-```
-
----
-
-## 13. 분석 목적별 Prompt Routing
-
-| 목적 | 강조할 결과 |
+| 항목 | 필수 참조 |
 |---|---|
-| `GITHUB_DIAGNOSIS` | README, 문서화, 테스트, Docker, CI/CD, Repository 정리 상태 |
-| `PORTFOLIO_ORGANIZATION` | 대표 프로젝트, 프로젝트 순서, 포트폴리오 문장, README 보완 |
-| `JOB_PREPARATION` | 직무 관련 경험, 부족하게 드러나는 경험, 개선 로드맵 |
-| `INTERVIEW_PREPARATION` | 예상 질문, 질문 의도, 답변 가이드, 꼬리질문, 강조 포인트 |
+| `OBSERVATION` | Evidence |
+| `INTERPRETATION` | Evidence 또는 Claim |
+| `RECOMMENDATION` | Evidence 최소 1개 |
+| 프로젝트 기반 `INTERVIEW_QUESTION` | Evidence 또는 Claim |
+| `jobAppeal` | 공개 Evidence 최소 1개, Claim 단독 금지 |
+| `portfolioStatements` | Evidence 또는 Claim 최소 1개 |
 
-Prompt는 다음 조합으로 선택한다.
+`portfolioStatements.statementType`은 `RESUME`, `PORTFOLIO`, `INTERVIEW`만 허용한다.
 
-```text
-TargetJob × AnalysisPurpose
-```
+### 누락 기반 판단
 
-예시:
-
-```text
-BACKEND × INTERVIEW_PREPARATION
-AI × PORTFOLIO_ORGANIZATION
-```
-
----
-
-## 14. 근거 기반 생성 규칙
-
-모든 Prompt와 검증 코드에서 다음 규칙을 적용한다.
-
-- 입력에 없는 기술을 사용했다고 말하지 않는다.
-- 입력에 없는 파일 경로를 근거로 생성하지 않는다.
-- 파일 존재를 사용자의 숙련도로 해석하지 않는다.
-- Commit 수를 개인 기여도나 실력으로 해석하지 않는다.
-- 사용자 역할 입력은 사용자 진술로 표시한다.
-- GitHub 근거와 사용자 입력을 혼합하지 않는다.
-- 직무 적합도를 취업 가능성으로 표현하지 않는다.
-- 점수는 역량 점수가 아닌 포트폴리오 준비도로 표현한다.
-- 불확실한 판단에는 `LOW` confidence 또는 확인 필요를 표시한다.
-- 공개 GitHub 데이터 기준이라는 한계를 응답에 포함한다.
-
----
-
-## 15. 출력 검증
-
-LLM 응답을 백엔드로 바로 반환하지 않는다.
-
-### 검증 항목
-
-- 언급한 기술이 입력 `techStacks`에 존재하는가
-- 언급한 파일이 입력 근거에 존재하는가
-- Repository 이름이 요청 목록에 존재하는가
-- GitHub 근거와 사용자 입력 근거를 올바르게 구분했는가
-- Commit 수를 기여도라고 표현하지 않았는가
-- 사용자의 실력이나 취업 가능성을 단정하지 않았는가
-- 필수 응답 필드가 존재하는가
-- Enum 값이 유효한가
-- Repository별 결과가 중복되지 않았는가
-
-### 검증 실패 처리
+AI는 README 섹션, 테스트, 배포 설정 등이 보이지 않았다는 사실을 직접 추론하지 않는다. Spring Boot가 다음과 같은 `BACKEND_DERIVED` Evidence를 전달한 경우에만 관련 Recommendation을 생성한다.
 
 ```text
-수정 가능한 오류
-→ 잘못된 항목 제거 또는 정규화
-
-JSON Schema 오류
-→ 제한 횟수 내 재생성
-
-근거 없는 핵심 주장
-→ 해당 주장 제거
-
-복구 불가능한 응답
-→ 명시적인 오류 반환
+README_SECTION_MISSING
+TEST_NOT_OBSERVED
+DEPLOYMENT_CONFIG_NOT_OBSERVED
 ```
 
-무한 재시도는 허용하지 않는다.
+`NOT_OBSERVED`는 수집 범위에서 확인하지 못했다는 뜻이며 실제 부재·거짓·미기여를 뜻하지 않는다.
 
----
-
-## 16. 구현 단계
-
-### Phase 1. 프로젝트 기반 구성
-
-- [x] Python 3.12 환경 구성
-- [x] FastAPI 프로젝트 생성
-- [x] `/health` API 구현
-- [x] 환경변수 설정
-- [x] Ruff 설정
-- [x] 타입 검사 설정
-- [x] pytest 설정
-- [x] Dockerfile 작성
-- [x] GitHub Actions 기본 검사 구성
-
-완료 조건:
+## 6. 버전과 식별자
 
 ```text
-서버 실행 가능
-/health 응답 성공
-lint와 테스트 통과
-Docker 실행 성공
+contractVersion: "1.0"
+snapshotSchemaVersion: integer
+extractorVersion: string
+promptVersion: string
+
+analysisId: UUID v4
+repositoryId: GitHub Repository numeric ID
+evidenceId: ^ev_[0-9]{3,}$
+claimId: ^claim_[0-9]{3,}$
+itemId: ^item_[0-9]{3,}$
+contentHash: SHA-256 lowercase hex
 ```
 
----
+`evidenceId`, `claimId`, `itemId`는 각각 하나의 `analysisId` 전체에서 유일해야 한다. Repository별로 번호를 다시 시작하지 않는다.
 
-### Phase 2. API 계약 확정
+## 7. 분석 깊이
 
-- [ ] 백엔드 팀과 Request JSON 확정
-- [ ] 백엔드 팀과 Response JSON 확정
-- [x] 공통 Enum 확정
-- [x] `schemaVersion` 정책 확정
-- [x] Pydantic Request 모델 작성
-- [x] Pydantic Response 모델 작성
-- [x] 정상·경계·실패 예시 JSON 작성
-- [ ] OpenAPI 문서 확인
+| 깊이 | 허용 | 금지 |
+|---|---|---|
+| P0 | README 준비도, 기술 근거, 테스트·Docker·CI 존재 | 설계 품질, 사용자 역량, 테스트 품질 |
+| P1 | 관찰된 활동과 활동 영역 후보 | 기여율, 코드 품질, 활동 부재를 거짓으로 판정 |
+| P2 | 제공된 코드 구간의 검증·오류 처리·책임 분리·테스트 | 저장소 전체 품질, 경력 충족 여부 |
 
-완료 조건:
+분석 깊이는 Repository별 `completedEvidenceLevels`로 관리한다. 응답 항목의 판단 깊이가 참조 Repository의 완료 깊이를 넘으면 전체 리포트를 실패시킨다.
+
+현재는 P0만 실행한다. P1/P2 요청은 `UNSUPPORTED_COMBINATION`이다.
+
+## 8. 요청·응답 책임
+
+### 요청 필수 정보
 
 ```text
-Mock 요청을 검증할 수 있음
-Mock 응답을 검증할 수 있음
-백엔드가 동일한 계약으로 DTO를 작성할 수 있음
+contractVersion
+analysisId
+targetJob
+targetCareerLevel
+analysisPurpose
+requestedAnalysisDepth
+repositories
 ```
 
----
-
-### Phase 3. Mock 리포트 API
-
-- [ ] `POST /ai/v1/portfolio-reports` 구현
-- [ ] Mock 요청 Fixture 작성
-- [ ] 고정된 Mock 응답 반환
-- [ ] Repository 1개와 5개 입력 테스트
-- [ ] 잘못된 Enum 테스트
-- [ ] 필수 필드 누락 테스트
-- [ ] Repository 개수 제한 테스트
-
-완료 조건:
+Repository에는 다음 정보가 포함된다.
 
 ```text
-Spring Boot와 LLM 없이 API 연동 가능
-요청·응답 스키마 오류를 명확하게 반환
+repositoryId
+repositoryFullName
+defaultBranch
+snapshotSha
+snapshotHashAlgorithm
+snapshotSchemaVersion
+extractorVersion
+completedEvidenceLevels
+collectionWarnings
+userClaims
+evidence
 ```
 
----
-
-### Phase 4. 직무·목적별 기준 구성
-
-- [ ] Backend Criteria 작성
-- [ ] Frontend Criteria 작성
-- [ ] AI Criteria 작성
-- [ ] Cloud/Infra Criteria 작성
-- [ ] 분석 목적별 강조 항목 작성
-- [ ] Criteria Loader 구현
-- [ ] Prompt Router 구현
-- [ ] 모든 직무·목적 조합 테스트
-
-완료 조건:
+### 응답 필수 정보
 
 ```text
-TargetJob과 AnalysisPurpose에 따라
-적절한 Criteria와 Prompt를 선택할 수 있음
+contractVersion
+analysisId
+generationMetadata
+usedEvidenceLevels
+overallDiagnosis
+repositoryReports
+representativeProjects
+jobAppeal
+roadmap
+interviewQuestions
+portfolioStatements
+limitations
+validationWarnings
 ```
 
----
+`generationMetadata`에는 provider, model, promptVersion, generatedAt, durationMs, attemptCount와 tokenUsage를 포함한다.
 
-### Phase 5. LLM Provider 연동
-
-- [ ] 공통 `LLMProvider` 인터페이스 정의
-- [ ] Google Gen AI SDK 기반 Gemini Provider 구현
-- [ ] Timeout 설정
-- [ ] 제한적인 Retry 설정
-- [ ] Gemini Structured Output과 Pydantic 응답 모델 연결
-- [ ] 모델명 환경변수화
-- [ ] API 오류 변환
-- [ ] 사용량 및 처리 시간 로그 기록
-
-완료 조건:
+대형 요청·응답 JSON은 이 문서에 복제하지 않는다. 확정 후 다음 공용 Fixture를 단일 예시로 사용한다.
 
 ```text
-Mock 입력을 LLM에 전달하고
-Response Schema에 맞는 JSON을 받을 수 있음
+docs/contracts/fixtures/valid-analysis-request.json
+docs/contracts/fixtures/valid-analysis-response.json
 ```
 
----
+## 9. 오류 계약
 
-### Phase 6. Repository별 분석
+모든 오류는 공통 Envelope를 사용한다.
 
-- [ ] Repository 분석 Prompt 작성
-- [ ] GitHub 근거와 사용자 입력 분리
-- [ ] 프로젝트 요약 생성
-- [ ] 강점 생성
-- [ ] 보완점 생성
-- [ ] 직무별 어필 포인트 생성
-- [ ] 면접 소재 생성
-- [ ] Repository별 결과 Schema 검증
-- [ ] 근거가 부족한 Repository 테스트
+```json
+{
+  "contractVersion": "1.0",
+  "analysisId": null,
+  "code": "INVALID_REQUEST",
+  "message": "요청 형식이 올바르지 않습니다.",
+  "retryable": false,
+  "details": []
+}
+```
 
-완료 조건:
+오류 코드:
 
 ```text
-각 Repository가 독립된 구조화 결과를 반환
-모든 핵심 판단에 근거 유형이 포함됨
+INVALID_REQUEST
+UNSUPPORTED_CONTRACT_VERSION
+UNSUPPORTED_COMBINATION
+EVIDENCE_BUDGET_EXCEEDED
+INVALID_EVIDENCE_REFERENCE
+LLM_RATE_LIMITED
+LLM_TIMEOUT
+LLM_OUTPUT_INVALID
+INTERNAL_ERROR
 ```
 
----
+필수 필드 누락, 존재하지 않는 참조, 깊이 위반 및 근거 없는 Recommendation은 warning으로 낮추지 않는다. 부분 항목을 제거해 성공 처리하지 않고 전체 오류를 반환한다.
 
-### Phase 7. 전체 Portfolio 종합
-
-- [ ] Repository별 결과 수집
-- [ ] 전체 진단 생성
-- [ ] 대표 프로젝트 추천
-- [ ] 직무별 어필 요소 생성
-- [ ] 부족하게 드러나는 경험 생성
-- [ ] 개선 로드맵 생성
-- [ ] 포트폴리오 문장 생성
-- [ ] 면접 질문과 답변 가이드 생성
-- [ ] 분석 한계 문구 생성
-
-완료 조건:
+## 10. 보안과 입력 제한
 
 ```text
-1~5개 Repository 결과를 종합한
-PortfolioReport JSON 반환
+README: 최대 256 KiB
+일반 텍스트 파일: 최대 128 KiB
+P0 요청 전체: 최대 2 MiB
+바이너리·생성 코드·빌드 결과물: 제외
+Secret: [REDACTED]
 ```
 
----
-
-### Phase 8. Evidence 검증
-
-- [ ] 허용된 기술 목록 생성
-- [ ] 허용된 파일 경로 목록 생성
-- [ ] 허용된 Repository 이름 목록 생성
-- [ ] 근거 없는 기술 검출
-- [ ] 존재하지 않는 파일 근거 검출
-- [ ] 근거 유형 혼동 검출
-- [ ] 기여도 단정 표현 검출
-- [ ] 역량·취업 가능성 단정 표현 검출
-- [ ] 검증 실패 정책 구현
-
-완료 조건:
+기본 제외:
 
 ```text
-입력에 없는 기술과 파일을
-최종 응답에 포함하지 않음
+.git, node_modules, dist, build, target, out, coverage, .next,
+vendor, .venv, __pycache__, .env, .env.*, *.pem, *.key,
+credentials.*, secrets.*, application-local.*
 ```
 
----
+- README, 코드, 커밋 및 사용자 입력은 untrusted data로 직렬화한다.
+- 외부 입력의 지시문을 따르지 않는다.
+- LLM 요청·응답 전문과 원문 전체를 운영 로그에 남기지 않는다.
+- 로그에는 `analysisId`, 단계, 처리 시간, Evidence 수, 토큰 사용량, 오류 코드만 남긴다.
 
-### Phase 9. 테스트
-
-- [ ] Spring Boot Repository Fixture
-- [ ] React Repository Fixture
-- [ ] AI/FastAPI Repository Fixture
-- [ ] Cloud/Infra Repository Fixture
-- [ ] README가 없는 입력
-- [ ] Commit과 PR이 없는 입력
-- [ ] 팀 프로젝트 역할이 없는 입력
-- [ ] 사용자 역할만 있고 GitHub 근거가 없는 입력
-- [ ] Repository 1개 입력
-- [ ] Repository 5개 입력
-- [ ] 지나치게 긴 입력
-- [ ] LLM Timeout
-- [ ] Rate Limit
-- [ ] 잘못된 JSON
-- [ ] 근거 없는 기술 생성
-- [ ] 동일 입력 반복 결과 비교
-
-완료 조건:
+## 11. 목표 구조
 
 ```text
-API, Schema, Router, Validator 테스트 통과
-주요 Hallucination 사례 차단
+gitddo/
+├── docs/contracts/
+│   ├── README.md
+│   ├── analysis-request.schema.json
+│   ├── analysis-response.schema.json
+│   ├── error-response.schema.json
+│   └── fixtures/
+└── ai/
+    ├── app/schemas/
+    │   ├── common.py
+    │   ├── enums.py
+    │   ├── evidence.py
+    │   ├── claims.py
+    │   ├── repository.py
+    │   ├── request.py
+    │   ├── response.py
+    │   └── error.py
+    ├── app/validators/
+    │   ├── evidence_validator.py
+    │   ├── depth_validator.py
+    │   └── report_validator.py
+    ├── scripts/export_contracts.py
+    └── tests/
 ```
 
----
+공용 Schema는 Pydantic에서 Draft 2020-12로 생성하고 직접 수정하지 않는다. Java DTO와 AI Pydantic은 동일 Schema와 Fixture로 검증한다.
 
-### Phase 10. Spring Boot 통합
+## 12. 구현 순서
 
-- [ ] 백엔드 개발 환경에서 API 호출
-- [ ] 인증 방식 또는 내부 네트워크 정책 확정
-- [ ] Timeout 합의
-- [ ] Retry 담당 주체 합의
-- [ ] 오류 코드 매핑
-- [ ] 실제 분석 데이터로 테스트
-- [ ] 요청 크기 제한 적용
-- [ ] 로그에서 민감 데이터 제거
-- [ ] Prompt 및 모델 버전 전달 또는 저장 방식 확정
+### Step 0. 기준선 확인
 
-완료 조건:
+- [ ] 작업 트리와 기존 변경 확인
+- [ ] 현재 pytest, Ruff, mypy 결과 기록
+- [ ] 기존 구 계약 파일과 테스트 목록 확인
+
+이 단계에서는 커밋하지 않는다.
+
+### Step 1. 미확정 wire format 합의
+
+공용 Schema 구현 전에 백엔드 정상 요청·응답·오류 Fixture로 다음을 확정한다.
+
+- [ ] `GroundedItem` 필드, 필수 여부와 null 정책
+- [ ] `repositoryRefs` 식별자 형식
+- [ ] `portfolioStatements`의 depth/confidence/supportStatus 포함 여부
+- [ ] `tokenUsage` 하위 필드
+- [ ] `validationWarnings` 객체 구조
+- [ ] 오류 `details` 구조, 정렬과 중복 규칙
+- [ ] Evidence discriminator 필드와 `DECIMAL` 직렬화
+- [ ] Snapshot SHA 대소문자와 hash algorithm 적용 범위
+- [ ] 참여 기간 필수 여부와 날짜 선후 관계
+- [ ] `BACKEND_DERIVED.sourceEvidenceRefs` 최소 개수와 미관찰 표현
+
+미합의 항목은 임의로 구현하지 않는다.
+
+### Step 2. 공용 계약 문서
+
+- [ ] `docs/contracts/README.md` 작성
+- [ ] enum, Evidence/UserClaim/ReportItem, 깊이, 오류, 보안 규칙 기록
+- [ ] 백엔드와 정상·경계·실패 Fixture 형식 합의
+
+권장 커밋: `docs: 평가 계약 v1.0 설계 반영`
+
+### Step 3. Pydantic 계약 교체
+
+- [ ] 공통 enum과 제약 타입 구현
+- [ ] Evidence discriminator 모델 구현
+- [ ] UserClaim과 Snapshot 모델 구현
+- [ ] UUID 요청 모델 구현
+- [ ] GroundedItem, ReportItem 및 전체 응답 구현
+- [ ] Error Envelope 구현
+- [ ] 구 계약 테스트 교체
+
+제거 대상:
 
 ```text
-Spring Boot 요청
-→ AI 분석
-→ JSON 응답 검증
-→ DB 저장
-과정이 정상 동작
+구 공통 버전 필드
+정수 analysisId
+구 단일 GitHub Evidence 타입
+사용자 진술을 Evidence로 표현한 타입
+AI 추천을 Evidence로 표현한 타입
+구 AnalysisPurpose 4종
+문자열 portfolioStatements
 ```
 
----
+권장 커밋: `feat: 평가 API 계약 v1.0 재설계`
 
-## 17. 테스트 우선순위
+### Step 4. JSON Schema와 Fixture
 
-### 필수
+- [ ] `docs/contracts/fixtures/` 작성
+- [ ] `ai/scripts/export_contracts.py` 작성
+- [ ] Request·Response·Error Draft 2020-12 Schema 생성
+- [ ] 정상 Fixture 성공과 실패 Fixture 실패 검증
+- [ ] Schema 재생성 무차이 테스트
 
-- 요청·응답 Schema
-- Prompt Routing
-- Evidence Validation
-- LLM Timeout
-- 잘못된 JSON 처리
-- 존재하지 않는 기술·파일 생성 방지
-- GitHub 근거와 사용자 입력 구분
+권장 커밋: `build: 평가 계약 JSON Schema 생성 체계 추가`
 
-### 품질 평가
+### Step 5. 요청 의미 검증
 
-- 희망 직무에 맞는 결과인가
-- 분석 목적에 따라 결과가 달라지는가
-- 대표 프로젝트 추천 이유가 구체적인가
-- 개선 행동이 실행 가능한가
-- 면접 질문이 실제 프로젝트 근거와 연결되는가
-- 포트폴리오 문장을 바로 활용할 수 있는가
-- 사용자의 실력이나 기여도를 과장하지 않는가
+- [ ] Evidence/Claim ID 전역 중복 검출
+- [ ] 참조 존재와 Snapshot 관계 검증
+- [ ] Evidence valueType/value 일치 검증
+- [ ] completedEvidenceLevels 일치 검증
+- [ ] MVP 지원 조합 검증
 
----
+권장 커밋: `feat: 평가 요청 의미 검증 추가`
 
-## 18. 환경변수
+### Step 6. 응답 검증
 
-```env
-APP_ENV=local
-APP_HOST=0.0.0.0
-APP_PORT=8000
+- [ ] Repository/Evidence/Claim allowlist 검증
+- [ ] 저장소별 깊이 검증
+- [ ] ReportItem 참조 규칙 검증
+- [ ] Recommendation Evidence 필수 검증
+- [ ] `jobAppeal`과 `portfolioStatements` 규칙 검증
+- [ ] 응답 전체 Item ID 중복 검출
+- [ ] 치명적 위반 전체 실패 처리
 
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.6-flash
-LLM_TIMEOUT_SECONDS=60
-LLM_MAX_RETRIES=2
+권장 커밋: `feat: 리포트 근거 및 분석 깊이 검증 추가`
 
-MAX_REPOSITORIES=5
-MAX_REQUEST_BYTES=
-LOG_LEVEL=INFO
+### Step 7. Mock 내부 API
+
+- [ ] `POST /internal/v1/portfolio-reports` 구현
+- [ ] Request validator → 고정 Fixture → Response validator 연결
+- [ ] Error Envelope와 HTTP 상태 매핑
+- [ ] Repository 1개·5개와 실패 케이스 테스트
+
+권장 커밋: `feat: 평가 리포트 Mock API 구현`
+
+### Step 8. 보안 경계
+
+- [ ] 2 MiB 요청 제한
+- [ ] untrusted data Prompt 경계
+- [ ] Prompt Injection 무시
+- [ ] 원문 로그와 Secret 노출 방지
+
+권장 커밋: `feat: 평가 요청 보안 및 크기 제한 적용`
+
+### Step 9. Gemini와 실제 리포트
+
+Mock 계약과 양쪽 통합이 성공한 뒤 진행한다.
+
+- [ ] Provider 인터페이스와 Gemini 구현
+- [ ] Structured Output 연결
+- [ ] 제한적인 429/timeout/5xx 재시도
+- [ ] P0 Criteria와 Prompt 구현
+- [ ] 생성 결과 검증 및 필요 시 1회 재생성
+- [ ] 품질 Fixture 평가
+
+LLM 연동 전에 계약·Mock·Validator가 완료되어야 한다.
+
+## 13. 검증 명령
+
+```bash
+cd ai
+pytest
+ruff check .
+ruff format --check .
+mypy app
+docker build -t gitddo-ai .
 ```
 
-실제 비밀값은 Repository에 커밋하지 않는다.
+계약 변경 시 추가 확인:
 
----
+- Pydantic serialization과 camelCase 계약 일치
+- Schema 재생성 후 예상하지 않은 diff 없음
+- 공용 정상 Fixture Schema 통과
+- 공용 실패 Fixture의 예상 규칙 위반
+- 미지원 조합의 `UNSUPPORTED_COMBINATION` 변환
 
-## 19. MVP 완료 기준
+## 14. 완료 기준
 
-- [ ] FastAPI 서버가 Docker에서 실행된다.
-- [ ] 백엔드 요청 Schema를 검증한다.
-- [ ] 최대 5개 Repository를 처리한다.
-- [ ] 네 가지 희망 직무를 지원한다.
-- [ ] 네 가지 분석 목적을 지원한다.
-- [ ] Repository별 분석을 생성한다.
-- [ ] 전체 포트폴리오 리포트를 생성한다.
-- [ ] 대표 프로젝트와 추천 이유를 반환한다.
-- [ ] 개선 로드맵을 반환한다.
-- [ ] 면접 질문과 답변 가이드를 반환한다.
-- [ ] 포트폴리오 문장을 반환한다.
-- [ ] 모든 결과를 구조화된 JSON으로 반환한다.
-- [ ] GitHub 근거와 사용자 입력을 구분한다.
-- [ ] 입력에 없는 기술과 파일을 검출한다.
-- [ ] LLM 오류와 Timeout을 명확하게 반환한다.
-- [ ] 핵심 테스트와 CI 검사가 통과한다.
+- [ ] 백엔드와 AI가 동일 JSON Schema와 Fixture를 사용한다.
+- [ ] Evidence, UserClaim, ReportItem이 분리된다.
+- [ ] UUID와 전역 ID 규칙이 적용된다.
+- [ ] P0 Evidence와 판단 범위를 넘는 결과를 차단한다.
+- [ ] 모든 Recommendation과 `jobAppeal`이 Evidence를 참조한다.
+- [ ] 모든 포트폴리오 문장이 Evidence 또는 Claim을 참조한다.
+- [ ] 저장소별 실제 분석 깊이와 limitations를 반환한다.
+- [ ] 모든 오류가 Error Envelope를 사용한다.
+- [ ] AI 서버가 stateless로 동작한다.
+- [ ] Spring Boot의 최종 검증과 저장 흐름이 통합 테스트를 통과한다.
+- [ ] pytest, Ruff, mypy, Docker 검증이 통과한다.
+
+## 15. 중단 조건
+
+다음 상황에서는 임의로 결정하지 않고 현재 문서, 구현, 선택지와 영향을 보고한다.
+
+- 백엔드 DTO 또는 Fixture가 최종 가이드와 다름
+- 미확정 wire field를 구현해야 함
+- AI 서버에 DB, Redis, Job Lock 또는 결과 저장 책임이 요구됨
+- P0 요청에 P1/P2 Evidence 또는 전체 코드가 포함됨
+- JSON Schema와 Pydantic이 다름
+- 계약 의미 변경 없이는 테스트를 통과할 수 없음

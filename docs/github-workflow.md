@@ -181,10 +181,18 @@ PR 본문에는 다음 내용을 포함한다.
 리뷰어는 다음 항목을 확인한다.
 
 - AI 서버의 책임 범위를 벗어나지 않는가
-- 요청과 응답이 Pydantic Schema와 일치하는가
-- GitHub 근거, 사용자 입력 및 AI 제안을 구분하는가
+- 요청과 응답이 `contractVersion = "1.0"`의 Pydantic 및 공용 JSON Schema와 일치하는가
+- 공용 Fixture가 백엔드와 AI 양쪽 테스트에서 동일하게 사용되는가
+- Evidence, UserClaim 및 ReportItem을 타입 수준에서 구분하는가
+- `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 이외 조합을 실행하지 않는가
+- 모든 Recommendation이 Evidence를 참조하는가
+- `jobAppeal`이 UserClaim만으로 확정되지 않는가
+- `portfolioStatements`가 Evidence 또는 Claim을 참조하는가
+- 저장소별 `completedEvidenceLevels`를 넘는 판단이 없는가
 - 입력에 없는 기술이나 파일을 사실처럼 생성할 가능성이 없는가
 - timeout, rate limit, 잘못된 JSON 등 실패 흐름을 처리하는가
+- 치명적 계약 위반을 일부 항목 삭제나 Warning으로 낮추지 않는가
+- AI 서버가 Job·결과·멱등성 상태를 저장하지 않는 stateless 구조인가
 - 테스트가 정상 흐름과 주요 경계 조건을 검증하는가
 - API key, token 또는 민감한 원문이 로그에 노출되지 않는가
 
@@ -220,7 +228,8 @@ PR 본문에는 다음 내용을 포함한다.
 
 ## 10. AI 코딩 에이전트 사용 규칙
 
-- AI 에이전트는 작업 시작 전 `README.md`, `AGENTS.md` 및 관련 `docs/` 문서를 확인한다.
+- AI 에이전트는 작업 시작 전 `AGENTS.md`와 `EVALUATION_CONTRACT_MIGRATION_GUIDE.md`를 우선 읽고, `docs/contracts/`, `docs/guide.md`, `README.md` 및 `ai/README.md`를 확인한다.
+- 계약 문서가 충돌하면 최종 마이그레이션 가이드와 생성된 공용 JSON Schema를 기준으로 차이를 보고하며, 미확정 wire format을 임의로 추정하지 않는다.
 - AI 에이전트가 생성한 코드도 사람이 작성한 코드와 동일한 리뷰와 테스트 기준을 적용한다.
 - 에이전트는 별도 지시가 없으면 로컬 `main`에서 작업한다.
 - 에이전트는 완료하고 검증한 변경을 논리적 작업 단위별로 로컬 `main`에 commit한다.
@@ -255,5 +264,6 @@ pytest
 - 구현과 테스트 작성 완료
 - formatter, lint, type check 및 test 통과
 - 관련 문서와 API 계약 갱신
+- 계약 변경인 경우 Pydantic, 공용 JSON Schema와 Fixture의 일치 확인
 - 작업 단위의 local `main` commit 생성
 - push를 요청받은 경우 원격 반영과 CI 결과 확인

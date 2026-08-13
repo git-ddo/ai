@@ -1,57 +1,113 @@
-# AI Server
+# GitDdo AI Server
 
-GitHub Repository의 구조화된 근거와 사용자 입력을 바탕으로 취업용 포트폴리오 코칭 리포트를 생성하는 AI 서버이다.
+Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여 근거가 연결된 포트폴리오 코칭 리포트를 생성하는 stateless FastAPI 서버이다.
 
-전체 서비스 기획은 루트 [`README.md`](../README.md), 상세 AI 개발 명세는 [`guide.md`](../docs/guide.md), AI 에이전트 작업 규칙은 [`AGENTS.md`](../AGENTS.md)를 참고한다.
+## 문서 기준
 
-> Phase 1의 서버 기반 구성이 완료되었으며 현재는 Phase 2의 API 계약을 구현하는 단계이다.
+- 최종 계약 기준: [`EVALUATION_CONTRACT_MIGRATION_GUIDE.md`](../EVALUATION_CONTRACT_MIGRATION_GUIDE.md)
+- 단계별 개발 절차: [`docs/guide.md`](../docs/guide.md)
+- 에이전트 작업 규칙: [`AGENTS.md`](../AGENTS.md)
+- 협업 규칙: [`docs/github-workflow.md`](../docs/github-workflow.md)
+
+공용 계약 구현 후 `docs/contracts/`의 JSON Schema와 Fixture를 백엔드와 함께 사용한다.
+
+## 현재 구현 상태
+
+- [x] FastAPI 프로젝트와 `/health`
+- [x] 설정, 로깅, 예외 기반 구조
+- [x] pytest, Ruff, mypy, Docker 구성
+- [ ] 최종 `contractVersion = "1.0"` Pydantic 계약
+- [ ] 공용 JSON Schema와 Fixture
+- [ ] 요청·응답 의미 Validator
+- [ ] `POST /internal/v1/portfolio-reports` Mock API
+- [ ] Gemini Structured Output 연동
+
+기존 Pydantic 계약은 초기 초안이며 최종 계약으로 교체해야 한다. 구현 완료 여부는 코드와 테스트를 기준으로 갱신한다.
+
+## MVP 지원 범위
+
+```text
+Repository: 1~5개
+TargetJob: BACKEND
+TargetCareerLevel: ENTRY
+AnalysisPurpose: PORTFOLIO_ANALYSIS
+AnalysisDepth: P0
+ContractVersion: 1.0
+```
+
+다른 직무·경력 수준과 P1/P2는 계약 확장 타입으로만 정의한다. 현재 요청되면 `UNSUPPORTED_COMBINATION`을 반환한다.
 
 ## 책임 범위
 
-AI 서버는 다음 작업을 담당한다.
+### 담당
 
-- 백엔드 요청 데이터 검증 및 정규화
-- 희망 직무와 분석 목적에 맞는 평가 기준 선택
-- Repository별 포트폴리오 분석
-- 전체 포트폴리오 진단과 대표 프로젝트 추천
-- GitHub 정리 로드맵 생성
-- 면접 질문과 답변 가이드 생성
-- 이력서·포트폴리오·면접용 문장 생성
-- LLM의 구조화된 출력과 근거 검증
+- Pydantic 요청·응답·오류 검증
+- MVP 지원 조합 검증
+- 전달된 Evidence와 UserClaim 해석
+- Gemini Structured Output 생성
+- Evidence/Claim 참조 무결성 검증
+- 저장소별 분석 깊이 검증
+- `jobAppeal`, Recommendation, `portfolioStatements` 근거 규칙 검증
+- 공통 Error Envelope 반환
 
-다음 작업은 AI 서버의 책임이 아니다.
+### 담당하지 않음
 
-- GitHub OAuth 및 사용자 인증
-- GitHub API 직접 호출
-- 사용자, 분석 상태 및 리포트의 영속화
-- Repository 전체 원본 저장
-- commit 수를 이용한 기여도 또는 실력 계산
-- Private Repository 접근 권한 관리
+- GitHub OAuth와 GitHub API 호출
+- Snapshot과 Evidence 수집
+- 사용자·포트폴리오·Evaluation Job 관리
+- 결과 저장과 멱등성 처리
+- 동일 `analysisId` 중복 실행 차단
+- DB, Redis, in-memory Job Lock
+- 기여율·역량 점수·합격 가능성 생성
 
 ## 데이터 흐름
 
 ```text
-Spring Boot Backend
-  └─ GitHub 근거, 백엔드 계산 지표, 사용자 입력 전달
-          ↓ JSON
-FastAPI AI Server
-  ├─ Pydantic 요청 검증
-  ├─ 입력 정규화
-  ├─ 직무별 Criteria 및 분석 목적별 Prompt 선택
-  ├─ LLM Structured Output 생성
-  └─ 근거 및 응답 Schema 검증
-          ↓ JSON
-Spring Boot Backend
-  └─ 최종 리포트 저장 및 Frontend 제공
+Spring Boot
+  Snapshot + Evidence + UserClaim 구성
+  Request JSON Schema 검증
+        ↓
+POST /internal/v1/portfolio-reports
+        ↓
+FastAPI
+  Pydantic 검증
+  → 지원 조합·참조·깊이 검증
+  → Gemini 호출
+  → Pydantic 응답 검증
+  → Evidence/Claim/깊이 검증
+        ↓
+Response JSON 또는 Error Envelope
+        ↓
+Spring Boot
+  최종 Schema와 allowlist 검증 후 저장
 ```
 
-분석 데이터는 항상 다음 세 범주를 구분한다.
+Spring Boot가 timeout 후 같은 요청을 재호출하면 LLM이 중복 실행될 수 있으며 MVP에서는 허용한다. AI 서버는 요청별로 독립 실행한다.
 
-1. `GITHUB`: GitHub에서 확인된 객관적 근거
-2. `USER_PROVIDED`: 사용자가 직접 입력한 역할과 경험
-3. `BACKEND_DERIVED`: 백엔드 규칙으로 계산된 결과
+## 계약 개념
 
-AI가 만든 해석과 추천은 입력에서 확인된 사실로 표현하지 않는다.
+```text
+Evidence
+GitHub 또는 백엔드가 확인·도출한 사실
+
+UserClaim
+사용자가 입력한 역할과 경험
+
+ReportItem
+AI가 생성한 관찰·해석·추천·면접 질문
+```
+
+핵심 규칙:
+
+- `contractVersion`은 `"1.0"`만 허용한다.
+- `analysisId`는 UUID v4이다.
+- Evidence 타입은 `GITHUB_STATIC`, `GITHUB_ACTIVITY`, `CODE_EVIDENCE`, `BACKEND_DERIVED`이다.
+- P0에서는 `GITHUB_STATIC`, `BACKEND_DERIVED`만 허용한다.
+- 모든 Recommendation은 `evidenceRefs`를 최소 1개 포함한다.
+- `jobAppeal`은 공개 Evidence를 최소 1개 포함하며 Claim만으로 만들지 않는다.
+- `portfolioStatements`는 `evidenceRefs` 또는 `claimRefs` 중 최소 하나를 포함한다.
+- `NOT_OBSERVED`는 부재·거짓·미기여를 뜻하지 않는다.
+- 잘못된 항목을 제거한 부분 성공을 반환하지 않는다.
 
 ## 기술 스택
 
@@ -61,38 +117,55 @@ AI가 만든 해석과 추천은 입력에서 확인된 사실로 표현하지 �
 | API | FastAPI, Uvicorn |
 | Schema | Pydantic v2 |
 | Settings | pydantic-settings |
-| LLM | Google Gen AI SDK (`google-genai`), Gemini Structured Output |
+| LLM | Google Gen AI SDK(`google-genai`), Gemini Structured Output |
 | Retry | tenacity |
 | Criteria | PyYAML |
 | Test | pytest, pytest-asyncio |
-| Quality | Ruff, mypy 또는 pyright |
+| Quality | Ruff, mypy |
 | Infrastructure | Docker, GitHub Actions |
 
 MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 및 자체 ML 모델을 사용하지 않는다.
 
-## 디렉토리 구조
+## 목표 디렉터리 구조
 
 ```text
 ai/
 ├── app/
 │   ├── main.py
-│   ├── api/            # FastAPI endpoint
-│   ├── core/           # 설정, 예외, 로깅
-│   ├── schemas/        # Pydantic 요청·응답 모델
-│   ├── criteria/       # 직무별 YAML 평가 기준
-│   ├── prompts/        # 시스템 및 분석 Prompt
-│   ├── llm/            # LLM Provider 인터페이스와 구현
-│   ├── services/       # 분석 유스케이스
-│   └── validators/     # 근거 및 최종 리포트 검증
+│   ├── api/
+│   │   ├── health.py
+│   │   └── reports.py
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── exceptions.py
+│   │   └── logging.py
+│   ├── schemas/
+│   │   ├── common.py
+│   │   ├── enums.py
+│   │   ├── evidence.py
+│   │   ├── claims.py
+│   │   ├── repository.py
+│   │   ├── request.py
+│   │   ├── response.py
+│   │   └── error.py
+│   ├── criteria/
+│   ├── prompts/
+│   ├── llm/
+│   ├── services/
+│   └── validators/
+│       ├── evidence_validator.py
+│       ├── depth_validator.py
+│       └── report_validator.py
+├── scripts/
+│   └── export_contracts.py
 ├── tests/
 │   └── fixtures/
 ├── .env.example
 ├── Dockerfile
-├── pyproject.toml
-└── README.md
+└── pyproject.toml
 ```
 
-Phase 2 이후에 구현할 모듈은 현재 빈 구조로 유지하며 각 단계에서 테스트와 함께 구현한다.
+공용 계약 Fixture는 루트 `docs/contracts/fixtures/`에 둔다. `ai/tests/fixtures/`에는 AI 서버 전용 실패·Prompt Injection Fixture만 둔다.
 
 ## API
 
@@ -111,39 +184,27 @@ GET /health
 ### 포트폴리오 리포트 생성
 
 ```http
-POST /ai/v1/portfolio-reports
+POST /internal/v1/portfolio-reports
 Content-Type: application/json
 ```
 
-초기 MVP에서는 동기 HTTP API로 구현한다. 장시간 분석의 Job 및 상태 관리는 Spring Boot가 담당한다.
-
-요청에는 다음 정보가 포함된다.
-
-- `schemaVersion`
-- `analysisId`
-- `targetJob`
-- `analysisPurpose`
-- 최대 5개의 `repositories`
-- Repository별 GitHub 근거, 백엔드 계산 지표 및 사용자 역할
-
-응답은 자유 형식 Markdown이 아닌 Pydantic 모델로 검증된 JSON이다. 상세 요청·응답 예시는 [`guide.md`](../docs/guide.md)를 참고한다.
+요청·응답 예시는 공용 계약 Fixture로 관리한다. 최종 wire format 확정 전 README에 별도 대형 JSON을 복제하지 않는다.
 
 ## 개발 순서
 
-1. FastAPI 프로젝트와 `/health` 구성
-2. 요청·응답 Pydantic 모델 및 API 계약 확정
-3. LLM 없이 고정 응답을 반환하는 Mock API 구현
-4. 직무별 Criteria와 분석 목적별 Prompt Routing 구현
-5. LLM Provider 및 Gemini Structured Output 연동
-6. Repository별 분석과 전체 포트폴리오 종합 구현
-7. Evidence Validator와 실패 정책 구현
-8. 백엔드 통합 및 품질 평가
+1. 백엔드 Fixture로 남은 wire format 확정
+2. `docs/contracts/README.md` 작성
+3. Pydantic 계약 v1.0 재설계
+4. JSON Schema와 공용 Fixture 생성
+5. 요청 의미·지원 조합 Validator 구현
+6. 응답 참조·분석 깊이 Validator 구현
+7. Mock 내부 API와 Error Envelope 구현
+8. 입력 제한과 Prompt Injection 방어 구현
+9. Gemini Structured Output과 P0 리포트 구현
 
-각 단계는 formatter, lint, type check 및 test가 통과한 뒤 다음 단계로 진행한다.
+단계별 체크리스트와 커밋 단위는 [`docs/guide.md`](../docs/guide.md)를 따른다.
 
 ## 환경변수
-
-예정된 환경변수는 다음과 같다.
 
 ```env
 APP_ENV=local
@@ -152,20 +213,18 @@ APP_PORT=8000
 
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.6-flash
+GEMINI_MODEL=
 LLM_TIMEOUT_SECONDS=60
 LLM_MAX_RETRIES=2
 
 MAX_REPOSITORIES=5
-MAX_REQUEST_BYTES=
+MAX_REQUEST_BYTES=2097152
 LOG_LEVEL=INFO
 ```
 
-실제 API key와 비밀값은 커밋하지 않는다.
+실제 API key, token, 개인정보와 Repository 원문은 커밋하거나 운영 로그에 남기지 않는다.
 
-## 실행 및 검증
-
-현재 다음 항목을 로컬과 CI에서 검증한다.
+## 실행과 검증
 
 ```bash
 pytest
@@ -175,11 +234,13 @@ mypy app
 docker build -t gitddo-ai .
 ```
 
-## 핵심 품질 기준
+계약 변경 시 Pydantic 직렬화, 공용 Fixture, Draft 2020-12 JSON Schema 및 참조 무결성 테스트를 함께 실행한다.
 
-- 입력에 없는 기술이나 파일을 근거로 사용하지 않는다.
-- GitHub 근거와 사용자 입력을 하나의 사실처럼 혼합하지 않는다.
-- commit 수를 개인 기여도 또는 역량으로 해석하지 않는다.
-- 포트폴리오 준비도 점수를 사용자의 실력이나 취업 가능성으로 표현하지 않는다.
-- LLM 응답은 JSON Schema와 Evidence 검증을 통과한 후에만 반환한다.
-- timeout, rate limit, 잘못된 JSON 및 근거 없는 핵심 주장을 명시적으로 처리한다.
+## 보안 기준
+
+- README·코드·커밋·사용자 입력을 untrusted data로 처리한다.
+- 외부 입력에 포함된 지시문을 따르지 않는다.
+- 전달된 코드를 실행하지 않는다.
+- 저장소 전체 코드와 GitHub raw response를 받지 않는다.
+- LLM 요청·응답 전문을 운영 로그에 남기지 않는다.
+- P0 요청은 최대 2 MiB로 제한한다.
