@@ -11,13 +11,14 @@
 - [x] FastAPI 기반 환경 구성
 - [x] `/health` 구현
 - [x] pytest, Ruff, mypy, Docker 기반 구성
-- [x] 최종 계약 기준 문서 확정
-- [ ] 최종 계약의 미확정 wire format을 백엔드 Fixture로 확정
-- [ ] `contractVersion = "1.0"` Pydantic 계약 구현
+- [x] 양쪽 독립 개발에 필요한 계약 의미와 책임 경계 확정
+- [ ] AI P0 Criteria·System Prompt·Gemini Provider 독립 구현
+- [ ] 백엔드 P0 수집·Evidence 생성 독립 구현
+- [ ] AI 내부 분석 파이프라인과 독립 테스트 구현
+- [ ] 실제 사용 데이터를 기준으로 최종 Pydantic 계약 구현
 - [ ] 공용 JSON Schema와 Fixture 생성
 - [ ] 의미·참조·분석 깊이 Validator 구현
-- [ ] Mock 내부 API 구현
-- [ ] Gemini 연동과 실제 리포트 생성
+- [ ] Mock 연동 후 실제 E2E 연동
 
 기존 Phase 2 Pydantic 코드는 구 계약 초안이다. reset하지 않고 새 커밋에서 최종 계약으로 교체한다.
 
@@ -334,21 +335,141 @@ gitddo/
     └── tests/
 ```
 
-공용 Schema는 Pydantic에서 Draft 2020-12로 생성하고 직접 수정하지 않는다. Java DTO와 AI Pydantic은 동일 Schema와 Fixture로 검증한다.
+공용 Schema는 최종 DTO를 확정한 뒤 Pydantic에서 Draft 2020-12로 생성하고 직접 수정하지 않는다. Java DTO와 AI Pydantic은 동일 Schema와 Fixture로 검증한다.
 
 ## 12. 구현 순서
 
-### Step 0. 기준선 확인
+백엔드와 AI는 실제 HTTP 연동을 최대한 뒤로 미루고 각자의 핵심 기능을 Fake·Stub·내부 모델로 먼저 완성한다. 상세 wire DTO는 양쪽에서 실제 사용하는 데이터가 드러난 뒤 확정한다.
 
-- [ ] 작업 트리와 기존 변경 확인
-- [ ] 현재 pytest, Ruff, mypy 결과 기록
+### Phase 0. 최소 공통 기준과 기준선
+
+- [x] `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 확정
+- [x] Evidence, UserClaim, ReportItem 의미 분리
+- [x] AI stateless와 Spring Boot Job·저장 책임 확정
+- [x] Recommendation·`jobAppeal`·`portfolioStatements` 근거 원칙 확정
+- [ ] 작업 시작 시 현재 pytest, Ruff, mypy 결과 기록
 - [ ] 기존 구 계약 파일과 테스트 목록 확인
 
-이 단계에서는 커밋하지 않는다.
+이 Phase에서는 세부 DTO와 Fixture를 확정하지 않는다.
 
-### Step 1. 미확정 wire format 합의
+### Phase 1. AI 독립 기반 개발
 
-공용 Schema 구현 전에 백엔드 정상 요청·응답·오류 Fixture로 다음을 확정한다.
+#### 1A. Backend P0 Criteria
+
+- [ ] `ai/app/criteria/backend.yaml` 작성
+- [ ] Criteria Loader 구현
+- [ ] YAML 필수 필드와 허용값 검증
+- [ ] P0에서 허용되는 README·기술 근거·테스트·Docker·CI 기준만 포함
+- [ ] 설계 품질·코드 품질·사용자 역량 기준 제외
+
+권장 커밋: `feat: Backend P0 Criteria 추가`
+
+#### 1B. System Prompt
+
+- [ ] Evidence와 UserClaim 분리 규칙 작성
+- [ ] Repository 입력을 untrusted data로 격리
+- [ ] README·코드·사용자 입력의 지시문 무시
+- [ ] 입력에 없는 사실 생성 금지
+- [ ] P0 범위 초과 판단 금지
+- [ ] 기여율·실력·취업 가능성 단정 금지
+- [ ] `NOT_OBSERVED` 의미 보호
+- [ ] Prompt 단위 테스트 작성
+
+최종 응답 필드명과 JSON Schema 지시는 계약 확정 후 추가한다.
+
+권장 커밋: `feat: 근거 기반 System Prompt 추가`
+
+#### 1C. Gemini Provider 기반
+
+- [ ] `LLMProvider` 인터페이스 정의
+- [ ] Gemini 클라이언트 초기화
+- [ ] API key와 모델명 환경변수화
+- [ ] timeout과 429·5xx 제한적 retry
+- [ ] provider 오류를 내부 예외로 변환
+- [ ] 작은 테스트용 Pydantic 출력 모델로 Structured Output 검증
+- [ ] 실제 API에 의존하지 않는 Fake Provider 테스트
+
+최종 `PortfolioReport` DTO, Evidence Validator와 서비스 연결은 이 Phase에서 구현하지 않는다.
+
+권장 커밋: `feat: Gemini Provider 기반 구현`
+
+### Phase 2. 백엔드 독립 P0 개발
+
+이 Phase는 Spring Boot 팀의 독립 작업 범위이다. AI 서버를 실행하지 않고 Fake AI Client로 검증한다.
+
+- [ ] Repository 메타데이터와 default branch 수집
+- [ ] Snapshot SHA 고정
+- [ ] README, 파일 트리, dependency, 테스트, Docker, Actions 수집
+- [ ] `GITHUB_STATIC`, `BACKEND_DERIVED` Evidence 생성
+- [ ] Evidence ID, `contentHash`, Repository·Snapshot 연결
+- [ ] `README_SECTION_MISSING`, `TEST_NOT_OBSERVED`, `DEPLOYMENT_CONFIG_NOT_OBSERVED` 생성
+- [ ] Secret, 바이너리, 생성 파일, 대용량 파일 제거
+- [ ] Evaluation Job과 실패·재시도 흐름 구현
+- [ ] Fake AI Client로 결과 저장 흐름 검증
+
+### Phase 3. AI 내부 분석 파이프라인
+
+최종 HTTP DTO 대신 AI 전용 내부 모델과 독립 Fixture를 사용한다.
+
+```text
+내부 테스트 입력
+→ 정규화
+→ P0 Criteria 선택
+→ Prompt 생성
+→ Fake 또는 Gemini Provider
+→ Repository별 분석
+→ Portfolio 종합
+→ 정책 검증
+```
+
+- [ ] `normalization_service.py` 구현
+- [ ] `repository_service.py` 구현
+- [ ] `portfolio_service.py` 구현
+- [ ] `report_service.py` 오케스트레이션 구현
+- [ ] Repository별 요약·어필 후보·보완 후보 생성
+- [ ] 전체 진단·대표 프로젝트·면접 소재·문장 후보 생성
+- [ ] P0 범위 초과 및 금지 표현 검사
+- [ ] Provider를 Fake로 교체할 수 있는 의존성 주입
+
+내부 모델은 최종 wire DTO와 분리한다. 이후 API DTO가 변경되어도 변환 계층만 수정할 수 있어야 한다.
+
+권장 커밋: `feat: P0 포트폴리오 분석 파이프라인 추가`
+
+### Phase 4. 양쪽 독립 검증
+
+AI 검증:
+
+- [ ] Criteria Loader 정상·실패 테스트
+- [ ] Prompt Injection 테스트
+- [ ] Gemini timeout·rate limit·잘못된 출력 테스트
+- [ ] P0 범위 초과 응답 차단
+- [ ] 입력에 없는 기술·파일 생성 방지
+- [ ] 내부 Repository 1개·5개 분석 테스트
+
+백엔드 검증:
+
+- [ ] Snapshot 재현성과 SHA 연결
+- [ ] Evidence 생성 및 누락 기반 Evidence 규칙
+- [ ] Secret 제거와 입력 예산
+- [ ] Repository 1개·5개 수집
+- [ ] Job 실패·재시도·중복 결과 정책
+
+### Phase 5. 최종 DTO·Schema·Fixture 확정
+
+양쪽 독립 개발에서 확인된 실제 데이터를 모아 wire contract를 확정한다.
+
+순서:
+
+1. 백엔드 P0 Evidence 출력 확인
+2. AI 내부 입력·출력 모델과 비교
+3. 미확정 wire format 합의
+4. Request·Response·Error Pydantic 구현
+5. Java DTO 구현
+6. Pydantic에서 Draft 2020-12 JSON Schema 생성
+7. 정상·경계·실패 공용 Fixture 작성
+8. 양쪽 Schema·Fixture 테스트
+
+확정 대상:
 
 - [ ] `GroundedItem` 필드, 필수 여부와 null 정책
 - [ ] `repositoryRefs` 식별자 형식
@@ -356,107 +477,89 @@ gitddo/
 - [ ] `tokenUsage` 하위 필드
 - [ ] `validationWarnings` 객체 구조
 - [ ] 오류 `details` 구조, 정렬과 중복 규칙
-- [ ] Evidence discriminator 필드와 `DECIMAL` 직렬화
+- [ ] Evidence discriminator와 `DECIMAL` 직렬화
 - [ ] Snapshot SHA 대소문자와 hash algorithm 적용 범위
 - [ ] 참여 기간 필수 여부와 날짜 선후 관계
 - [ ] `BACKEND_DERIVED.sourceEvidenceRefs` 최소 개수와 미관찰 표현
 
-미합의 항목은 임의로 구현하지 않는다.
+Fixture 선확정은 요구하지 않는다. Pydantic과 Java DTO의 의미를 합의한 뒤 Fixture를 생성한다.
 
-### Step 2. 공용 계약 문서
-
-- [ ] `docs/contracts/README.md` 작성
-- [ ] enum, Evidence/UserClaim/ReportItem, 깊이, 오류, 보안 규칙 기록
-- [ ] 백엔드와 정상·경계·실패 Fixture 형식 합의
-
-권장 커밋: `docs: 평가 계약 v1.0 설계 반영`
-
-### Step 3. Pydantic 계약 교체
-
-- [ ] 공통 enum과 제약 타입 구현
-- [ ] Evidence discriminator 모델 구현
-- [ ] UserClaim과 Snapshot 모델 구현
-- [ ] UUID 요청 모델 구현
-- [ ] GroundedItem, ReportItem 및 전체 응답 구현
-- [ ] Error Envelope 구현
-- [ ] 구 계약 테스트 교체
-
-제거 대상:
+권장 커밋:
 
 ```text
-구 공통 버전 필드
-정수 analysisId
-구 단일 GitHub Evidence 타입
-사용자 진술을 Evidence로 표현한 타입
-AI 추천을 Evidence로 표현한 타입
-구 AnalysisPurpose 4종
-문자열 portfolioStatements
+docs: 평가 계약 v1.0 wire format 확정
+feat: 평가 API 계약 v1.0 재설계
+build: 평가 계약 JSON Schema와 Fixture 추가
 ```
 
-권장 커밋: `feat: 평가 API 계약 v1.0 재설계`
+### Phase 6. 계약 Validator
 
-### Step 4. JSON Schema와 Fixture
+AI 서버:
 
-- [ ] `docs/contracts/fixtures/` 작성
-- [ ] `ai/scripts/export_contracts.py` 작성
-- [ ] Request·Response·Error Draft 2020-12 Schema 생성
-- [ ] 정상 Fixture 성공과 실패 Fixture 실패 검증
-- [ ] Schema 재생성 무차이 테스트
-
-권장 커밋: `build: 평가 계약 JSON Schema 생성 체계 추가`
-
-### Step 5. 요청 의미 검증
-
-- [ ] Evidence/Claim ID 전역 중복 검출
-- [ ] 참조 존재와 Snapshot 관계 검증
-- [ ] Evidence valueType/value 일치 검증
-- [ ] completedEvidenceLevels 일치 검증
-- [ ] MVP 지원 조합 검증
-
-권장 커밋: `feat: 평가 요청 의미 검증 추가`
-
-### Step 6. 응답 검증
-
-- [ ] Repository/Evidence/Claim allowlist 검증
-- [ ] 저장소별 깊이 검증
-- [ ] ReportItem 참조 규칙 검증
-- [ ] Recommendation Evidence 필수 검증
-- [ ] `jobAppeal`과 `portfolioStatements` 규칙 검증
-- [ ] 응답 전체 Item ID 중복 검출
+- [ ] Evidence·Claim ID 전역 유일성
+- [ ] 참조 존재와 Repository·Snapshot 관계
+- [ ] Evidence valueType/value 일치
+- [ ] 저장소별 `completedEvidenceLevels`
+- [ ] MVP 지원 조합
+- [ ] ReportItem 참조 규칙
+- [ ] Recommendation Evidence 필수
+- [ ] `jobAppeal` Claim 단독 금지
+- [ ] `portfolioStatements` 참조 필수
+- [ ] 응답 전체 Item ID 중복
 - [ ] 치명적 위반 전체 실패 처리
 
-권장 커밋: `feat: 리포트 근거 및 분석 깊이 검증 추가`
+Spring Boot:
 
-### Step 7. Mock 내부 API
+- [ ] Response JSON Schema 검증
+- [ ] `analysisId`, Repository, Snapshot 일치
+- [ ] Evidence·Claim allowlist
+- [ ] 저장소별 분석 깊이
+- [ ] 최초 검증 성공 결과만 저장
 
-- [ ] `POST /internal/v1/portfolio-reports` 구현
-- [ ] Request validator → 고정 Fixture → Response validator 연결
-- [ ] Error Envelope와 HTTP 상태 매핑
-- [ ] Repository 1개·5개와 실패 케이스 테스트
+### Phase 7. Mock 연동
+
+실제 Gemini 분석 대신 계약과 전송 흐름만 확인한다.
+
+```text
+Spring Boot P0 Evidence
+→ 실제 Request DTO
+→ POST /internal/v1/portfolio-reports
+→ FastAPI 고정 Response Fixture
+→ Spring Boot 최종 검증·저장
+```
+
+- [ ] Repository 1개·5개
+- [ ] 지원하지 않는 조합
+- [ ] HTTP 상태와 Error Envelope
+- [ ] 요청 크기와 timeout
+- [ ] 잘못된 참조·Snapshot·깊이
+- [ ] Spring Boot 재호출과 중복 결과 저장 방지
 
 권장 커밋: `feat: 평가 리포트 Mock API 구현`
 
-### Step 8. 보안 경계
+### Phase 8. 실제 연동과 E2E
 
-- [ ] 2 MiB 요청 제한
-- [ ] untrusted data Prompt 경계
-- [ ] Prompt Injection 무시
-- [ ] 원문 로그와 Secret 노출 방지
+```text
+Spring Boot P0 Collector
+→ Request DTO
+→ FastAPI
+→ Criteria + Prompt + Gemini
+→ AI Validator
+→ Response DTO
+→ Spring Boot 최종 검증·저장
+```
 
-권장 커밋: `feat: 평가 요청 보안 및 크기 제한 적용`
+진행 순서:
 
-### Step 9. Gemini와 실제 리포트
+1. Repository 1개 정상 요청
+2. Evidence가 부족한 Repository
+3. Repository 5개
+4. Gemini timeout·rate limit
+5. 잘못된 Structured Output
+6. 동일 요청 재호출과 중복 LLM 실행
+7. 전체 E2E와 운영 로그 점검
 
-Mock 계약과 양쪽 통합이 성공한 뒤 진행한다.
-
-- [ ] Provider 인터페이스와 Gemini 구현
-- [ ] Structured Output 연결
-- [ ] 제한적인 429/timeout/5xx 재시도
-- [ ] P0 Criteria와 Prompt 구현
-- [ ] 생성 결과 검증 및 필요 시 1회 재생성
-- [ ] 품질 Fixture 평가
-
-LLM 연동 전에 계약·Mock·Validator가 완료되어야 한다.
+이 Phase 전까지 백엔드와 AI는 서로의 실행 환경에 의존하지 않아야 한다.
 
 ## 13. 검증 명령
 

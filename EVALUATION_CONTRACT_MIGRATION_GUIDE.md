@@ -12,7 +12,7 @@
 - Mock 내부 API 구현
 - 보안과 입력 제한 적용
 
-모든 작업은 한 번에 구현하지 않고, 이 문서의 Phase 순서와 완료 조건을 따른다.
+모든 작업은 한 번에 구현하지 않는다. 백엔드와 AI가 Fake·Stub으로 각자의 핵심 기능을 먼저 완성하고, 최종 DTO·Schema·Fixture와 실제 HTTP 연동은 뒤에서 확정한다. 실행 순서는 이 문서의 변경된 Phase와 `docs/guide.md`를 따른다.
 
 ---
 
@@ -1048,7 +1048,25 @@ gitddo/
 
 ## 19. 단계별 실행 계획
 
-각 Phase는 독립적으로 검증 가능한 작업 단위이다. 이전 Phase가 완료되지 않으면 다음 Phase로 진행하지 않는다.
+각 Phase는 독립적으로 검증 가능한 작업 단위이다. 백엔드와 AI의 독립 Phase는 병렬로 진행할 수 있으며, 실제 연동은 양쪽 독립 완료 조건을 만족한 뒤 시작한다.
+
+### 현재 실행 순서
+
+```text
+Phase 0  최소 계약 의미와 책임 경계 확정
+Phase 1  AI 독립 기반: P0 Criteria · System Prompt · Gemini Provider
+Phase 2  백엔드 독립 기반: P0 Collector · Evidence · Job
+Phase 3  AI 내부 P0 분석 파이프라인
+Phase 4  양쪽 독립 검증
+Phase 5  실제 데이터를 기준으로 최종 DTO · Schema · Fixture 확정
+Phase 6  양쪽 계약 Validator
+Phase 7  Mock HTTP 연동
+Phase 8  실제 Gemini · Spring Boot E2E
+```
+
+Fixture 선확정은 요구하지 않는다. AI는 wire DTO와 분리된 내부 모델로 먼저 개발하고, 백엔드는 Fake AI Client로 먼저 개발한다. 양쪽에서 필요한 데이터가 확인된 뒤 Pydantic·Java DTO를 확정하고 공용 Fixture를 생성한다.
+
+아래의 기존 계약 마이그레이션 작업 목록은 Phase 5~7에서 수행할 세부 체크리스트로 사용한다. 목록에 붙은 기존 Phase 번호는 작업 종류를 구분하기 위한 참조이며 현재 실행 우선순위를 의미하지 않는다.
 
 ### Phase 0. 현재 상태 점검
 
@@ -1079,7 +1097,7 @@ mypy app
 
 ---
 
-### Phase 1. 계약 문서 재작성
+### 기존 계약 작업 A. 계약 문서 재작성
 
 목표:
 
@@ -1117,7 +1135,7 @@ docs: 평가 계약 v1.0 설계 반영
 
 ---
 
-### Phase 2. Pydantic 계약 재설계
+### 기존 계약 작업 B. Pydantic 계약 재설계
 
 목표:
 
@@ -1198,7 +1216,7 @@ feat: 평가 API 계약 v1.0 재설계
 
 ---
 
-### Phase 3. 공용 Fixture와 JSON Schema 생성
+### 기존 계약 작업 C. 공용 Fixture와 JSON Schema 생성
 
 목표:
 
@@ -1242,7 +1260,7 @@ build: 평가 계약 JSON Schema 생성 체계 추가
 
 ---
 
-### Phase 4. 요청 의미 검증
+### 기존 계약 작업 D. 요청 의미 검증
 
 목표:
 
@@ -1292,7 +1310,7 @@ feat: 평가 요청 의미 검증 추가
 
 ---
 
-### Phase 5. 응답 Evidence 및 깊이 검증
+### 기존 계약 작업 E. 응답 Evidence 및 깊이 검증
 
 목표:
 
@@ -1335,7 +1353,7 @@ feat: 리포트 근거 및 분석 깊이 검증 추가
 
 ---
 
-### Phase 6. Mock 내부 API 구현
+### 기존 계약 작업 F. Mock 내부 API 구현
 
 목표:
 
@@ -1384,7 +1402,7 @@ feat: 평가 리포트 Mock API 구현
 
 ---
 
-### Phase 7. 보안과 입력 제한 적용
+### 기존 계약 작업 G. 보안과 입력 제한 적용
 
 목표:
 
@@ -1432,7 +1450,7 @@ feat: 평가 요청 보안 및 크기 제한 적용
 
 ---
 
-### Phase 8. 문서 및 에이전트 지침 동기화
+### 기존 계약 작업 H. 문서 및 에이전트 지침 동기화
 
 목표:
 
@@ -1576,14 +1594,21 @@ Pydantic 직렬화 결과가 camelCase 계약과 일치하는가
 ## 22. 권장 커밋 순서
 
 ```text
-1. docs: 평가 계약 v1.0 설계 반영
-2. feat: 평가 API 계약 v1.0 재설계
-3. build: 평가 계약 JSON Schema 생성 체계 추가
-4. feat: 평가 요청 의미 검증 추가
-5. feat: 리포트 근거 및 분석 깊이 검증 추가
-6. feat: 평가 리포트 Mock API 구현
-7. feat: 평가 요청 보안 및 크기 제한 적용
-8. docs: 평가 계약 구현 상태와 개발 가이드 동기화
+AI 독립 개발
+1. feat: Backend P0 Criteria 추가
+2. feat: 근거 기반 System Prompt 추가
+3. feat: Gemini Provider 기반 구현
+4. feat: P0 포트폴리오 분석 파이프라인 추가
+
+계약 확정과 연동
+5. docs: 평가 계약 v1.0 wire format 확정
+6. feat: 평가 API 계약 v1.0 재설계
+7. build: 평가 계약 JSON Schema와 Fixture 추가
+8. feat: 평가 요청 의미 검증 추가
+9. feat: 리포트 근거 및 분석 깊이 검증 추가
+10. feat: 평가 리포트 Mock API 구현
+11. feat: 평가 요청 보안 및 크기 제한 적용
+12. docs: 평가 계약 구현 상태와 개발 가이드 동기화
 ```
 
 각 커밋에는 해당 작업과 직접 관련된 파일만 포함한다. 사용자나 다른 에이전트의 변경을 함께 커밋하지 않는다.
@@ -1642,4 +1667,4 @@ Pydantic 직렬화 결과가 camelCase 계약과 일치하는가
 - [ ] 전체 pytest, Ruff, mypy, Docker 검증이 통과함
 - [ ] 모든 문서가 실제 구현과 일치함
 
-이 완료 기준을 충족한 후에만 LLM 연동과 실제 P0 리포트 생성 단계로 진행한다.
+Gemini Provider와 P0 Prompt·Criteria는 최종 DTO 전에 독립 구현할 수 있다. 다만 실제 Spring Boot 요청, 최종 Structured Output, Evidence Validator 및 결과 저장을 연결하는 E2E는 이 완료 기준을 충족한 뒤 진행한다.

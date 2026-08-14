@@ -16,11 +16,15 @@ Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여
 - [x] FastAPI 프로젝트와 `/health`
 - [x] 설정, 로깅, 예외 기반 구조
 - [x] pytest, Ruff, mypy, Docker 구성
+- [ ] Backend P0 Criteria와 Loader
+- [ ] 근거 기반 System Prompt
+- [ ] 독립형 Gemini Provider
+- [ ] 내부 P0 분석 파이프라인
 - [ ] 최종 `contractVersion = "1.0"` Pydantic 계약
 - [ ] 공용 JSON Schema와 Fixture
 - [ ] 요청·응답 의미 Validator
 - [ ] `POST /internal/v1/portfolio-reports` Mock API
-- [ ] Gemini Structured Output 연동
+- [ ] Spring Boot Mock 연동과 실제 E2E
 
 기존 Pydantic 계약은 초기 초안이며 최종 계약으로 교체해야 한다. 구현 완료 여부는 코드와 테스트를 기준으로 갱신한다.
 
@@ -192,15 +196,20 @@ Content-Type: application/json
 
 ## 개발 순서
 
-1. 백엔드 Fixture로 남은 wire format 확정
-2. `docs/contracts/README.md` 작성
-3. Pydantic 계약 v1.0 재설계
-4. JSON Schema와 공용 Fixture 생성
-5. 요청 의미·지원 조합 Validator 구현
-6. 응답 참조·분석 깊이 Validator 구현
-7. Mock 내부 API와 Error Envelope 구현
-8. 입력 제한과 Prompt Injection 방어 구현
-9. Gemini Structured Output과 P0 리포트 구현
+백엔드와 실제 HTTP 연동은 최대한 뒤로 미룬다. AI와 백엔드는 Fake·Stub을 사용하여 각자의 핵심 기능을 독립적으로 완성한다.
+
+1. Backend P0 Criteria와 Loader 구현
+2. 근거 기반 System Prompt와 Prompt Injection 방어 구현
+3. `LLMProvider`와 Gemini Provider 기반 구현
+4. 내부 모델을 사용한 P0 분석 파이프라인 구현
+5. 백엔드 P0 Collector·Evidence 생성과 양쪽 독립 테스트 완료
+6. 실제 사용 데이터를 비교하여 최종 Pydantic·Java DTO 확정
+7. JSON Schema와 공용 Fixture 생성
+8. 요청·응답 참조 및 분석 깊이 Validator 구현
+9. Mock 내부 API로 계약 연동
+10. 실제 Gemini 분석과 Spring Boot E2E 연동
+
+최종 wire DTO는 내부 분석 모델과 분리한다. Fixture는 DTO 의미를 확정한 뒤 생성하며 선확정을 요구하지 않는다.
 
 단계별 체크리스트와 커밋 단위는 [`docs/guide.md`](../docs/guide.md)를 따른다.
 

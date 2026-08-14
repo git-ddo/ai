@@ -151,7 +151,7 @@ Pydantic 요청 검증
 - 작업 전 `git status --short --branch`로 기존 변경을 확인한다.
 - 사용자가 전체 구현을 요청하지 않았다면 설계, 데이터 흐름, 요청·응답, 대상 파일을 먼저 설명한다.
 - 기능을 독립적으로 검증 가능한 작은 단계로 나눈다.
-- 최종 가이드의 Phase 순서를 따른다.
+- 최종 가이드의 Phase 순서를 따른다. AI P0 Criteria·System Prompt·Gemini Provider와 내부 분석 파이프라인을 먼저 독립 구현하고, 최종 DTO·Fixture와 실제 연동은 양쪽 독립 개발 이후 진행한다.
 - 현재 지원하지 않는 기능을 구현 완료로 표시하지 않는다.
 - 새로운 의존성의 필요성과 사용 범위를 설명한다.
 - 사용자 또는 다른 에이전트의 변경을 덮어쓰거나 되돌리지 않는다.
@@ -161,7 +161,7 @@ Pydantic 요청 검증
 - 공용 Fixture는 `docs/contracts/fixtures/`에서 관리한다.
 - AI 서버 전용 Prompt Injection·LLM 실패 Fixture만 `ai/tests/fixtures/`에 둔다.
 - Pydantic에서 생성한 JSON Schema를 직접 수정하지 않는다.
-- Schema와 Fixture가 확정되기 전 미확정 wire field를 임의로 구현하지 않는다.
+- Schema와 Fixture가 확정되기 전 미확정 wire field를 임의로 구현하지 않는다. 독립 개발에서는 wire DTO에 결합하지 않은 내부 모델과 Fake Provider를 사용한다.
 - 계약 변경 시 문서, Pydantic, Schema, Fixture 및 양쪽 검증 테스트를 함께 갱신한다.
 
 ## 10. Git 작업 원칙

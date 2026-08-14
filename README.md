@@ -84,7 +84,10 @@ MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 및 자체 ML 모델�
 
 - Phase 1 기반 환경과 `/health` 구현 완료
 - 최종 `contractVersion = "1.0"`에 맞춘 문서 동기화 진행
+- 백엔드와 AI가 Fake·Stub으로 각자의 P0 기능을 먼저 개발하는 순서로 전환
+- AI는 P0 Criteria·System Prompt·Gemini Provider·내부 분석 파이프라인부터 구현 예정
+- 백엔드는 P0 Collector·Evidence·Job 흐름을 AI 서버 없이 구현 예정
 - 기존 Pydantic 계약은 최종 계약으로 마이그레이션 필요
-- 공용 JSON Schema, Fixture 및 Mock 내부 API는 아직 구현 전
+- 최종 DTO·Schema·Fixture, Mock 연동과 E2E는 독립 개발 이후 진행
 
 실제 완료 상태와 다음 작업은 [AI 서버 개발 가이드](./docs/guide.md)를 기준으로 확인한다.
