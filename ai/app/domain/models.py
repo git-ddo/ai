@@ -41,6 +41,7 @@ class InternalEvidence(InternalDomainModel):
     key: NonEmptyString
     summary: NonEmptyString
     source_paths: tuple[NonEmptyString, ...] = ()
+    technology_names: tuple[NonEmptyString, ...] = ()
 
     @model_validator(mode="after")
     def reject_duplicate_source_paths(self) -> Self:
@@ -58,7 +59,7 @@ class InternalUserClaim(InternalDomainModel):
 
 
 class InternalRepositoryInput(InternalDomainModel):
-    """Normalized repository data required by independent P0 analysis."""
+    """Validated repository data awaiting canonical P0 normalization."""
 
     repository_id: PositiveRepositoryId
     repository_full_name: NonEmptyString
@@ -88,6 +89,50 @@ class InternalRepositoryInput(InternalDomainModel):
         )
         if mismatched_claims:
             raise ValueError("user claims must belong to the parent repository")
+
+        return self
+
+
+class NormalizedRepositoryContext(InternalDomainModel):
+    """Canonical repository context consumed by prompt and analysis services."""
+
+    repository_id: PositiveRepositoryId
+    repository_full_name: NonEmptyString
+    description: NonEmptyString | None = None
+    analysis_depth: AnalysisDepth
+    evidence: tuple[InternalEvidence, ...] = Field(min_length=1)
+    user_claims: tuple[InternalUserClaim, ...] = ()
+    technology_names: tuple[NonEmptyString, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_normalized_members(self) -> Self:
+        evidence_ids = [item.evidence_id for item in self.evidence]
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValueError("evidence IDs must be unique within a normalized context")
+
+        claim_ids = [item.claim_id for item in self.user_claims]
+        if len(claim_ids) != len(set(claim_ids)):
+            raise ValueError("claim IDs must be unique within a normalized context")
+
+        if any(item.repository_full_name != self.repository_full_name for item in self.evidence):
+            raise ValueError("evidence must belong to the normalized repository")
+        if any(item.repository_full_name != self.repository_full_name for item in self.user_claims):
+            raise ValueError("user claims must belong to the normalized repository")
+
+        if len(self.technology_names) != len(set(self.technology_names)):
+            raise ValueError("normalized technology names must be unique")
+        if any(
+            len(item.technology_names) != len(set(item.technology_names)) for item in self.evidence
+        ):
+            raise ValueError("evidence technology names must be normalized and unique")
+
+        evidence_technologies = {
+            technology for item in self.evidence for technology in item.technology_names
+        }
+        if set(self.technology_names) != evidence_technologies:
+            raise ValueError(
+                "context technology names must match the normalized evidence technologies"
+            )
 
         return self
 

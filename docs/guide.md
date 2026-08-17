@@ -423,7 +423,7 @@ gitddo/
 ```
 
 - [x] HTTP DTO와 분리된 P0 내부 도메인 모델 구현
-- [ ] `normalization_service.py` 구현
+- [x] `normalization_service.py` 구현
 - [ ] `repository_service.py` 구현
 - [ ] `portfolio_service.py` 구현
 - [ ] `report_service.py` 오케스트레이션 구현

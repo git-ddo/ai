@@ -13,6 +13,7 @@ from app.domain import (
     InternalRepositoryInput,
     InternalUserClaim,
     InterviewQuestion,
+    NormalizedRepositoryContext,
     PortfolioAnalysis,
     PortfolioStatement,
     PortfolioStatementType,
@@ -27,6 +28,7 @@ def make_evidence(
     evidence_id: str = "ev_001",
     repository_full_name: str = "git-ddo/backend",
     evidence_type: InternalEvidenceType | str = InternalEvidenceType.GITHUB_STATIC,
+    technology_names: tuple[str, ...] = (),
 ) -> InternalEvidence:
     return InternalEvidence(
         evidence_id=evidence_id,
@@ -35,6 +37,7 @@ def make_evidence(
         key="README_INTRODUCTION_OBSERVED",
         summary="README에서 프로젝트 소개가 관찰되었습니다.",
         source_paths=("README.md",),
+        technology_names=technology_names,
     )
 
 
@@ -186,6 +189,108 @@ def test_creates_valid_p0_repository_input() -> None:
     assert repository.analysis_depth is AnalysisDepth.P0
     assert repository.evidence[0].evidence_type is InternalEvidenceType.GITHUB_STATIC
     assert repository.user_claims[0].claim_id == "claim_001"
+
+
+def test_creates_evidence_with_explicit_technology_names() -> None:
+    evidence = make_evidence(technology_names=("Spring Boot", "PostgreSQL"))
+
+    assert evidence.technology_names == ("Spring Boot", "PostgreSQL")
+
+
+def test_rejects_blank_technology_name() -> None:
+    with pytest.raises(ValidationError):
+        make_evidence(technology_names=("   ",))
+
+
+def test_creates_normalized_repository_context() -> None:
+    evidence = make_evidence(technology_names=("Spring Boot",))
+    context = NormalizedRepositoryContext(
+        repository_id=1,
+        repository_full_name="git-ddo/backend",
+        description="GitDdo backend",
+        analysis_depth=AnalysisDepth.P0,
+        evidence=(evidence,),
+        user_claims=(make_claim(),),
+        technology_names=("Spring Boot",),
+    )
+
+    assert context.evidence == (evidence,)
+    assert context.technology_names == ("Spring Boot",)
+
+
+def test_normalized_context_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        NormalizedRepositoryContext(
+            repository_id=1,
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P0,
+            evidence=(make_evidence(),),
+            contract_version="1.0",
+        )
+
+
+def test_normalized_context_is_frozen() -> None:
+    context = NormalizedRepositoryContext(
+        repository_id=1,
+        repository_full_name="git-ddo/backend",
+        analysis_depth=AnalysisDepth.P0,
+        evidence=(make_evidence(),),
+    )
+
+    with pytest.raises(ValidationError, match="Instance is frozen"):
+        context.description = "변경할 수 없습니다."  # type: ignore[misc]
+
+
+def test_normalized_context_rejects_empty_evidence() -> None:
+    with pytest.raises(ValidationError):
+        NormalizedRepositoryContext(
+            repository_id=1,
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P0,
+            evidence=(),
+        )
+
+
+def test_normalized_context_rejects_duplicate_evidence_ids() -> None:
+    with pytest.raises(ValidationError, match="evidence IDs must be unique"):
+        NormalizedRepositoryContext(
+            repository_id=1,
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P0,
+            evidence=(make_evidence(), make_evidence()),
+        )
+
+
+def test_normalized_context_rejects_duplicate_claim_ids() -> None:
+    with pytest.raises(ValidationError, match="claim IDs must be unique"):
+        NormalizedRepositoryContext(
+            repository_id=1,
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P0,
+            evidence=(make_evidence(),),
+            user_claims=(make_claim(), make_claim()),
+        )
+
+
+def test_normalized_context_rejects_evidence_from_another_repository() -> None:
+    with pytest.raises(ValidationError, match="evidence must belong"):
+        NormalizedRepositoryContext(
+            repository_id=1,
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P0,
+            evidence=(make_evidence(repository_full_name="git-ddo/frontend"),),
+        )
+
+
+def test_normalized_context_rejects_claim_from_another_repository() -> None:
+    with pytest.raises(ValidationError, match="user claims must belong"):
+        NormalizedRepositoryContext(
+            repository_id=1,
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P0,
+            evidence=(make_evidence(),),
+            user_claims=(make_claim(repository_full_name="git-ddo/frontend"),),
+        )
 
 
 def test_creates_valid_repository_analysis() -> None:
@@ -381,6 +486,7 @@ def test_internal_models_do_not_expose_scoring_or_http_contract_fields() -> None
         InternalRepositoryInput,
         InternalEvidence,
         InternalUserClaim,
+        NormalizedRepositoryContext,
         RepositoryAnalysis,
         PortfolioAnalysis,
         InterviewQuestion,
