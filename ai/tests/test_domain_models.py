@@ -10,9 +10,14 @@ from app.domain import (
     GroundedAnalysisItem,
     InternalEvidence,
     InternalEvidenceType,
+    InternalGenerationRecord,
+    InternalGenerationStage,
+    InternalPortfolioInput,
+    InternalPortfolioReport,
     InternalRepositoryInput,
     InternalUserClaim,
     InterviewQuestion,
+    InterviewQuestionBatch,
     NormalizedRepositoryContext,
     PortfolioAnalysis,
     PortfolioStatement,
@@ -95,6 +100,26 @@ def make_interpretation(
     )
 
 
+def make_portfolio_repository_input(index: int) -> InternalRepositoryInput:
+    repository_full_name = f"git-ddo/repo-{index}"
+    return make_repository_input(
+        repository_id=index,
+        repository_full_name=repository_full_name,
+        evidence=(
+            make_evidence(
+                evidence_id=f"ev_{index:03d}",
+                repository_full_name=repository_full_name,
+            ),
+        ),
+        user_claims=(
+            make_claim(
+                claim_id=f"claim_{index:03d}",
+                repository_full_name=repository_full_name,
+            ),
+        ),
+    )
+
+
 def make_observation() -> GroundedAnalysisItem:
     return GroundedAnalysisItem(
         item_type=AnalysisItemType.OBSERVATION,
@@ -137,14 +162,36 @@ def make_repository_analysis(
     )
 
 
+def make_interview_question(
+    *,
+    repository_full_name: str = "git-ddo/backend",
+    question: str = "README에 표시된 Spring Boot를 선택한 이유는 무엇인가요?",
+) -> InterviewQuestion:
+    return InterviewQuestion(
+        repository_full_name=repository_full_name,
+        question=question,
+        intent="공개 기술 근거를 자신의 설명과 연결하는지 확인합니다.",
+        answer_guide=("기술 선택 배경을 사용자 경험과 구분해 설명합니다.",),
+        follow_up_questions=(),
+        evidence_refs=("ev_001",),
+        claim_refs=("claim_001",),
+    )
+
+
 def make_portfolio_analysis(
     *,
     repository_analyses: tuple[RepositoryAnalysis, ...] | None = None,
+    interview_questions: tuple[InterviewQuestion, ...] | None = None,
 ) -> PortfolioAnalysis:
     analyses = (
         repository_analyses if repository_analyses is not None else (make_repository_analysis(),)
     )
     representative_name = analyses[0].repository_full_name if analyses else "git-ddo/backend"
+    resolved_interview_questions = (
+        interview_questions
+        if interview_questions is not None
+        else (make_interview_question(repository_full_name=representative_name),)
+    )
     return PortfolioAnalysis(
         overall_summary=make_interpretation(
             content="공개 P0 근거에서 백엔드 프로젝트 설명 요소가 관찰됩니다."
@@ -160,17 +207,7 @@ def make_portfolio_analysis(
         ),
         job_appeal=(make_job_appeal(),),
         recommendations=(make_recommendation(),),
-        interview_questions=(
-            InterviewQuestion(
-                repository_full_name=representative_name,
-                question="README에 표시된 Spring Boot를 선택한 이유는 무엇인가요?",
-                intent="공개 기술 근거를 자신의 설명과 연결하는지 확인합니다.",
-                answer_guide=("기술 선택 배경을 사용자 경험과 구분해 설명합니다.",),
-                follow_up_questions=(),
-                evidence_refs=("ev_001",),
-                claim_refs=("claim_001",),
-            ),
-        ),
+        interview_questions=resolved_interview_questions,
         portfolio_statements=(
             PortfolioStatement(
                 statement_type=PortfolioStatementType.PORTFOLIO,
@@ -181,6 +218,37 @@ def make_portfolio_analysis(
         ),
         limitations=("공개 P0 근거만 사용한 분석입니다.",),
     )
+
+
+def make_generation_records(
+    analysis: PortfolioAnalysis,
+) -> tuple[InternalGenerationRecord, ...]:
+    repository_records = tuple(
+        InternalGenerationRecord(
+            stage=InternalGenerationStage.REPOSITORY,
+            repository_full_name=repository.repository_full_name,
+            duration_ms=10,
+            attempt_count=1,
+        )
+        for repository in analysis.repository_analyses
+    )
+    portfolio_record = InternalGenerationRecord(
+        stage=InternalGenerationStage.PORTFOLIO,
+        duration_ms=20,
+        attempt_count=1,
+    )
+    interview_records = tuple(
+        InternalGenerationRecord(
+            stage=InternalGenerationStage.INTERVIEW,
+            repository_full_name=repository_full_name,
+            duration_ms=10,
+            attempt_count=1,
+        )
+        for repository_full_name in dict.fromkeys(
+            question.repository_full_name for question in analysis.interview_questions
+        )
+    )
+    return repository_records + (portfolio_record,) + interview_records
 
 
 def test_creates_valid_p0_repository_input() -> None:
@@ -471,6 +539,420 @@ def test_rejects_duplicate_repository_analysis_names() -> None:
         make_portfolio_analysis(repository_analyses=analyses)
 
 
+@pytest.mark.parametrize("repository_count", [1, 5])
+def test_creates_internal_portfolio_input_with_one_to_five_repositories(
+    repository_count: int,
+) -> None:
+    repositories = tuple(
+        make_portfolio_repository_input(index) for index in range(1, repository_count + 1)
+    )
+
+    portfolio_input = InternalPortfolioInput(repositories=repositories)
+
+    assert portfolio_input.repositories == repositories
+
+
+@pytest.mark.parametrize("repository_count", [0, 6])
+def test_rejects_internal_portfolio_input_outside_repository_limit(
+    repository_count: int,
+) -> None:
+    repositories = tuple(
+        make_portfolio_repository_input(index) for index in range(1, repository_count + 1)
+    )
+
+    with pytest.raises(ValidationError):
+        InternalPortfolioInput(repositories=repositories)
+
+
+def test_internal_portfolio_input_rejects_duplicate_repository_id() -> None:
+    repositories = (
+        make_portfolio_repository_input(1),
+        make_repository_input(
+            repository_id=1,
+            repository_full_name="git-ddo/other",
+            evidence=(make_evidence(evidence_id="ev_002", repository_full_name="git-ddo/other"),),
+            user_claims=(make_claim(claim_id="claim_002", repository_full_name="git-ddo/other"),),
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="duplicate repository ID"):
+        InternalPortfolioInput(repositories=repositories)
+
+
+def test_internal_portfolio_input_rejects_duplicate_repository_full_name() -> None:
+    repositories = (
+        make_portfolio_repository_input(1),
+        make_repository_input(
+            repository_id=2,
+            repository_full_name="git-ddo/repo-1",
+            evidence=(make_evidence(evidence_id="ev_002", repository_full_name="git-ddo/repo-1"),),
+            user_claims=(make_claim(claim_id="claim_002", repository_full_name="git-ddo/repo-1"),),
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="duplicate repository full name"):
+        InternalPortfolioInput(repositories=repositories)
+
+
+def test_internal_portfolio_input_rejects_evidence_id_reused_across_repositories() -> None:
+    first = make_portfolio_repository_input(1)
+    second_name = "git-ddo/repo-2"
+    second = make_repository_input(
+        repository_id=2,
+        repository_full_name=second_name,
+        evidence=(make_evidence(evidence_id="ev_001", repository_full_name=second_name),),
+        user_claims=(make_claim(claim_id="claim_002", repository_full_name=second_name),),
+    )
+
+    with pytest.raises(ValidationError, match="duplicate evidence ID across repositories"):
+        InternalPortfolioInput(repositories=(first, second))
+
+
+def test_internal_portfolio_input_rejects_claim_id_reused_across_repositories() -> None:
+    first = make_portfolio_repository_input(1)
+    second_name = "git-ddo/repo-2"
+    second = make_repository_input(
+        repository_id=2,
+        repository_full_name=second_name,
+        evidence=(make_evidence(evidence_id="ev_002", repository_full_name=second_name),),
+        user_claims=(make_claim(claim_id="claim_001", repository_full_name=second_name),),
+    )
+
+    with pytest.raises(ValidationError, match="duplicate claim ID across repositories"):
+        InternalPortfolioInput(repositories=(first, second))
+
+
+def test_internal_portfolio_input_keeps_same_evidence_content_with_distinct_ids() -> None:
+    repositories = tuple(make_portfolio_repository_input(index) for index in (1, 2))
+
+    portfolio_input = InternalPortfolioInput(repositories=repositories)
+
+    assert tuple(
+        repository.evidence[0].evidence_id for repository in portfolio_input.repositories
+    ) == ("ev_001", "ev_002")
+    assert portfolio_input.repositories[0].evidence[0].summary == (
+        portfolio_input.repositories[1].evidence[0].summary
+    )
+
+
+def test_internal_portfolio_input_preserves_repository_order() -> None:
+    repositories = tuple(make_portfolio_repository_input(index) for index in (3, 1, 2))
+
+    portfolio_input = InternalPortfolioInput(repositories=repositories)
+
+    assert tuple(repository.repository_id for repository in portfolio_input.repositories) == (
+        3,
+        1,
+        2,
+    )
+
+
+def test_internal_portfolio_input_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        InternalPortfolioInput(
+            repositories=(make_portfolio_repository_input(1),),
+            contract_version="1.0",
+        )
+
+
+def test_internal_portfolio_input_is_frozen() -> None:
+    portfolio_input = InternalPortfolioInput(repositories=(make_portfolio_repository_input(1),))
+
+    with pytest.raises(ValidationError, match="Instance is frozen"):
+        portfolio_input.repositories = ()  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("question_count", [1, 10])
+def test_creates_interview_question_batch_with_one_to_ten_questions(
+    question_count: int,
+) -> None:
+    questions = tuple(
+        make_interview_question(question=f"백엔드 질문 {index}") for index in range(question_count)
+    )
+
+    batch = InterviewQuestionBatch(questions=questions)
+
+    assert batch.questions == questions
+
+
+@pytest.mark.parametrize("question_count", [0, 11])
+def test_rejects_interview_question_batch_outside_question_limit(
+    question_count: int,
+) -> None:
+    questions = tuple(
+        make_interview_question(question=f"백엔드 질문 {index}") for index in range(question_count)
+    )
+
+    with pytest.raises(ValidationError):
+        InterviewQuestionBatch(questions=questions)
+
+
+def test_interview_question_batch_rejects_multiple_repositories() -> None:
+    questions = (
+        make_interview_question(repository_full_name="git-ddo/backend"),
+        make_interview_question(
+            repository_full_name="git-ddo/other",
+            question="다른 저장소에 관한 질문입니다.",
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="must reference one repository"):
+        InterviewQuestionBatch(questions=questions)
+
+
+@pytest.mark.parametrize(
+    "duplicate_question",
+    [
+        "Spring Boot 질문",
+        "  Spring Boot 질문  ",
+        "SPRING BOOT 질문",
+    ],
+)
+def test_interview_question_batch_rejects_duplicate_question_text(
+    duplicate_question: str,
+) -> None:
+    questions = (
+        make_interview_question(question="Spring Boot 질문"),
+        make_interview_question(question=duplicate_question),
+    )
+
+    with pytest.raises(ValidationError, match="interview questions must be unique"):
+        InterviewQuestionBatch(questions=questions)
+
+
+def test_interview_question_batch_preserves_question_order() -> None:
+    questions = tuple(
+        make_interview_question(question=question) for question in ("세 번째", "첫 번째", "두 번째")
+    )
+
+    batch = InterviewQuestionBatch(questions=questions)
+
+    assert tuple(question.question for question in batch.questions) == (
+        "세 번째",
+        "첫 번째",
+        "두 번째",
+    )
+
+
+def test_interview_question_batch_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        InterviewQuestionBatch(
+            questions=(make_interview_question(),),
+            analysis_id="not-an-internal-field",
+        )
+
+
+@pytest.mark.parametrize(
+    "stage",
+    [InternalGenerationStage.REPOSITORY, InternalGenerationStage.INTERVIEW],
+)
+def test_repository_scoped_generation_record_requires_repository_name(
+    stage: InternalGenerationStage,
+) -> None:
+    with pytest.raises(ValidationError, match="requires a repository full name"):
+        InternalGenerationRecord(stage=stage, duration_ms=0, attempt_count=1)
+
+
+def test_portfolio_generation_record_rejects_repository_name() -> None:
+    with pytest.raises(ValidationError, match="must not reference a repository"):
+        InternalGenerationRecord(
+            stage=InternalGenerationStage.PORTFOLIO,
+            repository_full_name="git-ddo/backend",
+            duration_ms=0,
+            attempt_count=1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("duration_ms", "attempt_count"),
+    [(-1, 1), (0, 0), (0, -1)],
+)
+def test_generation_record_rejects_invalid_metrics(
+    duration_ms: int,
+    attempt_count: int,
+) -> None:
+    with pytest.raises(ValidationError):
+        InternalGenerationRecord(
+            stage=InternalGenerationStage.PORTFOLIO,
+            duration_ms=duration_ms,
+            attempt_count=attempt_count,
+        )
+
+
+def test_creates_valid_internal_generation_records() -> None:
+    repository_record = InternalGenerationRecord(
+        stage=InternalGenerationStage.REPOSITORY,
+        repository_full_name="git-ddo/backend",
+        duration_ms=12,
+        attempt_count=2,
+    )
+    portfolio_record = InternalGenerationRecord(
+        stage=InternalGenerationStage.PORTFOLIO,
+        duration_ms=20,
+        attempt_count=1,
+    )
+
+    assert repository_record.repository_full_name == "git-ddo/backend"
+    assert portfolio_record.repository_full_name is None
+
+
+@pytest.mark.parametrize("repository_count", [1, 5])
+def test_creates_internal_portfolio_report_for_one_to_five_repositories(
+    repository_count: int,
+) -> None:
+    analyses = tuple(
+        make_repository_analysis(repository_full_name=f"git-ddo/repo-{index}")
+        for index in range(1, repository_count + 1)
+    )
+    analysis = make_portfolio_analysis(repository_analyses=analyses)
+    records = make_generation_records(analysis)
+
+    report = InternalPortfolioReport(analysis=analysis, generation_records=records)
+
+    assert report.analysis is analysis
+    assert report.generation_records == records
+
+
+def test_internal_portfolio_report_rejects_empty_generation_records() -> None:
+    with pytest.raises(ValidationError):
+        InternalPortfolioReport(
+            analysis=make_portfolio_analysis(),
+            generation_records=(),
+        )
+
+
+def test_internal_portfolio_report_requires_one_portfolio_record() -> None:
+    analysis = make_portfolio_analysis()
+    records = tuple(
+        record
+        for record in make_generation_records(analysis)
+        if record.stage is not InternalGenerationStage.PORTFOLIO
+    )
+
+    with pytest.raises(ValidationError, match="exactly one PORTFOLIO"):
+        InternalPortfolioReport(analysis=analysis, generation_records=records)
+
+
+def test_internal_portfolio_report_rejects_duplicate_portfolio_records() -> None:
+    analysis = make_portfolio_analysis()
+    records = make_generation_records(analysis)
+    portfolio_record = next(
+        record for record in records if record.stage is InternalGenerationStage.PORTFOLIO
+    )
+
+    with pytest.raises(ValidationError, match="exactly one PORTFOLIO"):
+        InternalPortfolioReport(
+            analysis=analysis,
+            generation_records=records + (portfolio_record,),
+        )
+
+
+def test_internal_portfolio_report_rejects_missing_repository_record() -> None:
+    analysis = make_portfolio_analysis()
+    records = tuple(
+        record
+        for record in make_generation_records(analysis)
+        if record.stage is not InternalGenerationStage.REPOSITORY
+    )
+
+    with pytest.raises(ValidationError, match="must match all analyzed repositories"):
+        InternalPortfolioReport(analysis=analysis, generation_records=records)
+
+
+def test_internal_portfolio_report_rejects_unanalyzed_repository_record() -> None:
+    analysis = make_portfolio_analysis()
+    unexpected_record = InternalGenerationRecord(
+        stage=InternalGenerationStage.REPOSITORY,
+        repository_full_name="git-ddo/other",
+        duration_ms=10,
+        attempt_count=1,
+    )
+
+    with pytest.raises(ValidationError, match="must match all analyzed repositories"):
+        InternalPortfolioReport(
+            analysis=analysis,
+            generation_records=make_generation_records(analysis) + (unexpected_record,),
+        )
+
+
+def test_internal_portfolio_report_rejects_duplicate_repository_record() -> None:
+    analysis = make_portfolio_analysis()
+    records = make_generation_records(analysis)
+    repository_record = next(
+        record for record in records if record.stage is InternalGenerationStage.REPOSITORY
+    )
+
+    with pytest.raises(ValidationError, match="duplicate REPOSITORY"):
+        InternalPortfolioReport(
+            analysis=analysis,
+            generation_records=records + (repository_record,),
+        )
+
+
+def test_internal_portfolio_report_rejects_duplicate_interview_record() -> None:
+    analysis = make_portfolio_analysis()
+    records = make_generation_records(analysis)
+    interview_record = next(
+        record for record in records if record.stage is InternalGenerationStage.INTERVIEW
+    )
+
+    with pytest.raises(ValidationError, match="duplicate INTERVIEW"):
+        InternalPortfolioReport(
+            analysis=analysis,
+            generation_records=records + (interview_record,),
+        )
+
+
+def test_internal_portfolio_report_requires_record_for_interview_questions() -> None:
+    analysis = make_portfolio_analysis()
+    records = tuple(
+        record
+        for record in make_generation_records(analysis)
+        if record.stage is not InternalGenerationStage.INTERVIEW
+    )
+
+    with pytest.raises(ValidationError, match="must match repositories with interview questions"):
+        InternalPortfolioReport(analysis=analysis, generation_records=records)
+
+
+def test_internal_portfolio_report_rejects_interview_record_without_questions() -> None:
+    analysis = make_portfolio_analysis(interview_questions=())
+    unexpected_record = InternalGenerationRecord(
+        stage=InternalGenerationStage.INTERVIEW,
+        repository_full_name=analysis.repository_analyses[0].repository_full_name,
+        duration_ms=10,
+        attempt_count=1,
+    )
+
+    with pytest.raises(ValidationError, match="must match repositories with interview questions"):
+        InternalPortfolioReport(
+            analysis=analysis,
+            generation_records=make_generation_records(analysis) + (unexpected_record,),
+        )
+
+
+def test_internal_portfolio_report_rejects_unknown_fields() -> None:
+    analysis = make_portfolio_analysis()
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        InternalPortfolioReport(
+            analysis=analysis,
+            generation_records=make_generation_records(analysis),
+            contract_version="1.0",
+        )
+
+
+def test_internal_portfolio_report_is_frozen() -> None:
+    analysis = make_portfolio_analysis()
+    report = InternalPortfolioReport(
+        analysis=analysis,
+        generation_records=make_generation_records(analysis),
+    )
+
+    with pytest.raises(ValidationError, match="Instance is frozen"):
+        report.generation_records = ()  # type: ignore[misc]
+
+
 def test_internal_models_do_not_expose_scoring_or_http_contract_fields() -> None:
     forbidden_fields = {
         "contract_version",
@@ -484,13 +966,17 @@ def test_internal_models_do_not_expose_scoring_or_http_contract_fields() -> None
     }
     model_types = (
         InternalRepositoryInput,
+        InternalPortfolioInput,
         InternalEvidence,
         InternalUserClaim,
         NormalizedRepositoryContext,
         RepositoryAnalysis,
         PortfolioAnalysis,
         InterviewQuestion,
+        InterviewQuestionBatch,
         PortfolioStatement,
+        InternalGenerationRecord,
+        InternalPortfolioReport,
     )
 
     for model_type in model_types:

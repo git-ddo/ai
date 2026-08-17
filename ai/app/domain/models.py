@@ -7,6 +7,7 @@ from app.domain.enums import (
     AnalysisItemType,
     EvidenceConfidence,
     InternalEvidenceType,
+    InternalGenerationStage,
     PortfolioStatementType,
     RecommendationPriority,
 )
@@ -89,6 +90,41 @@ class InternalRepositoryInput(InternalDomainModel):
         )
         if mismatched_claims:
             raise ValueError("user claims must belong to the parent repository")
+
+        return self
+
+
+class InternalPortfolioInput(InternalDomainModel):
+    """One to five repository inputs sharing analysis-wide identifier scopes."""
+
+    repositories: tuple[InternalRepositoryInput, ...] = Field(
+        min_length=1,
+        max_length=5,
+    )
+
+    @model_validator(mode="after")
+    def validate_analysis_wide_identifiers(self) -> Self:
+        repository_ids = [repository.repository_id for repository in self.repositories]
+        if len(repository_ids) != len(set(repository_ids)):
+            raise ValueError("duplicate repository ID")
+
+        repository_names = [repository.repository_full_name for repository in self.repositories]
+        if len(repository_names) != len(set(repository_names)):
+            raise ValueError("duplicate repository full name")
+
+        evidence_ids = [
+            evidence.evidence_id
+            for repository in self.repositories
+            for evidence in repository.evidence
+        ]
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValueError("duplicate evidence ID across repositories")
+
+        claim_ids = [
+            claim.claim_id for repository in self.repositories for claim in repository.user_claims
+        ]
+        if len(claim_ids) != len(set(claim_ids)):
+            raise ValueError("duplicate claim ID across repositories")
 
         return self
 
@@ -237,6 +273,27 @@ class InterviewQuestion(InternalDomainModel):
         return self
 
 
+class InterviewQuestionBatch(InternalDomainModel):
+    """Structured-output wrapper for questions about exactly one repository."""
+
+    questions: tuple[InterviewQuestion, ...] = Field(
+        min_length=1,
+        max_length=10,
+    )
+
+    @model_validator(mode="after")
+    def validate_question_scope(self) -> Self:
+        repository_names = {question.repository_full_name for question in self.questions}
+        if len(repository_names) != 1:
+            raise ValueError("interview question batch must reference one repository")
+
+        question_texts = [question.question.casefold() for question in self.questions]
+        if len(question_texts) != len(set(question_texts)):
+            raise ValueError("interview questions must be unique")
+
+        return self
+
+
 class PortfolioStatement(InternalDomainModel):
     """One reusable statement grounded by evidence or an explicit user claim."""
 
@@ -299,5 +356,78 @@ class PortfolioAnalysis(InternalDomainModel):
             for question in self.interview_questions
         ):
             raise ValueError("interview questions must reference analyzed repositories")
+
+        return self
+
+
+class InternalGenerationRecord(InternalDomainModel):
+    """Provider-neutral execution metadata for one internal generation stage."""
+
+    stage: InternalGenerationStage
+    repository_full_name: NonEmptyString | None = None
+    duration_ms: int = Field(ge=0)
+    attempt_count: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_repository_scope(self) -> Self:
+        repository_scoped_stages = {
+            InternalGenerationStage.REPOSITORY,
+            InternalGenerationStage.INTERVIEW,
+        }
+        if self.stage in repository_scoped_stages and self.repository_full_name is None:
+            raise ValueError(f"{self.stage} generation requires a repository full name")
+        if (
+            self.stage is InternalGenerationStage.PORTFOLIO
+            and self.repository_full_name is not None
+        ):
+            raise ValueError("PORTFOLIO generation must not reference a repository")
+        return self
+
+
+class InternalPortfolioReport(InternalDomainModel):
+    """Complete internal P0 result and provider-neutral generation records."""
+
+    analysis: PortfolioAnalysis
+    generation_records: tuple[InternalGenerationRecord, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_generation_records(self) -> Self:
+        analyzed_repositories = {
+            repository.repository_full_name for repository in self.analysis.repository_analyses
+        }
+
+        portfolio_records = [
+            record
+            for record in self.generation_records
+            if record.stage is InternalGenerationStage.PORTFOLIO
+        ]
+        if len(portfolio_records) != 1:
+            raise ValueError("internal report requires exactly one PORTFOLIO generation record")
+
+        repository_record_names = [
+            record.repository_full_name
+            for record in self.generation_records
+            if record.stage is InternalGenerationStage.REPOSITORY
+        ]
+        if len(repository_record_names) != len(set(repository_record_names)):
+            raise ValueError("duplicate REPOSITORY generation record")
+        if set(repository_record_names) != analyzed_repositories:
+            raise ValueError("REPOSITORY generation records must match all analyzed repositories")
+
+        interview_record_names = [
+            record.repository_full_name
+            for record in self.generation_records
+            if record.stage is InternalGenerationStage.INTERVIEW
+        ]
+        if len(interview_record_names) != len(set(interview_record_names)):
+            raise ValueError("duplicate INTERVIEW generation record")
+
+        interview_question_repositories = {
+            question.repository_full_name for question in self.analysis.interview_questions
+        }
+        if set(interview_record_names) != interview_question_repositories:
+            raise ValueError(
+                "INTERVIEW generation records must match repositories with interview questions"
+            )
 
         return self

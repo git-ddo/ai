@@ -46,3 +46,11 @@ class RecommendationPriority(StrEnum):
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
     LOW = "LOW"
+
+
+class InternalGenerationStage(StrEnum):
+    """LLM generation stages recorded by the internal analysis pipeline."""
+
+    REPOSITORY = "REPOSITORY"
+    PORTFOLIO = "PORTFOLIO"
+    INTERVIEW = "INTERVIEW"
