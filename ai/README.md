@@ -26,6 +26,7 @@ Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여
 - [x] Repository·Portfolio·Interview P0 Prompt Context 생성
 - [x] 외부 데이터의 Prompt 예약 마커 충돌 방지
 - [x] 내부 정책 위반 타입과 `ReportPolicyError`
+- [x] Repository 결과의 Evidence·Claim 참조 정책 Validator
 - [ ] Repository·Portfolio·Report Service
 - [ ] 생성 결과 내용 정책 Validator
 - [ ] 내부 P0 전체 오케스트레이션과 독립 품질 테스트

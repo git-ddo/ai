@@ -441,6 +441,7 @@ gitddo/
 - [x] 실제 구조 마커 유지와 Repository·Portfolio·Interview 충돌 테스트
 - [x] 내부 정책 위반 code와 불변 `PolicyViolation` 구현
 - [x] `ReportPolicyError` 구현
+- [x] `RepositoryAnalysis`의 Evidence·Claim 존재 및 Repository 소유 관계 검증
 - [ ] `repository_service.py` 구현
 - [ ] `portfolio_service.py` 구현
 - [ ] `report_service.py` 오케스트레이션 구현
