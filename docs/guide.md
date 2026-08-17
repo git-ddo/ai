@@ -366,14 +366,14 @@ gitddo/
 
 #### 1B. System Prompt
 
-- [ ] Evidence와 UserClaim 분리 규칙 작성
-- [ ] Repository 입력을 untrusted data로 격리
-- [ ] README·코드·사용자 입력의 지시문 무시
-- [ ] 입력에 없는 사실 생성 금지
-- [ ] P0 범위 초과 판단 금지
-- [ ] 기여율·실력·취업 가능성 단정 금지
-- [ ] `NOT_OBSERVED` 의미 보호
-- [ ] Prompt 단위 테스트 작성
+- [x] Evidence와 UserClaim 분리 규칙 작성
+- [x] Repository 입력을 untrusted data로 격리
+- [x] README·코드·사용자 입력의 지시문 무시
+- [x] 입력에 없는 사실 생성 금지
+- [x] P0 범위 초과 판단 금지
+- [x] 기여율·실력·취업 가능성 단정 금지
+- [x] `NOT_OBSERVED` 의미 보호
+- [x] Prompt 단위 테스트 작성
 
 최종 응답 필드명과 JSON Schema 지시는 계약 확정 후 추가한다.
 

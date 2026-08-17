@@ -17,7 +17,7 @@ Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여
 - [x] 설정, 로깅, 예외 기반 구조
 - [x] pytest, Ruff, mypy, Docker 구성
 - [x] Backend P0 Criteria와 Loader
-- [ ] 근거 기반 System Prompt
+- [x] 근거 기반 System Prompt
 - [ ] 독립형 Gemini Provider
 - [ ] 내부 P0 분석 파이프라인
 - [ ] 최종 `contractVersion = "1.0"` Pydantic 계약
