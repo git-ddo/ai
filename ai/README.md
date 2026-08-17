@@ -16,7 +16,7 @@ Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여
 - [x] FastAPI 프로젝트와 `/health`
 - [x] 설정, 로깅, 예외 기반 구조
 - [x] pytest, Ruff, mypy, Docker 구성
-- [ ] Backend P0 Criteria와 Loader
+- [x] Backend P0 Criteria와 Loader
 - [ ] 근거 기반 System Prompt
 - [ ] 독립형 Gemini Provider
 - [ ] 내부 P0 분석 파이프라인

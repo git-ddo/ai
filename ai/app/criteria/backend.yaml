@@ -1,0 +1,85 @@
+version: "1.0"
+target_job: BACKEND
+analysis_depth: P0
+
+criteria:
+  - key: README_READINESS
+    title: README 준비도
+    description: >-
+      README에서 프로젝트 소개, 주요 기능, 실행 방법처럼 공개적으로 확인되는
+      문서 항목의 관찰 여부를 해석한다.
+    allowed_evidence_types:
+      - GITHUB_STATIC
+      - BACKEND_DERIVED
+    allowed_judgments:
+      - README와 백엔드가 도출한 문서 항목의 관찰 여부
+      - 공개 문서만으로 설명할 수 있는 프로젝트 정보의 범위
+    forbidden_judgments:
+      - 사용자의 문서 작성 역량
+      - Repository 전체 품질
+      - 관찰되지 않은 문서 항목의 실제 부재
+
+  - key: TECH_STACK_EVIDENCE
+    title: 기술스택 근거
+    description: >-
+      의존성 파일과 설정 파일 등에서 백엔드가 수집한 공개 근거를 바탕으로
+      포트폴리오에 설명할 수 있는 기술 후보를 해석한다.
+    allowed_evidence_types:
+      - GITHUB_STATIC
+      - BACKEND_DERIVED
+    allowed_judgments:
+      - 공개 파일에서 기술 의존성이나 설정이 관찰되었는지 여부
+      - 기술 후보를 뒷받침하는 공개 근거의 종류
+    forbidden_judgments:
+      - 사용자의 기술 숙련도
+      - 기술 선택의 설계 품질
+      - 근거에 없는 기술 사용 여부
+
+  - key: TEST_PRESENCE
+    title: 테스트 존재 여부
+    description: >-
+      테스트 디렉터리, 테스트 파일 또는 백엔드가 도출한 미관찰 Evidence를
+      바탕으로 테스트 구성의 관찰 여부만 해석한다.
+    allowed_evidence_types:
+      - GITHUB_STATIC
+      - BACKEND_DERIVED
+    allowed_judgments:
+      - 수집 범위에서 테스트 파일이나 설정이 관찰되었는지 여부
+      - 테스트 구성과 관련된 공개 근거의 종류
+    forbidden_judgments:
+      - 테스트 코드 품질
+      - 테스트 커버리지
+      - 사용자의 테스트 역량
+      - 관찰되지 않은 테스트의 실제 부재
+
+  - key: DOCKER_CONFIGURATION
+    title: Docker 구성
+    description: >-
+      Dockerfile과 Compose 파일 등 공개 설정의 관찰 여부를 바탕으로
+      컨테이너 실행 구성이 포트폴리오에 드러나는지 해석한다.
+    allowed_evidence_types:
+      - GITHUB_STATIC
+      - BACKEND_DERIVED
+    allowed_judgments:
+      - Docker 관련 파일이나 설정이 관찰되었는지 여부
+      - 공개 근거에서 설명 가능한 컨테이너 구성 범위
+    forbidden_judgments:
+      - 배포 아키텍처 품질
+      - 운영 역량
+      - 관찰되지 않은 Docker 구성의 실제 부재
+
+  - key: GITHUB_ACTIONS_CONFIGURATION
+    title: GitHub Actions 구성
+    description: >-
+      GitHub Actions Workflow와 백엔드가 도출한 미관찰 Evidence를 바탕으로
+      자동화 구성이 공개적으로 드러나는지 해석한다.
+    allowed_evidence_types:
+      - GITHUB_STATIC
+      - BACKEND_DERIVED
+    allowed_judgments:
+      - GitHub Actions Workflow가 관찰되었는지 여부
+      - 공개 Workflow에서 확인 가능한 자동화 단계의 범위
+    forbidden_judgments:
+      - CI/CD 설계 품질
+      - 운영 자동화 역량
+      - 관찰되지 않은 Workflow의 실제 부재

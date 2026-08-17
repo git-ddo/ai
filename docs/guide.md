@@ -356,11 +356,11 @@ gitddo/
 
 #### 1A. Backend P0 Criteria
 
-- [ ] `ai/app/criteria/backend.yaml` 작성
-- [ ] Criteria Loader 구현
-- [ ] YAML 필수 필드와 허용값 검증
-- [ ] P0에서 허용되는 README·기술 근거·테스트·Docker·CI 기준만 포함
-- [ ] 설계 품질·코드 품질·사용자 역량 기준 제외
+- [x] `ai/app/criteria/backend.yaml` 작성
+- [x] Criteria Loader 구현
+- [x] YAML 필수 필드와 허용값 검증
+- [x] P0에서 허용되는 README·기술 근거·테스트·Docker·CI 기준만 포함
+- [x] 설계 품질·코드 품질·사용자 역량 기준 제외
 
 권장 커밋: `feat: Backend P0 Criteria 추가`
 
