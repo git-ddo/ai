@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,20 @@ class Settings(BaseSettings):
     app_host: str = Field(default="0.0.0.0", validation_alias="APP_HOST")
     app_port: int = Field(default=8000, validation_alias="APP_PORT")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
+    gemini_api_key: SecretStr | None = Field(default=None, validation_alias="GEMINI_API_KEY")
+    gemini_model: str | None = Field(default=None, validation_alias="GEMINI_MODEL")
+    llm_timeout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        le=600,
+        validation_alias="LLM_TIMEOUT_SECONDS",
+    )
+    llm_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        validation_alias="LLM_MAX_RETRIES",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

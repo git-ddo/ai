@@ -12,7 +12,7 @@
 - [x] `/health` 구현
 - [x] pytest, Ruff, mypy, Docker 기반 구성
 - [x] 양쪽 독립 개발에 필요한 계약 의미와 책임 경계 확정
-- [ ] AI P0 Criteria·System Prompt·Gemini Provider 독립 구현
+- [x] AI P0 Criteria·System Prompt·Gemini Provider 독립 구현
 - [ ] 백엔드 P0 수집·Evidence 생성 독립 구현
 - [ ] AI 내부 분석 파이프라인과 독립 테스트 구현
 - [ ] 실제 사용 데이터를 기준으로 최종 Pydantic 계약 구현
@@ -381,13 +381,13 @@ gitddo/
 
 #### 1C. Gemini Provider 기반
 
-- [ ] `LLMProvider` 인터페이스 정의
-- [ ] Gemini 클라이언트 초기화
-- [ ] API key와 모델명 환경변수화
-- [ ] timeout과 429·5xx 제한적 retry
-- [ ] provider 오류를 내부 예외로 변환
-- [ ] 작은 테스트용 Pydantic 출력 모델로 Structured Output 검증
-- [ ] 실제 API에 의존하지 않는 Fake Provider 테스트
+- [x] `LLMProvider` 인터페이스 정의
+- [x] Gemini 클라이언트 초기화
+- [x] API key와 모델명 환경변수화
+- [x] timeout과 429·5xx 제한적 retry
+- [x] provider 오류를 내부 예외로 변환
+- [x] 작은 테스트용 Pydantic 출력 모델로 Structured Output 검증
+- [x] 실제 API에 의존하지 않는 Fake Provider 테스트
 
 최종 `PortfolioReport` DTO, Evidence Validator와 서비스 연결은 이 Phase에서 구현하지 않는다.
 
