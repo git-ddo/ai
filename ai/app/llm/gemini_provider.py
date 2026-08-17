@@ -4,6 +4,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Protocol, cast
 
+import httpx
 from google import genai
 from google.genai import errors, types
 from pydantic import ValidationError
@@ -54,9 +55,10 @@ class GeminiProvider:
         sleep: SleepCallable = asyncio.sleep,
         clock: ClockCallable = time.perf_counter,
     ) -> None:
-        api_key = settings.gemini_api_key
+        api_key_secret = settings.gemini_api_key
+        api_key = api_key_secret.get_secret_value().strip() if api_key_secret is not None else ""
         model = settings.gemini_model.strip() if settings.gemini_model is not None else ""
-        if api_key is None or not api_key.get_secret_value().strip():
+        if not api_key:
             raise LLMConfigurationError("Gemini API key is not configured.")
         if not model:
             raise LLMConfigurationError("Gemini model is not configured.")
@@ -71,7 +73,7 @@ class GeminiProvider:
 
         if client is None:
             self._client_owner = genai.Client(
-                api_key=api_key.get_secret_value(),
+                api_key=api_key,
                 http_options=types.HttpOptions(
                     timeout=int(self._timeout_seconds * 1000),
                     retry_options=types.HttpRetryOptions(attempts=1),
@@ -157,10 +159,16 @@ class GeminiProvider:
                     contents=user_prompt,
                     config=config,
                 )
-        except TimeoutError as exc:
+        except (TimeoutError, httpx.TimeoutException) as exc:
             raise LLMTimeoutError(
                 "Gemini generation timed out.",
                 retryable=True,
+                attempt_count=attempt_count,
+            ) from exc
+        except httpx.TransportError as exc:
+            raise LLMServiceError(
+                "Gemini transport request failed.",
+                retryable=False,
                 attempt_count=attempt_count,
             ) from exc
         except errors.APIError as exc:
@@ -210,6 +218,13 @@ class GeminiProvider:
         attempt_count: int,
     ) -> LLMProviderError:
         status_code = error.code
+        if status_code == 408:
+            return LLMTimeoutError(
+                "Gemini request timed out.",
+                retryable=True,
+                attempt_count=attempt_count,
+                status_code=status_code,
+            )
         if status_code == 429:
             return LLMRateLimitError(
                 "Gemini rate limit was reached.",

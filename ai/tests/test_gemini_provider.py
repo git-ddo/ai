@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any
 
+import httpx
 import pytest
 from google import genai
 from google.genai import errors, types
@@ -159,7 +160,7 @@ async def test_rejects_empty_invalid_or_mismatched_structured_output(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status_code", [429, 500, 503])
+@pytest.mark.parametrize("status_code", [408, 429, 500, 503])
 async def test_retries_retryable_api_errors_then_succeeds(status_code: int) -> None:
     models = StubModels(
         [
@@ -201,6 +202,46 @@ async def test_timeout_is_retried_then_succeeds() -> None:
 
 
 @pytest.mark.asyncio
+async def test_httpx_timeout_is_converted_and_retried() -> None:
+    models = StubModels(
+        [
+            httpx.ReadTimeout("transport timeout"),
+            types.GenerateContentResponse(
+                parsed=ExampleResponse(summary="after transport timeout")
+            ),
+        ]
+    )
+    provider = GeminiProvider(
+        make_settings(max_retries=1),
+        client=StubAsyncClient(models),
+        sleep=no_sleep,
+    )
+
+    result = await provider.generate_structured("system", "user", ExampleResponse)
+
+    assert result.metadata.attempt_count == 2
+    assert result.value.summary == "after transport timeout"
+
+
+@pytest.mark.asyncio
+async def test_httpx_connection_error_is_converted_without_retry() -> None:
+    models = StubModels([httpx.ConnectError("connection failed")])
+    provider = GeminiProvider(
+        make_settings(max_retries=2),
+        client=StubAsyncClient(models),
+        sleep=no_sleep,
+    )
+
+    with pytest.raises(LLMServiceError) as raised:
+        await provider.generate_structured("system", "user", ExampleResponse)
+
+    assert raised.value.retryable is False
+    assert raised.value.attempt_count == 1
+    assert len(models.calls) == 1
+    assert "connection failed" not in str(raised.value)
+
+
+@pytest.mark.asyncio
 async def test_async_timeout_guard_raises_internal_timeout_error() -> None:
     models = BlockingModels([])
     provider = GeminiProvider(
@@ -219,7 +260,7 @@ async def test_async_timeout_guard_raises_internal_timeout_error() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status_code", "expected_error"),
-    [(429, LLMRateLimitError), (500, LLMServiceError)],
+    [(408, LLMTimeoutError), (429, LLMRateLimitError), (500, LLMServiceError)],
 )
 async def test_retry_limit_is_honored(
     status_code: int,
@@ -312,7 +353,7 @@ def test_initializes_official_client_with_secret_and_sdk_retries_disabled(
 
     monkeypatch.setattr(genai, "Client", client_factory)
 
-    GeminiProvider(make_settings(timeout=12.5))
+    GeminiProvider(make_settings(api_key="  test-secret-key  ", timeout=12.5))
 
     assert captured["api_key"] == "test-secret-key"
     http_options = captured["http_options"]

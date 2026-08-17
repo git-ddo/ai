@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi",
     "google-genai>=2.18,<3",
+    "httpx",
     "pydantic>=2",
     "pydantic-settings",
     "PyYAML>=6.0",
@@ -19,7 +20,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "httpx",
     "mypy",
     "pytest",
     "pytest-asyncio",
