@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -11,6 +11,16 @@ CriteriaKey = Annotated[
     str,
     StringConstraints(strip_whitespace=True, pattern=r"^[A-Z][A-Z0-9_]*$"),
 ]
+
+BACKEND_P0_CRITERIA_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "README_READINESS",
+        "TECH_STACK_EVIDENCE",
+        "TEST_PRESENCE",
+        "DOCKER_CONFIGURATION",
+        "GITHUB_ACTIONS_CONFIGURATION",
+    }
+)
 
 
 class CriteriaTargetJob(StrEnum):
@@ -70,8 +80,19 @@ class CriteriaSet(CriteriaModel):
     criteria: tuple[Criterion, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def reject_duplicate_criteria_keys(self) -> "CriteriaSet":
+    def validate_criteria_keys(self) -> "CriteriaSet":
         keys = [criterion.key for criterion in self.criteria]
         if len(keys) != len(set(keys)):
             raise ValueError("criteria keys must be unique")
+
+        actual_keys = set(keys)
+        missing_keys = sorted(BACKEND_P0_CRITERIA_KEYS - actual_keys)
+        unexpected_keys = sorted(actual_keys - BACKEND_P0_CRITERIA_KEYS)
+        if missing_keys or unexpected_keys:
+            problems: list[str] = []
+            if missing_keys:
+                problems.append(f"missing criteria keys: {', '.join(missing_keys)}")
+            if unexpected_keys:
+                problems.append(f"unexpected criteria keys: {', '.join(unexpected_keys)}")
+            raise ValueError("; ".join(problems))
         return self
