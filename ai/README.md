@@ -19,6 +19,7 @@ Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여
 - [x] Backend P0 Criteria와 Loader
 - [x] 근거 기반 System Prompt
 - [x] 독립형 Gemini Provider
+- [x] HTTP DTO와 분리된 P0 내부 분석 모델
 - [ ] 내부 P0 분석 파이프라인
 - [ ] 최종 `contractVersion = "1.0"` Pydantic 계약
 - [ ] 공용 JSON Schema와 Fixture
@@ -155,6 +156,9 @@ ai/
 │   ├── criteria/
 │   ├── prompts/
 │   ├── llm/
+│   ├── domain/
+│   │   ├── enums.py
+│   │   └── models.py
 │   ├── services/
 │   └── validators/
 │       ├── evidence_validator.py

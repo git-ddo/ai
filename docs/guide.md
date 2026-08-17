@@ -422,6 +422,7 @@ gitddo/
 → 정책 검증
 ```
 
+- [x] HTTP DTO와 분리된 P0 내부 도메인 모델 구현
 - [ ] `normalization_service.py` 구현
 - [ ] `repository_service.py` 구현
 - [ ] `portfolio_service.py` 구현
