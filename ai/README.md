@@ -19,10 +19,15 @@ Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여
 - [x] Backend P0 Criteria와 Loader
 - [x] 근거 기반 System Prompt
 - [x] 독립형 Gemini Provider
-- [x] HTTP DTO와 분리된 P0 내부 분석 모델
+- [x] HTTP DTO와 분리된 P0 내부 분석·집계 모델
+- [x] `InternalPortfolioInput` 범위 Evidence·Claim ID 중복 검증
+- [x] `InterviewQuestionBatch`와 `InternalPortfolioReport`
 - [x] P0 Repository 입력 정규화
-- [x] P0 Prompt Context 생성
-- [ ] 내부 P0 분석 파이프라인
+- [x] Repository·Portfolio·Interview P0 Prompt Context 생성
+- [x] 외부 데이터의 Prompt 예약 마커 충돌 방지
+- [ ] Repository·Portfolio·Report Service
+- [ ] 생성 결과 내용 정책 Validator
+- [ ] 내부 P0 전체 오케스트레이션과 독립 품질 테스트
 - [ ] 최종 `contractVersion = "1.0"` Pydantic 계약
 - [ ] 공용 JSON Schema와 Fixture
 - [ ] 요청·응답 의미 Validator
@@ -30,6 +35,8 @@ Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여
 - [ ] Spring Boot Mock 연동과 실제 E2E
 
 기존 Pydantic 계약은 초기 초안이며 최종 계약으로 교체해야 한다. 구현 완료 여부는 코드와 테스트를 기준으로 갱신한다.
+
+현재 독립 구현 검증 기준은 전체 `pytest` 269개 통과, Ruff 검사·포맷 검사와 mypy 통과이다. 실제 Gemini 호출, 최종 wire DTO와 Spring Boot HTTP 연동은 아직 포함하지 않는다.
 
 ## MVP 지원 범위
 
@@ -133,7 +140,7 @@ AI가 생성한 관찰·해석·추천·면접 질문
 
 MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 및 자체 ML 모델을 사용하지 않는다.
 
-## 목표 디렉터리 구조
+## 현재 독립 구현 구조와 목표 계약 구조
 
 ```text
 ai/
@@ -156,12 +163,26 @@ ai/
 │   │   ├── response.py
 │   │   └── error.py
 │   ├── criteria/
+│   │   ├── backend.yaml
+│   │   ├── models.py
+│   │   └── loader.py
 │   ├── prompts/
+│   │   ├── system.py
+│   │   ├── context.py
+│   │   ├── repository.py
+│   │   ├── portfolio.py
+│   │   └── interview.py
 │   ├── llm/
+│   │   ├── provider.py
+│   │   └── gemini_provider.py
 │   ├── domain/
 │   │   ├── enums.py
 │   │   └── models.py
 │   ├── services/
+│   │   ├── normalization_service.py
+│   │   ├── repository_service.py
+│   │   ├── portfolio_service.py
+│   │   └── report_service.py
 │   └── validators/
 │       ├── evidence_validator.py
 │       ├── depth_validator.py
@@ -176,6 +197,8 @@ ai/
 ```
 
 공용 계약 Fixture는 루트 `docs/contracts/fixtures/`에 둔다. `ai/tests/fixtures/`에는 AI 서버 전용 실패·Prompt Injection Fixture만 둔다.
+
+현재 `repository_service.py`, `portfolio_service.py`, `report_service.py`와 내용 정책 Validator는 후속 구현을 위한 빈 경계 파일이다. `schemas/`의 기존 코드는 최종 `contractVersion = "1.0"` wire 계약이 아니다.
 
 ## API
 
@@ -207,13 +230,15 @@ Content-Type: application/json
 1. Backend P0 Criteria와 Loader 구현
 2. 근거 기반 System Prompt와 Prompt Injection 방어 구현
 3. `LLMProvider`와 Gemini Provider 기반 구현
-4. 내부 모델을 사용한 P0 분석 파이프라인 구현
-5. 백엔드 P0 Collector·Evidence 생성과 양쪽 독립 테스트 완료
-6. 실제 사용 데이터를 비교하여 최종 Pydantic·Java DTO 확정
-7. JSON Schema와 공용 Fixture 생성
-8. 요청·응답 참조 및 분석 깊이 Validator 구현
-9. Mock 내부 API로 계약 연동
-10. 실제 Gemini 분석과 Spring Boot E2E 연동
+4. 내부 도메인 모델, P0 정규화와 안전한 Prompt Context 구현
+5. Repository Service와 Repository 결과 내용 정책 Validator 구현
+6. Portfolio·Interview 생성 Service와 Report Service 오케스트레이션 구현
+7. 백엔드 P0 Collector·Evidence 생성과 양쪽 독립 테스트 완료
+8. 실제 사용 데이터를 비교하여 최종 Pydantic·Java DTO 확정
+9. JSON Schema와 공용 Fixture 생성
+10. 요청·응답 참조 및 분석 깊이 Validator 구현
+11. Mock 내부 API로 계약 연동
+12. 실제 Gemini 분석과 Spring Boot E2E 연동
 
 최종 wire DTO는 내부 분석 모델과 분리한다. Fixture는 DTO 의미를 확정한 뒤 생성하며 선확정을 요구하지 않는다.
 
@@ -255,6 +280,7 @@ docker build -t gitddo-ai .
 
 - README·코드·커밋·사용자 입력을 untrusted data로 처리한다.
 - 외부 입력에 포함된 지시문을 따르지 않는다.
+- 외부 데이터 JSON에 구조 마커와 같은 문자열이 들어오면 대괄호를 JSON Unicode escape로 치환하고, 실제 Prompt 구조 마커는 변경하지 않는다.
 - 전달된 코드를 실행하지 않는다.
 - 저장소 전체 코드와 GitHub raw response를 받지 않는다.
 - LLM 요청·응답 전문을 운영 로그에 남기지 않는다.

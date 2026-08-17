@@ -83,11 +83,14 @@ MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 및 자체 ML 모델�
 ## 현재 개발 상태
 
 - Phase 1 기반 환경과 `/health` 구현 완료
-- 최종 `contractVersion = "1.0"`에 맞춘 문서 동기화 진행
-- 백엔드와 AI가 Fake·Stub으로 각자의 P0 기능을 먼저 개발하는 순서로 전환
-- AI는 P0 Criteria·System Prompt·Gemini Provider·내부 분석 파이프라인부터 구현 예정
+- Backend P0 Criteria·필수 key allowlist·Loader 구현 완료
+- 근거 기반 System Prompt와 Gemini Structured Output Provider 구현 완료
+- HTTP DTO와 분리된 내부 P0 도메인 모델과 `InternalPortfolioInput` 범위 Evidence·Claim ID 중복 검증 구현 완료
+- P0 입력 정규화와 Repository·Portfolio·Interview Prompt Context 구현 완료
+- 외부 데이터의 Prompt 섹션 종료 마커 충돌 방지 구현 완료
+- AI 내부 분석 파이프라인은 기반 계층까지 완료했으며 Repository·Portfolio·Report Service와 내용 정책 Validator가 다음 작업
 - 백엔드는 P0 Collector·Evidence·Job 흐름을 AI 서버 없이 구현 예정
 - 기존 Pydantic 계약은 최종 계약으로 마이그레이션 필요
 - 최종 DTO·Schema·Fixture, Mock 연동과 E2E는 독립 개발 이후 진행
 
-실제 완료 상태와 다음 작업은 [AI 서버 개발 가이드](./docs/guide.md)를 기준으로 확인한다.
+현재 AI 독립 계층은 전체 `pytest` 269개, Ruff와 mypy 검증을 통과한 상태이다. 실제 완료 상태와 다음 작업은 [AI 서버 개발 가이드](./docs/guide.md)를 기준으로 확인한다.

@@ -14,13 +14,17 @@
 - [x] 양쪽 독립 개발에 필요한 계약 의미와 책임 경계 확정
 - [x] AI P0 Criteria·System Prompt·Gemini Provider 독립 구현
 - [ ] 백엔드 P0 수집·Evidence 생성 독립 구현
-- [ ] AI 내부 분석 파이프라인과 독립 테스트 구현
+- [x] AI 내부 모델·입력 정규화·안전한 Prompt Context 구현
+- [ ] AI Repository·Portfolio·Report Service와 내용 정책 Validator 구현
+- [ ] AI 내부 P0 전체 오케스트레이션과 독립 품질 테스트 구현
 - [ ] 실제 사용 데이터를 기준으로 최종 Pydantic 계약 구현
 - [ ] 공용 JSON Schema와 Fixture 생성
 - [ ] 의미·참조·분석 깊이 Validator 구현
 - [ ] Mock 연동 후 실제 E2E 연동
 
 기존 Phase 2 Pydantic 코드는 구 계약 초안이다. reset하지 않고 새 커밋에서 최종 계약으로 교체한다.
+
+현재 검증 기준은 전체 `pytest` 269개 통과, Ruff 검사·포맷 검사와 mypy 통과이다. 실제 Gemini 호출, 최종 wire DTO, 공용 Fixture와 Spring Boot 연동은 이 수치에 포함되지 않는다.
 
 ## 2. MVP 범위
 
@@ -304,6 +308,8 @@ credentials.*, secrets.*, application-local.*
 
 - README, 코드, 커밋 및 사용자 입력은 untrusted data로 직렬화한다.
 - 외부 입력의 지시문을 따르지 않는다.
+- Criteria는 신뢰된 로컬 JSON 영역으로, Repository·UserClaim·이전 분석 결과는 untrusted JSON 영역으로 분리한다.
+- untrusted JSON 안의 정확한 Prompt 예약 마커는 대괄호를 JSON Unicode escape로 바꾸고, 구조를 만드는 실제 마커는 한 번만 유지한다.
 - LLM 요청·응답 전문과 원문 전체를 운영 로그에 남기지 않는다.
 - 로그에는 `analysisId`, 단계, 처리 시간, Evidence 수, 토큰 사용량, 오류 코드만 남긴다.
 
@@ -347,8 +353,8 @@ gitddo/
 - [x] Evidence, UserClaim, ReportItem 의미 분리
 - [x] AI stateless와 Spring Boot Job·저장 책임 확정
 - [x] Recommendation·`jobAppeal`·`portfolioStatements` 근거 원칙 확정
-- [ ] 작업 시작 시 현재 pytest, Ruff, mypy 결과 기록
-- [ ] 기존 구 계약 파일과 테스트 목록 확인
+- [x] 현재 pytest, Ruff, mypy 결과 기록
+- [x] 기존 구 계약 파일과 테스트 목록 확인
 
 이 Phase에서는 세부 DTO와 Fixture를 확정하지 않는다.
 
@@ -359,6 +365,8 @@ gitddo/
 - [x] `ai/app/criteria/backend.yaml` 작성
 - [x] Criteria Loader 구현
 - [x] YAML 필수 필드와 허용값 검증
+- [x] Backend P0 필수 Criteria key 5종 allowlist 검증
+- [x] 누락·추가·교체·중복 Criteria key 거절
 - [x] P0에서 허용되는 README·기술 근거·테스트·Docker·CI 기준만 포함
 - [x] 설계 품질·코드 품질·사용자 역량 기준 제외
 
@@ -423,8 +431,14 @@ gitddo/
 ```
 
 - [x] HTTP DTO와 분리된 P0 내부 도메인 모델 구현
+- [x] `InternalPortfolioInput`의 Repository·Evidence·Claim 전역 중복 검증
+- [x] `InterviewQuestionBatch` Structured Output wrapper 구현
+- [x] `InternalPortfolioReport`와 단계별 생성 메타데이터 모델 구현
 - [x] `normalization_service.py` 구현
 - [x] Repository·Portfolio·Interview Prompt Context 생성
+- [x] Criteria, Evidence, UserClaim과 이전 분석 결과 영역 분리
+- [x] Prompt 예약 마커 8종의 가역적 JSON Unicode escape
+- [x] 실제 구조 마커 유지와 Repository·Portfolio·Interview 충돌 테스트
 - [ ] `repository_service.py` 구현
 - [ ] `portfolio_service.py` 구현
 - [ ] `report_service.py` 오케스트레이션 구현
@@ -441,9 +455,9 @@ gitddo/
 
 AI 검증:
 
-- [ ] Criteria Loader 정상·실패 테스트
-- [ ] Prompt Injection 테스트
-- [ ] Gemini timeout·rate limit·잘못된 출력 테스트
+- [x] Criteria Loader 정상·실패·필수 key allowlist 테스트
+- [x] Prompt Injection과 구조 마커 충돌 테스트
+- [x] Gemini timeout·rate limit·5xx·잘못된 출력 테스트
 - [ ] P0 범위 초과 응답 차단
 - [ ] 입력에 없는 기술·파일 생성 방지
 - [ ] 내부 Repository 1개·5개 분석 테스트
@@ -498,7 +512,7 @@ build: 평가 계약 JSON Schema와 Fixture 추가
 
 AI 서버:
 
-- [ ] Evidence·Claim ID 전역 유일성
+- [ ] 최종 wire 요청의 Evidence·Claim ID 전역 유일성
 - [ ] 참조 존재와 Repository·Snapshot 관계
 - [ ] Evidence valueType/value 일치
 - [ ] 저장소별 `completedEvidenceLevels`
@@ -562,6 +576,8 @@ Spring Boot P0 Collector
 7. 전체 E2E와 운영 로그 점검
 
 이 Phase 전까지 백엔드와 AI는 서로의 실행 환경에 의존하지 않아야 한다.
+
+현재 다음 구현 순서는 `repository_service.py` → Repository 결과 내용 정책 Validator → `portfolio_service.py`와 면접·문장 생성 → `report_service.py` 오케스트레이션 → 독립 품질 테스트이다.
 
 ## 13. 검증 명령
 

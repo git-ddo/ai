@@ -991,6 +991,8 @@ application-local.*
 - AI 서버는 README·코드 원문을 영구 저장하지 않는다.
 - P2 snippet도 MVP에서는 영구 저장하지 않는다.
 - LLM 요청·응답 전문을 운영 로그에 남기지 않는다.
+- Criteria는 신뢰된 로컬 설정으로 분리하고 Repository·UserClaim·이전 분석 결과는 canonical untrusted JSON으로 직렬화한다.
+- untrusted JSON에 Prompt 섹션과 동일한 예약 마커가 포함되면 정확히 일치하는 마커의 대괄호를 JSON Unicode escape로 치환한다. JSON 파싱 시 원문은 복원되어야 하며 실제 구조 마커는 변경하지 않는다.
 - 로그에는 `analysisId`, 처리 단계, 처리 시간, Evidence 개수, 토큰 사용량, 오류 코드만 남긴다.
 - snippet을 저장하지 않아도 `snapshotSha`, `path`, `startLine`, `endLine`, `contentHash`는 보존한다.
 - 저장소가 삭제되거나 비공개로 전환되면 과거 Evidence를 재확인하지 못할 수 있음을 리포트 한계에 포함한다.
@@ -1064,6 +1066,36 @@ Phase 7  Mock HTTP 연동
 Phase 8  실제 Gemini · Spring Boot E2E
 ```
 
+### 현재 AI 구현 스냅샷
+
+완료된 독립 구현:
+
+```text
+FastAPI 기반과 /health
+Backend P0 Criteria 5종과 필수 key allowlist Loader
+근거 기반 System Prompt
+Gemini Structured Output Provider와 Fake Provider
+HTTP DTO와 분리된 내부 P0 도메인·집계 모델
+InternalPortfolioInput 범위 Evidence·Claim ID 중복 검증
+InterviewQuestionBatch와 InternalPortfolioReport
+P0 입력 정규화
+Repository·Portfolio·Interview Prompt Context
+Prompt 예약 마커 8종 충돌 방지
+```
+
+아직 구현하지 않은 독립 파이프라인:
+
+```text
+Repository Service
+Repository 결과 내용 정책 Validator와 재생성 정책
+Portfolio Service
+면접 질문·포트폴리오 문장 생성 Service
+Report Service 오케스트레이션
+내부 전체 품질 테스트
+```
+
+현재 검증 기준은 전체 `pytest` 269개, Ruff 검사·포맷 검사와 mypy 통과이다. 실제 Gemini 호출, 최종 wire DTO·Schema·공용 Fixture, Spring Boot 연동은 포함하지 않는다.
+
 Fixture 선확정은 요구하지 않는다. AI는 wire DTO와 분리된 내부 모델로 먼저 개발하고, 백엔드는 Fake AI Client로 먼저 개발한다. 양쪽에서 필요한 데이터가 확인된 뒤 Pydantic·Java DTO를 확정하고 공용 Fixture를 생성한다.
 
 아래의 기존 계약 마이그레이션 작업 목록은 Phase 5~7에서 수행할 세부 체크리스트로 사용한다. 목록에 붙은 기존 Phase 번호는 작업 종류를 구분하기 위한 참조이며 현재 실행 우선순위를 의미하지 않는다.
@@ -1072,11 +1104,11 @@ Fixture 선확정은 요구하지 않는다. AI는 wire DTO와 분리된 내부 
 
 작업:
 
-- [ ] `git status --short --branch` 확인
-- [ ] 기존 변경 및 미추적 파일 확인
-- [ ] Phase 1 동작 확인
-- [ ] 현재 테스트 결과 기록
-- [ ] 기존 Phase 2 계약 파일 목록 확인
+- [x] `git status --short --branch` 확인
+- [x] 기존 변경 및 미추적 파일 확인
+- [x] Phase 1 동작 확인
+- [x] 현재 테스트 결과 기록
+- [x] 기존 Phase 2 계약 파일 목록 확인
 
 검증:
 
@@ -1430,10 +1462,11 @@ P2 예산 관련 환경변수는 P2 런타임 지원을 시작하는 Phase에서
 
 - [ ] 요청 전체 크기 제한
 - [ ] 민감 원문 로그 금지
-- [ ] untrusted data 직렬화 경계 정의
-- [ ] Prompt Injection 방어 System Prompt 작성
-- [ ] README와 사용자 입력의 지시문 무시 테스트
-- [ ] 코드 비실행 원칙 문서화
+- [x] untrusted data 직렬화 경계 정의
+- [x] Prompt Injection 방어 System Prompt 작성
+- [x] README와 사용자 입력의 지시문 무시 테스트
+- [x] Prompt 예약 마커 충돌 방지와 가역성 테스트
+- [x] 코드 비실행 원칙 문서화
 - [ ] 로그 마스킹 테스트
 
 완료 조건:
@@ -1468,17 +1501,19 @@ docs/github-workflow.md
 
 작업:
 
-- [ ] Evidence, UserClaim, ReportItem 분리 반영
-- [ ] UUID `analysisId` 반영
-- [ ] 네 가지 버전 분리 반영
-- [ ] `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 범위 반영
-- [ ] `jobAppeal` 및 `portfolioStatements` 계약 반영
-- [ ] 저장소별 분석 깊이 반영
-- [ ] AI와 Spring Boot 이중 검증 반영
-- [ ] Error Envelope 반영
-- [ ] Spring Boot Job 책임과 AI stateless 정책 반영
-- [ ] 보안 제한 반영
-- [ ] 실제 완료된 Phase만 체크
+- [x] Evidence, UserClaim, ReportItem 분리 반영
+- [x] UUID `analysisId` 반영
+- [x] 네 가지 버전 분리 반영
+- [x] `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 범위 반영
+- [x] `jobAppeal` 및 `portfolioStatements` 계약 반영
+- [x] 저장소별 분석 깊이 반영
+- [x] AI와 Spring Boot 이중 검증 반영
+- [x] Error Envelope 반영
+- [x] Spring Boot Job 책임과 AI stateless 정책 반영
+- [x] 보안 제한 반영
+- [x] 실제 완료된 Phase만 체크
+
+위 체크는 최종 목표 계약과 현재 구현 상태가 문서에 반영되었다는 뜻이다. 최종 wire Pydantic·Schema·Fixture와 실제 HTTP 연동이 구현되었다는 뜻은 아니다.
 
 완료 조건:
 
@@ -1595,20 +1630,26 @@ Pydantic 직렬화 결과가 camelCase 계약과 일치하는가
 
 ```text
 AI 독립 개발
-1. feat: Backend P0 Criteria 추가
+1. feat: Backend P0 Criteria와 Loader 추가
 2. feat: 근거 기반 System Prompt 추가
-3. feat: Gemini Provider 기반 구현
-4. feat: P0 포트폴리오 분석 파이프라인 추가
+3. feat: Gemini Structured Output Provider 추가
+4. feat: P0 내부 분석 모델 추가
+5. feat: P0 입력 정규화 추가
+6. feat: P0 Prompt Context 생성 추가
+7. fix: 독립 기반 검증과 Prompt 경계 보완
+8. feat: Repository 분석 Service와 내용 정책 Validator 추가
+9. feat: Portfolio·Interview 생성 Service 추가
+10. feat: P0 Report Service 오케스트레이션 추가
 
 계약 확정과 연동
-5. docs: 평가 계약 v1.0 wire format 확정
-6. feat: 평가 API 계약 v1.0 재설계
-7. build: 평가 계약 JSON Schema와 Fixture 추가
-8. feat: 평가 요청 의미 검증 추가
-9. feat: 리포트 근거 및 분석 깊이 검증 추가
-10. feat: 평가 리포트 Mock API 구현
-11. feat: 평가 요청 보안 및 크기 제한 적용
-12. docs: 평가 계약 구현 상태와 개발 가이드 동기화
+11. docs: 평가 계약 v1.0 wire format 확정
+12. feat: 평가 API 계약 v1.0 재설계
+13. build: 평가 계약 JSON Schema와 Fixture 추가
+14. feat: 평가 요청 의미 검증 추가
+15. feat: 리포트 근거 및 분석 깊이 검증 추가
+16. feat: 평가 리포트 Mock API 구현
+17. feat: 평가 요청 보안 및 크기 제한 적용
+18. docs: 평가 계약 구현 상태와 개발 가이드 동기화
 ```
 
 각 커밋에는 해당 작업과 직접 관련된 파일만 포함한다. 사용자나 다른 에이전트의 변경을 함께 커밋하지 않는다.
@@ -1667,4 +1708,4 @@ AI 독립 개발
 - [ ] 전체 pytest, Ruff, mypy, Docker 검증이 통과함
 - [ ] 모든 문서가 실제 구현과 일치함
 
-Gemini Provider와 P0 Prompt·Criteria는 최종 DTO 전에 독립 구현할 수 있다. 다만 실제 Spring Boot 요청, 최종 Structured Output, Evidence Validator 및 결과 저장을 연결하는 E2E는 이 완료 기준을 충족한 뒤 진행한다.
+Gemini Provider, P0 Criteria·System Prompt, 내부 모델·정규화·Prompt Context는 최종 DTO와 분리하여 구현 완료했다. 다음은 Repository·Portfolio·Report Service와 내용 정책 Validator를 독립 구현한다. 실제 Spring Boot 요청, 최종 Structured Output wire DTO, 계약 Evidence Validator 및 결과 저장을 연결하는 E2E는 이 완료 기준을 충족한 뒤 진행한다.
