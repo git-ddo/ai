@@ -21,6 +21,7 @@ Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여
 - [x] 독립형 Gemini Provider
 - [x] HTTP DTO와 분리된 P0 내부 분석 모델
 - [x] P0 Repository 입력 정규화
+- [x] P0 Prompt Context 생성
 - [ ] 내부 P0 분석 파이프라인
 - [ ] 최종 `contractVersion = "1.0"` Pydantic 계약
 - [ ] 공용 JSON Schema와 Fixture
