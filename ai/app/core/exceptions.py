@@ -1,3 +1,10 @@
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.validators.report_validator import PolicyViolation
+
+
 class LLMProviderError(Exception):
     """Base error exposed by an LLM provider implementation."""
 
@@ -39,3 +46,16 @@ class LLMStructuredOutputError(LLMProviderError):
 
     def __init__(self, message: str, *, attempt_count: int = 1) -> None:
         super().__init__(message, retryable=False, attempt_count=attempt_count)
+
+
+class ReportPolicyError(Exception):
+    """Raised when an internal report violates one or more fixed policies."""
+
+    def __init__(self, violations: Sequence["PolicyViolation"]) -> None:
+        immutable_violations = tuple(violations)
+        if not immutable_violations:
+            raise ValueError("ReportPolicyError requires at least one violation")
+
+        self.violations = immutable_violations
+        violation_codes = ", ".join(violation.code.value for violation in immutable_violations)
+        super().__init__(f"Report policy validation failed: {violation_codes}")

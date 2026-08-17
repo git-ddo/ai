@@ -439,6 +439,8 @@ gitddo/
 - [x] Criteria, Evidence, UserClaim과 이전 분석 결과 영역 분리
 - [x] Prompt 예약 마커 8종의 가역적 JSON Unicode escape
 - [x] 실제 구조 마커 유지와 Repository·Portfolio·Interview 충돌 테스트
+- [x] 내부 정책 위반 code와 불변 `PolicyViolation` 구현
+- [x] `ReportPolicyError` 구현
 - [ ] `repository_service.py` 구현
 - [ ] `portfolio_service.py` 구현
 - [ ] `report_service.py` 오케스트레이션 구현
