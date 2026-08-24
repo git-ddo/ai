@@ -1,3 +1,4 @@
+import re
 from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -32,6 +33,8 @@ RepositoryId = Annotated[
 ]
 PositiveLineNumber = Annotated[int, Field(strict=True, gt=0)]
 PositivePullRequestNumber = Annotated[int, Field(strict=True, gt=0)]
+
+_WINDOWS_ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
 _COMPLETED_DEPTH_PREFIXES: dict[AnalysisDepth, tuple[AnalysisDepth, ...]] = {
     AnalysisDepth.P0: (AnalysisDepth.P0,),
@@ -305,6 +308,9 @@ class GroundedAnalysisItem(InternalDomainModel):
     confidence: EvidenceConfidence
     evidence_refs: tuple[EvidenceId, ...] = ()
     claim_refs: tuple[ClaimId, ...] = ()
+    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+    technology_names: tuple[NonEmptyString, ...] = ()
+    file_paths: tuple[NonEmptyString, ...] = ()
     priority: RecommendationPriority | None = None
 
     @model_validator(mode="after")
@@ -313,6 +319,14 @@ class GroundedAnalysisItem(InternalDomainModel):
             raise ValueError("evidence_refs must not contain duplicates")
         if len(self.claim_refs) != len(set(self.claim_refs)):
             raise ValueError("claim_refs must not contain duplicates")
+        if len(self.criterion_keys) != len(set(self.criterion_keys)):
+            raise ValueError("criterion_keys must not contain duplicates")
+        if len({name.casefold() for name in self.technology_names}) != len(self.technology_names):
+            raise ValueError("technology_names must not contain duplicates")
+        if len(self.file_paths) != len(set(self.file_paths)):
+            raise ValueError("file_paths must not contain duplicates")
+        if any(not _is_repository_relative_path(path) for path in self.file_paths):
+            raise ValueError("file_paths must contain only safe repository-relative paths")
 
         requires_evidence = self.item_type in {
             AnalysisItemType.OBSERVATION,
@@ -336,6 +350,12 @@ class GroundedAnalysisItem(InternalDomainModel):
             raise ValueError("priority is only allowed for RECOMMENDATION items")
 
         return self
+
+
+def _is_repository_relative_path(path: str) -> bool:
+    if "\x00" in path or path.startswith(("/", "\\")) or _WINDOWS_ABSOLUTE_PATH.match(path):
+        return False
+    return all(part != ".." for part in re.split(r"[\\/]", path))
 
 
 class RepositoryAnalysis(InternalDomainModel):

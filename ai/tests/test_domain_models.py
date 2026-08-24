@@ -129,6 +129,7 @@ def make_interpretation(
         confidence=EvidenceConfidence.HIGH,
         evidence_refs=evidence_refs,
         claim_refs=claim_refs,
+        criterion_keys=("README_READINESS",),
     )
 
 
@@ -208,6 +209,7 @@ def make_observation() -> GroundedAnalysisItem:
         content="README에서 프로젝트 소개 항목이 관찰되었습니다.",
         confidence=EvidenceConfidence.HIGH,
         evidence_refs=("ev_001",),
+        criterion_keys=("README_READINESS",),
     )
 
 
@@ -217,6 +219,7 @@ def make_recommendation() -> GroundedAnalysisItem:
         content="백엔드가 미관찰로 도출한 실행 방법을 README에 보완하세요.",
         confidence=EvidenceConfidence.HIGH,
         evidence_refs=("ev_002",),
+        criterion_keys=("README_READINESS",),
         priority=RecommendationPriority.HIGH,
     )
 
@@ -227,6 +230,8 @@ def make_job_appeal() -> GroundedAnalysisItem:
         content="Spring Boot 의존성이 공개 설정에서 확인됩니다.",
         confidence=EvidenceConfidence.HIGH,
         evidence_refs=("ev_001",),
+        criterion_keys=("TECH_STACK_EVIDENCE",),
+        technology_names=("Spring Boot",),
     )
 
 
@@ -939,6 +944,7 @@ def test_evidence_required_item_types_reject_missing_evidence(
             content="근거가 필요한 항목입니다.",
             confidence=EvidenceConfidence.NOT_VERIFIABLE,
             claim_refs=("claim_001",),
+            criterion_keys=("README_READINESS",),
             priority=(
                 RecommendationPriority.HIGH
                 if item_type is AnalysisItemType.RECOMMENDATION
@@ -953,6 +959,7 @@ def test_interpretation_rejects_missing_references() -> None:
             item_type=AnalysisItemType.INTERPRETATION,
             content="참조가 없는 해석입니다.",
             confidence=EvidenceConfidence.NOT_VERIFIABLE,
+            criterion_keys=("README_READINESS",),
         )
 
 
@@ -963,7 +970,92 @@ def test_recommendation_requires_priority() -> None:
             content="우선순위가 없는 추천입니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=("ev_001",),
+            criterion_keys=("README_READINESS",),
         )
+
+
+def test_grounded_item_requires_at_least_one_criterion_key() -> None:
+    with pytest.raises(ValidationError):
+        GroundedAnalysisItem(
+            item_type=AnalysisItemType.INTERPRETATION,
+            content="Criteria가 없는 분석입니다.",
+            confidence=EvidenceConfidence.HIGH,
+            evidence_refs=("ev_001",),
+            criterion_keys=(),
+        )
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["criterion_keys", "technology_names", "file_paths"],
+)
+def test_grounded_item_rejects_blank_grounding_metadata(field_name: str) -> None:
+    values: dict[str, object] = {
+        "item_type": AnalysisItemType.INTERPRETATION,
+        "content": "공백 메타데이터가 있는 분석입니다.",
+        "confidence": EvidenceConfidence.HIGH,
+        "evidence_refs": ("ev_001",),
+        "criterion_keys": ("README_READINESS",),
+    }
+    values[field_name] = ("   ",)
+
+    with pytest.raises(ValidationError):
+        GroundedAnalysisItem.model_validate(values)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "values", "message"),
+    [
+        ("criterion_keys", ("README_READINESS", "README_READINESS"), "criterion_keys"),
+        ("technology_names", ("Spring Boot", "spring boot"), "technology_names"),
+        ("file_paths", ("README.md", "README.md"), "file_paths"),
+    ],
+)
+def test_grounded_item_rejects_duplicate_grounding_metadata(
+    field_name: str,
+    values: tuple[str, ...],
+    message: str,
+) -> None:
+    values_by_field: dict[str, object] = {
+        "item_type": AnalysisItemType.INTERPRETATION,
+        "content": "중복 메타데이터가 있는 분석입니다.",
+        "confidence": EvidenceConfidence.HIGH,
+        "evidence_refs": ("ev_001",),
+        "criterion_keys": ("README_READINESS",),
+    }
+    values_by_field[field_name] = values
+
+    with pytest.raises(ValidationError, match=message):
+        GroundedAnalysisItem.model_validate(values_by_field)
+
+
+@pytest.mark.parametrize(
+    "file_path",
+    ["../secret.env", "/etc/passwd", r"C:\\secrets\\token.txt", "dir\x00file"],
+)
+def test_grounded_item_rejects_unsafe_file_paths(file_path: str) -> None:
+    with pytest.raises(ValidationError, match="repository-relative"):
+        GroundedAnalysisItem(
+            item_type=AnalysisItemType.INTERPRETATION,
+            content="안전하지 않은 경로가 있는 분석입니다.",
+            confidence=EvidenceConfidence.HIGH,
+            evidence_refs=("ev_001",),
+            criterion_keys=("README_READINESS",),
+            file_paths=(file_path,),
+        )
+
+
+def test_grounded_item_accepts_safe_repository_relative_file_path() -> None:
+    item = GroundedAnalysisItem(
+        item_type=AnalysisItemType.INTERPRETATION,
+        content="README 경로를 참조합니다.",
+        confidence=EvidenceConfidence.HIGH,
+        evidence_refs=("ev_001",),
+        criterion_keys=("README_READINESS",),
+        file_paths=("docs/README.md",),
+    )
+
+    assert item.file_paths == ("docs/README.md",)
 
 
 def test_interview_question_rejects_missing_references() -> None:

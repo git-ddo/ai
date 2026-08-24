@@ -3,10 +3,12 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from app.core.exceptions import LLMProviderError, ReportPolicyError
+from app.criteria import CriteriaLoader
 from app.domain import (
     AnalysisDepth,
     AnalysisItemType,
     EvidenceConfidence,
+    EvidenceValueType,
     GroundedAnalysisItem,
     InternalEvidence,
     InternalEvidenceType,
@@ -14,6 +16,7 @@ from app.domain import (
     NormalizedRepositoryContext,
     RecommendationPriority,
     RepositoryAnalysis,
+    SnapshotHashAlgorithm,
 )
 from app.validators.report_validator import (
     PolicyViolation,
@@ -33,6 +36,11 @@ EXPECTED_POLICY_VIOLATION_CODES = {
     "NOT_OBSERVED_MISUSE",
     "USER_CLAIM_AS_FACT",
     "MISSING_DERIVED_EVIDENCE",
+    "UNKNOWN_CRITERION",
+    "CRITERIA_EVIDENCE_MISMATCH",
+    "P1_SCOPE_VIOLATION",
+    "P2_SCOPE_VIOLATION",
+    "REPOSITORY_WIDE_GENERALIZATION",
 }
 
 
@@ -79,16 +87,23 @@ def make_context(
 def make_item(
     *,
     item_type: AnalysisItemType = AnalysisItemType.INTERPRETATION,
+    content: str = "공개 P0 근거를 포트폴리오에서 설명할 수 있습니다.",
     evidence_refs: tuple[str, ...] = ("ev_001",),
     claim_refs: tuple[str, ...] = ("claim_001",),
+    criterion_keys: tuple[str, ...] = ("README_READINESS",),
+    technology_names: tuple[str, ...] = (),
+    file_paths: tuple[str, ...] = (),
 ) -> GroundedAnalysisItem:
     priority = RecommendationPriority.HIGH if item_type is AnalysisItemType.RECOMMENDATION else None
     return GroundedAnalysisItem(
         item_type=item_type,
-        content="공개 P0 근거를 포트폴리오에서 설명할 수 있습니다.",
+        content=content,
         confidence=EvidenceConfidence.HIGH,
         evidence_refs=evidence_refs,
         claim_refs=claim_refs,
+        criterion_keys=criterion_keys,
+        technology_names=technology_names,
+        file_paths=file_paths,
         priority=priority,
     )
 
@@ -107,6 +122,116 @@ def make_analysis(
         observations=observations,
         strengths=strengths,
         recommendations=recommendations,
+    )
+
+
+def make_depth_context(depth: AnalysisDepth) -> NormalizedRepositoryContext:
+    repository_name = "git-ddo/backend"
+    evidence: list[InternalEvidence] = [
+        InternalEvidence(
+            evidence_id="ev_001",
+            repository_full_name=repository_name,
+            evidence_type=InternalEvidenceType.GITHUB_STATIC,
+            analysis_depth=AnalysisDepth.P0,
+            key="TECHNOLOGY_DEPENDENCY",
+            summary="Spring Boot dependency was observed.",
+            source_paths=("build.gradle",),
+            technology_names=("Spring Boot",),
+        )
+    ]
+    completed_levels = [AnalysisDepth.P0]
+    if depth in {AnalysisDepth.P1, AnalysisDepth.P2}:
+        completed_levels.append(AnalysisDepth.P1)
+        evidence.append(
+            InternalEvidence(
+                evidence_id="ev_002",
+                repository_full_name=repository_name,
+                evidence_type=InternalEvidenceType.GITHUB_ACTIVITY,
+                analysis_depth=AnalysisDepth.P1,
+                key="COMMIT_ACTIVITY",
+                summary="A commit changed the service path.",
+                source_paths=("src/main/java/OrderService.java",),
+                commit_sha="abc123",
+            )
+        )
+    if depth is AnalysisDepth.P2:
+        completed_levels.append(AnalysisDepth.P2)
+        evidence.append(
+            InternalEvidence(
+                evidence_id="ev_003",
+                repository_full_name=repository_name,
+                evidence_type=InternalEvidenceType.CODE_EVIDENCE,
+                analysis_depth=AnalysisDepth.P2,
+                key="CODE_SNIPPET",
+                summary="if (request == null) throw new IllegalArgumentException();",
+                value_type=EvidenceValueType.STRING,
+                path="src/main/java/OrderService.java",
+                start_line=10,
+                end_line=12,
+                commit_sha="abc123",
+                source_evidence_refs=("ev_002",),
+            )
+        )
+
+    return NormalizedRepositoryContext(
+        repository_id="1",
+        repository_full_name=repository_name,
+        analysis_depth=depth,
+        completed_evidence_levels=tuple(completed_levels),
+        snapshot_hash_algorithm=(
+            SnapshotHashAlgorithm.SHA1 if depth is not AnalysisDepth.P0 else None
+        ),
+        snapshot_sha="abc123" if depth is not AnalysisDepth.P0 else None,
+        evidence=tuple(evidence),
+        user_claims=(
+            InternalUserClaim(
+                claim_id="claim_001",
+                repository_full_name=repository_name,
+                statement="사용자는 주문 API를 담당했다고 진술했습니다.",
+                related_evidence_refs=(("ev_002",) if depth is not AnalysisDepth.P0 else ()),
+            ),
+        ),
+        technology_names=("Spring Boot",),
+    )
+
+
+def validate_content(
+    analysis: RepositoryAnalysis,
+    context: NormalizedRepositoryContext,
+) -> None:
+    criteria = CriteriaLoader().load("BACKEND", context.analysis_depth.value)
+    RepositoryPolicyValidator().validate_content(analysis, context, criteria)
+
+
+def make_missing_context(
+    *,
+    derived_key: str = "PROJECT_STRUCTURE",
+    derived_summary: str = "testFileCount=0 hasDocker=false hasCi=false",
+) -> NormalizedRepositoryContext:
+    repository_name = "git-ddo/backend"
+    return NormalizedRepositoryContext(
+        repository_id="1",
+        repository_full_name=repository_name,
+        analysis_depth=AnalysisDepth.P0,
+        evidence=(
+            InternalEvidence(
+                evidence_id="ev_001",
+                repository_full_name=repository_name,
+                evidence_type=InternalEvidenceType.GITHUB_STATIC,
+                key="README_OBSERVED",
+                summary="README was observed.",
+                source_paths=("README.md",),
+            ),
+            InternalEvidence(
+                evidence_id="ev_002",
+                repository_full_name=repository_name,
+                evidence_type=InternalEvidenceType.BACKEND_DERIVED,
+                analysis_depth=AnalysisDepth.P0,
+                key=derived_key,
+                summary=derived_summary,
+                derived_from_level=AnalysisDepth.P0,
+            ),
+        ),
     )
 
 
@@ -474,3 +599,510 @@ def test_repository_reference_validator_error_does_not_expose_source_content() -
     assert prompt not in rendered_error
     assert secret not in rendered_error
     assert context.repository_full_name not in rendered_error
+
+
+def test_repository_content_validator_accepts_grounded_p0_result() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    analysis = make_analysis(
+        summary=make_item(
+            content="공개 설정에서 Spring Boot 의존성이 관찰되었습니다.",
+            evidence_refs=("ev_001",),
+            claim_refs=(),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
+            technology_names=("spring boot",),
+            file_paths=("build.gradle",),
+        )
+    )
+
+    validate_content(analysis, context)
+
+
+def test_repository_content_validator_accepts_grounded_p1_result() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            content="전달된 커밋에서 Service 경로 변경 활동이 관찰되었습니다.",
+            evidence_refs=("ev_002",),
+            claim_refs=(),
+            criterion_keys=("ACTIVITY_SCOPE",),
+            file_paths=("src/main/java/OrderService.java",),
+        )
+    )
+
+    validate_content(analysis, context)
+
+
+def test_repository_content_validator_accepts_grounded_p2_snippet_result() -> None:
+    context = make_depth_context(AnalysisDepth.P2)
+    analysis = make_analysis(
+        summary=make_item(
+            content="제공된 snippet 범위에서 null 입력 검증이 관찰됩니다.",
+            evidence_refs=("ev_003",),
+            claim_refs=(),
+            criterion_keys=("INPUT_VALIDATION_OBSERVATION",),
+            file_paths=("src/main/java/OrderService.java",),
+        )
+    )
+
+    validate_content(analysis, context)
+
+
+def test_repository_content_validator_rejects_unknown_criterion() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    analysis = make_analysis(
+        summary=make_item(
+            evidence_refs=("ev_001",),
+            claim_refs=(),
+            criterion_keys=("CODE_QUALITY",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert exc_info.value.violations[0].code is PolicyViolationCode.UNKNOWN_CRITERION
+
+
+def test_repository_content_validator_rejects_criteria_evidence_mismatch() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            evidence_refs=("ev_002",),
+            claim_refs=(),
+            criterion_keys=("README_READINESS",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert exc_info.value.violations[0].code is PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH
+
+
+def test_repository_content_validator_rejects_criterion_above_repository_depth() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    criteria_p2 = CriteriaLoader().load("BACKEND", "P2")
+    analysis = make_analysis(
+        summary=make_item(
+            evidence_refs=("ev_001",),
+            claim_refs=(),
+            criterion_keys=("SNIPPET_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        RepositoryPolicyValidator().validate_content(analysis, context, criteria_p2)
+
+    assert PolicyViolationCode.P0_SCOPE_VIOLATION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_claim_for_disallowed_criterion() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            evidence_refs=("ev_002",),
+            claim_refs=("claim_001",),
+            criterion_keys=("ACTIVITY_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+@pytest.mark.parametrize(
+    ("technology_names", "file_paths", "expected_code"),
+    [
+        (("Redis",), (), PolicyViolationCode.UNKNOWN_TECHNOLOGY),
+        ((), ("src/Unknown.java",), PolicyViolationCode.UNKNOWN_FILE_PATH),
+    ],
+)
+def test_repository_content_validator_rejects_unknown_grounding_metadata(
+    technology_names: tuple[str, ...],
+    file_paths: tuple[str, ...],
+    expected_code: PolicyViolationCode,
+) -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    analysis = make_analysis(
+        summary=make_item(
+            evidence_refs=("ev_001",),
+            claim_refs=(),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
+            technology_names=technology_names,
+            file_paths=file_paths,
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "이 저장소의 코드 품질은 우수합니다.",
+        "전체 아키텍처가 견고하게 설계되었습니다.",
+        "테스트 커버리지가 충분합니다.",
+    ],
+)
+def test_repository_content_validator_rejects_p0_quality_assertions(content: str) -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    analysis = make_analysis(
+        summary=make_item(content=content, evidence_refs=("ev_001",), claim_refs=())
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.P0_SCOPE_VIOLATION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_uses_item_criterion_depth_in_mixed_repository() -> None:
+    context = make_depth_context(AnalysisDepth.P2)
+    analysis = make_analysis(
+        summary=make_item(
+            content="공개 설정만으로 코드 품질이 우수하다고 판단할 수 있습니다.",
+            evidence_refs=("ev_001",),
+            claim_refs=(),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.P0_SCOPE_VIOLATION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_p1_activity_as_skill() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            content="커밋 수가 많아 사용자의 개발 역량이 우수합니다.",
+            evidence_refs=("ev_002",),
+            claim_refs=(),
+            criterion_keys=("ACTIVITY_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.USER_ABILITY_ASSERTION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_p1_activity_as_contribution() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            content="커밋 수가 많아 개인 기여도가 높습니다.",
+            evidence_refs=("ev_002",),
+            claim_refs=(),
+            criterion_keys=("ACTIVITY_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.CONTRIBUTION_ASSERTION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_p1_code_quality_assertion() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            content="변경 경로를 보면 코드 품질이 우수합니다.",
+            evidence_refs=("ev_002",),
+            claim_refs=(),
+            criterion_keys=("CHANGE_AREA_OBSERVATION",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.P1_SCOPE_VIOLATION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_unobserved_activity_as_non_contribution() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            content="커밋 활동이 확인되지 않아 사용자가 기여하지 않았습니다.",
+            evidence_refs=("ev_002",),
+            claim_refs=(),
+            criterion_keys=("ACTIVITY_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.CONTRIBUTION_ASSERTION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_p2_repository_generalization() -> None:
+    context = make_depth_context(AnalysisDepth.P2)
+    analysis = make_analysis(
+        summary=make_item(
+            content="이 저장소 전체 코드 품질이 우수합니다.",
+            evidence_refs=("ev_003",),
+            claim_refs=(),
+            criterion_keys=("SNIPPET_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.REPOSITORY_WIDE_GENERALIZATION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_p2_snippet_as_user_ability() -> None:
+    context = make_depth_context(AnalysisDepth.P2)
+    analysis = make_analysis(
+        summary=make_item(
+            content="이 코드 구간으로 사용자의 개발 역량이 우수함을 알 수 있습니다.",
+            evidence_refs=("ev_003",),
+            claim_refs=(),
+            criterion_keys=("SNIPPET_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.USER_ABILITY_ASSERTION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_p2_code_as_personal_implementation() -> None:
+    context = make_depth_context(AnalysisDepth.P2)
+    analysis = make_analysis(
+        summary=make_item(
+            content="이 코드 구간은 사용자가 직접 구현한 사실이 확인됩니다.",
+            evidence_refs=("ev_003",),
+            claim_refs=(),
+            criterion_keys=("SNIPPET_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.CONTRIBUTION_ASSERTION in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_rejects_claim_only_item_as_github_fact() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            content="주문 API를 직접 구현했습니다.",
+            evidence_refs=(),
+            claim_refs=("claim_001",),
+            criterion_keys=("CLAIM_ACTIVITY_LINK",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.USER_CLAIM_AS_FACT in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_accepts_explicitly_attributed_user_claim() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            content="사용자 진술에 따르면 주문 API 구현을 담당했습니다.",
+            evidence_refs=(),
+            claim_refs=("claim_001",),
+            criterion_keys=("CLAIM_ACTIVITY_LINK",),
+        )
+    )
+
+    validate_content(analysis, context)
+
+
+def test_repository_content_validator_rejects_evidence_and_claim_as_fully_verified() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    analysis = make_analysis(
+        summary=make_item(
+            content="사용자 진술의 전체 내용이 GitHub에서 확인되었습니다.",
+            evidence_refs=("ev_002",),
+            claim_refs=("claim_001",),
+            criterion_keys=("CLAIM_ACTIVITY_LINK",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.USER_CLAIM_AS_FACT in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_accepts_derived_missing_test_recommendation() -> None:
+    context = make_missing_context()
+    analysis = make_analysis(
+        summary=make_item(evidence_refs=("ev_001",), claim_refs=()),
+        recommendations=(
+            make_item(
+                item_type=AnalysisItemType.RECOMMENDATION,
+                content="수집 범위에서 테스트 파일이 확인되지 않아 테스트를 추가하세요.",
+                evidence_refs=("ev_002",),
+                claim_refs=(),
+                criterion_keys=("TEST_PRESENCE",),
+            ),
+        ),
+    )
+
+    validate_content(analysis, context)
+
+
+def test_repository_content_validator_rejects_missing_recommendation_without_derived_evidence() -> (
+    None
+):
+    context = make_depth_context(AnalysisDepth.P0)
+    analysis = make_analysis(
+        summary=make_item(evidence_refs=("ev_001",), claim_refs=()),
+        recommendations=(
+            make_item(
+                item_type=AnalysisItemType.RECOMMENDATION,
+                content="README 실행 방법을 추가하세요.",
+                evidence_refs=("ev_001",),
+                claim_refs=(),
+                criterion_keys=("README_READINESS",),
+            ),
+        ),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.MISSING_DERIVED_EVIDENCE in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_accepts_explicit_readme_missing_evidence() -> None:
+    context = make_missing_context(
+        derived_key="README_SECTION_MISSING",
+        derived_summary="README run guide was not observed.",
+    )
+    analysis = make_analysis(
+        summary=make_item(evidence_refs=("ev_001",), claim_refs=()),
+        recommendations=(
+            make_item(
+                item_type=AnalysisItemType.RECOMMENDATION,
+                content="수집 범위에서 실행 방법이 관찰되지 않아 README를 보완하세요.",
+                evidence_refs=("ev_002",),
+                claim_refs=(),
+                criterion_keys=("README_READINESS",),
+            ),
+        ),
+    )
+
+    validate_content(analysis, context)
+
+
+def test_repository_content_validator_rejects_not_observed_as_actual_absence() -> None:
+    context = make_missing_context()
+    analysis = make_analysis(
+        summary=make_item(evidence_refs=("ev_001",), claim_refs=()),
+        recommendations=(
+            make_item(
+                item_type=AnalysisItemType.RECOMMENDATION,
+                content="테스트 코드가 실제로 없습니다. 테스트를 추가하세요.",
+                evidence_refs=("ev_002",),
+                claim_refs=(),
+                criterion_keys=("TEST_PRESENCE",),
+            ),
+        ),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.NOT_OBSERVED_MISUSE in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_repository_content_validator_collects_metadata_violations_in_stable_order() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    analysis = make_analysis(
+        summary=make_item(
+            evidence_refs=("ev_001",),
+            claim_refs=(),
+            criterion_keys=("UNKNOWN_KEY",),
+            technology_names=("Redis",),
+            file_paths=("unknown.file",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert [violation.code for violation in exc_info.value.violations] == [
+        PolicyViolationCode.UNKNOWN_CRITERION,
+        PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH,
+        PolicyViolationCode.UNKNOWN_TECHNOLOGY,
+        PolicyViolationCode.UNKNOWN_FILE_PATH,
+    ]
+
+
+def test_repository_content_validator_error_excludes_untrusted_content() -> None:
+    sensitive_content = "raw model response with secret"
+    sensitive_evidence = "repository secret source"
+    sensitive_claim = "private user claim"
+    context = make_context(
+        evidence_summary=sensitive_evidence,
+        claim_statement=sensitive_claim,
+    )
+    analysis = make_analysis(
+        summary=make_item(
+            content=sensitive_content,
+            evidence_refs=("ev_001",),
+            claim_refs=(),
+            criterion_keys=("README_READINESS",),
+            technology_names=("UnknownSecretTechnology",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    rendered = str(exc_info.value)
+    assert sensitive_content not in rendered
+    assert sensitive_evidence not in rendered
+    assert sensitive_claim not in rendered

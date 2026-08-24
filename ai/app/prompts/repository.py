@@ -19,8 +19,14 @@ BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의
 - 관찰 항목은 OBSERVATION으로 만들고 Evidence를 참조한다.
 - 강점 해석은 INTERPRETATION으로 만들고 Evidence 또는 UserClaim을 참조한다.
 - 개선 제안은 RECOMMENDATION으로 만들고 Evidence와 우선순위를 포함한다.
+- 모든 분석 항목은 실제 적용한 Criteria key를 criterion_keys에 하나 이상 반환한다.
+- content에서 기술을 언급하면 같은 기술명을 technology_names에 반환한다.
+- content에서 파일 경로를 언급하면 같은 Repository 상대 경로를 file_paths에 반환한다.
+- technology_names는 입력 Repository의 technology_names에서만 선택한다.
+- file_paths는 입력 Evidence의 path 또는 source_paths에서만 선택한다.
+- 입력에 없는 Criteria key, 기술명 또는 파일 경로를 생성하지 않는다.
 - 공개 근거에서 포트폴리오로 설명 가능한 범위와 실제 분석 깊이의 한계를 제시한다.
-- UserClaim을 GitHub에서 확인된 사실처럼 표현하지 않는다.
+- UserClaim 기반 문장은 사용자 진술임을 명확히 표시하고 GitHub 확인 사실처럼 표현하지 않는다.
 - 미관찰 사실에 관한 Recommendation은 명시적인 BACKEND_DERIVED Evidence가 있을 때만 만든다.
 - 점수, 개인 기여율, 사용자 역량, 경력 수준 충족 여부, 취업 또는 합격 가능성을 생성하지 않는다.
 - 입력에 없는 기술, 파일 경로, 코드, 호출 관계와 구현 기능을 생성하지 않는다.
@@ -45,6 +51,7 @@ _P1_REPOSITORY_RULES = """
 _P2_REPOSITORY_RULES = """
 - P2에서는 제공된 CODE_EVIDENCE snippet에서 직접 보이는 입력 검증, 오류 처리,
   책임과 테스트 사례만 다룬다.
+- P2 분석 문장에는 판단이 제공된 snippet 범위에 한정됨을 명확히 표시한다.
 - REPOSITORY_WIDE_GENERALIZATION을 금지하고 snippet을 Repository 전체 품질로 일반화하지 않는다.
 - snippet 밖의 코드나 호출 관계를 추정하지 않는다.
 """.strip()

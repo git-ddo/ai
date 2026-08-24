@@ -148,6 +148,8 @@ def make_analysis(
             content=summary_content,
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=evidence_refs,
+            criterion_keys=("TECH_STACK_EVIDENCE",),
+            technology_names=("Spring Boot",),
         ),
         observations=(
             GroundedAnalysisItem(
@@ -155,6 +157,8 @@ def make_analysis(
                 content="Spring Boot 의존성이 관찰되었습니다.",
                 confidence=EvidenceConfidence.HIGH,
                 evidence_refs=evidence_refs,
+                criterion_keys=("TECH_STACK_EVIDENCE",),
+                technology_names=("Spring Boot",),
             ),
         ),
         strengths=(
@@ -164,6 +168,7 @@ def make_analysis(
                     content=strength_content,
                     confidence=EvidenceConfidence.HIGH,
                     evidence_refs=evidence_refs,
+                    criterion_keys=("TECH_STACK_EVIDENCE",),
                 ),
             )
             if strength_content is not None
@@ -176,6 +181,7 @@ def make_analysis(
                     content=recommendation_content,
                     confidence=EvidenceConfidence.HIGH,
                     evidence_refs=evidence_refs,
+                    criterion_keys=("README_READINESS",),
                     priority=RecommendationPriority.HIGH,
                 ),
             )
@@ -409,6 +415,12 @@ def test_repository_task_contains_p0_grounding_and_forbidden_rules(
         "점수",
         "개인 기여율",
         "합격 가능성",
+        "criterion_keys",
+        "technology_names",
+        "file_paths",
+        "입력 Repository의 technology_names에서만 선택",
+        "입력 Evidence의 path 또는 source_paths에서만 선택",
+        "사용자 진술임을 명확히 표시",
         "RepositoryAnalysis Structured Output Schema",
     ):
         assert required in task
@@ -471,6 +483,7 @@ def test_repository_prompt_contains_depth_specific_rules(
     if analysis_depth is AnalysisDepth.P2:
         assert "CODE_EVIDENCE snippet" in task
         assert "REPOSITORY_WIDE_GENERALIZATION" in task
+        assert "snippet 범위에 한정됨을 명확히 표시" in task
         assert "snippet 밖의 코드나 호출 관계를 추정하지 않는다" in task
 
 

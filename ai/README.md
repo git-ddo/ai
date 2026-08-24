@@ -38,17 +38,19 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] Repository Finding의 Evidence·Claim 참조 Validator
 - [x] 입력 Evidence·UserClaim 참조 그래프 Validator
 - [x] 요청 최대 깊이와 Repository별 완료 깊이 Validator
+- [x] Repository 결과의 Criteria·기술·파일 grounding 메타데이터
+- [x] P0/P1/P2 Repository 생성 결과 내용 정책 Validator
 
 ### 다음 구현
 
 - [ ] Repository·Portfolio·Report Service
-- [ ] 생성 결과 내용 정책 Validator
+- [ ] 정책 실패 후 Repository 결과 1회 재생성
 - [ ] 전체 270초 분석 deadline
 - [ ] Backend Schema 기준 Pydantic Wire DTO와 Error Envelope
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 462개이다. 이 수치는 실제 Gemini 호출, Repository·Portfolio Service와
+현재 전체 테스트 기준은 503개이다. 이 수치는 실제 Gemini 호출, Repository·Portfolio Service와
 Portfolio Report Wire API를 포함하지 않는다.
 
 ## 목표 지원 범위
@@ -121,6 +123,12 @@ Repository A의 Evidence를 Repository B 결과에 사용하지 않는다. P2 �
 실제 완료된 최대 깊이이다. 입력 Reference Validator는 LLM 호출 전에 Evidence·Claim ID,
 source/related 참조, 교차 Repository 참조, 순환과 P2의 P1 source를 검사한다. 출력
 `RepositoryPolicyValidator`는 Gemini가 생성한 결과의 참조를 별도로 검사한다.
+
+각 `GroundedAnalysisItem`은 적용한 `criterion_keys`와 문장에서 사용한 `technology_names`,
+`file_paths`를 구조화된 grounding 메타데이터로 반환한다. 내용 정책 Validator는 이를 누적
+Criteria와 Repository Context의 기술·경로 allowlist에 대조하고, P0/P1/P2 범위 초과 단정,
+UserClaim의 사실 승격, `NOT_OBSERVED` 오용과 근거 없는 누락 Recommendation을 거절한다.
+자연어 정책 검출은 보수적인 고정 패턴 기반이며 모든 표현을 완전히 판별하지는 못한다.
 
 Evidence별 Wire `repositoryId`·`snapshotSha`는 아직 내부 Evidence에 보존하지 않는다. 해당 값과
 부모 Repository의 일치 여부는 향후 Wire DTO → 내부 모델 Mapper에서 검증한다.
