@@ -1,78 +1,87 @@
 # GitDdo AI Server
 
-Spring Boot가 수집·구조화한 GitHub Evidence와 UserClaim을 해석하여 근거가 연결된 포트폴리오 코칭 리포트를 생성하는 stateless FastAPI 서버이다.
+Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연결된 포트폴리오 코칭
+리포트를 생성하는 stateless FastAPI 서버이다.
 
-## 문서 기준
+## 문서와 계약 기준
 
-- 최종 계약 기준: [`EVALUATION_CONTRACT_MIGRATION_GUIDE.md`](../EVALUATION_CONTRACT_MIGRATION_GUIDE.md)
-- 단계별 개발 절차: [`docs/guide.md`](../docs/guide.md)
-- 에이전트 작업 규칙: [`AGENTS.md`](../AGENTS.md)
+- Wire Source of Truth: `backend/backend/docs/contracts/*.schema.json`
+- 평가 의미와 안전 정책: [`EVALUATION_CONTRACT_MIGRATION_GUIDE.md`](../EVALUATION_CONTRACT_MIGRATION_GUIDE.md)
+- 구현 순서: [`docs/guide.md`](../docs/guide.md)
+- 에이전트 규칙: [`AGENTS.md`](../AGENTS.md)
 - 협업 규칙: [`docs/github-workflow.md`](../docs/github-workflow.md)
 
-공용 계약 구현 후 `docs/contracts/`의 JSON Schema와 Fixture를 백엔드와 함께 사용한다.
+현재 P2 계약은 Backend `origin/feat/portfolio-evaluation-p2`의 `bcc9a4f`를 기준으로 임시
+동기화한 상태이다. Backend `main` 병합 후 다시 확인한다.
 
 ## 현재 구현 상태
 
-- [x] FastAPI 프로젝트와 `/health`
-- [x] 설정, 로깅, 예외 기반 구조
+### 완료
+
+- [x] FastAPI 프로젝트와 `GET /health`
+- [x] 설정·로깅·내부 예외 기반 구조
 - [x] pytest, Ruff, mypy, Docker 구성
 - [x] Backend P0 Criteria와 Loader
-- [x] 근거 기반 System Prompt
-- [x] 독립형 Gemini Provider
+- [x] Backend P0 Criteria 필수 key allowlist
+- [x] 근거 기반 P0 System Prompt
+- [x] Gemini Structured Output Provider와 Fake Provider
 - [x] HTTP DTO와 분리된 P0 내부 분석·집계 모델
-- [x] `InternalPortfolioInput` 범위 Evidence·Claim ID 중복 검증
-- [x] `InterviewQuestionBatch`와 `InternalPortfolioReport`
+- [x] Portfolio 범위 Evidence·Claim ID 중복 검증
 - [x] P0 Repository 입력 정규화
-- [x] Repository·Portfolio·Interview P0 Prompt Context 생성
-- [x] 외부 데이터의 Prompt 예약 마커 충돌 방지
+- [x] Repository·Portfolio·Interview Prompt Context
+- [x] Prompt 예약 마커 충돌 방지
 - [x] 내부 정책 위반 타입과 `ReportPolicyError`
-- [x] Repository 결과의 Evidence·Claim 참조 정책 Validator
+- [x] Repository Finding의 Evidence·Claim 참조 Validator
+
+### 다음 구현
+
+- [ ] P1/P2 내부 Evidence 모델
+- [ ] P1/P2 Criteria와 Loader
+- [ ] P0/P1/P2 혼합 깊이 System Prompt
+- [ ] P1/P2 정규화와 Prompt Context
+- [ ] 입력 참조·분석 깊이 Validator
 - [ ] Repository·Portfolio·Report Service
 - [ ] 생성 결과 내용 정책 Validator
-- [ ] 내부 P0 전체 오케스트레이션과 독립 품질 테스트
-- [ ] 최종 `contractVersion = "1.0"` Pydantic 계약
-- [ ] 공용 JSON Schema와 Fixture
-- [ ] 요청·응답 의미 Validator
-- [ ] `POST /internal/v1/portfolio-reports` Mock API
-- [ ] Spring Boot Mock 연동과 실제 E2E
+- [ ] 전체 270초 분석 deadline
+- [ ] Backend Schema 기준 Pydantic Wire DTO와 Error Envelope
+- [ ] `POST /internal/v1/portfolio-reports`
+- [ ] Fake Provider 및 실제 Gemini E2E
 
-기존 Pydantic 계약은 초기 초안이며 최종 계약으로 교체해야 한다. 구현 완료 여부는 코드와 테스트를 기준으로 갱신한다.
+현재 전체 테스트 기준은 300개이다. 이 수치는 실제 Gemini 호출, P1/P2 분석과 Portfolio Report
+Wire API를 포함하지 않는다.
 
-현재 독립 구현 검증 기준은 전체 `pytest` 269개 통과, Ruff 검사·포맷 검사와 mypy 통과이다. 실제 Gemini 호출, 최종 wire DTO와 Spring Boot HTTP 연동은 아직 포함하지 않는다.
-
-## MVP 지원 범위
+## 목표 지원 범위
 
 ```text
 Repository: 1~5개
 TargetJob: BACKEND
 TargetCareerLevel: ENTRY
 AnalysisPurpose: PORTFOLIO_ANALYSIS
-AnalysisDepth: P0
-ContractVersion: 1.0
+AnalysisDepth: P0 | P1 | P2
+schemaVersion: "1.0"
 ```
 
-다른 직무·경력 수준과 P1/P2는 계약 확장 타입으로만 정의한다. 현재 요청되면 `UNSUPPORTED_COMBINATION`을 반환한다.
+Backend Schema에는 다른 직무·경력 수준 enum도 있지만 해당 Criteria와 Prompt는 아직 구현하지
+않는다.
 
 ## 책임 범위
 
-### 담당
+### AI 서버 담당
 
-- Pydantic 요청·응답·오류 검증
-- MVP 지원 조합 검증
+- Pydantic request·response·error 검증
 - 전달된 Evidence와 UserClaim 해석
+- Repository별 `completedEvidenceLevels` 준수
 - Gemini Structured Output 생성
-- Evidence/Claim 참조 무결성 검증
-- 저장소별 분석 깊이 검증
-- `jobAppeal`, Recommendation, `portfolioStatements` 근거 규칙 검증
+- Evidence·Claim 참조와 분석 깊이 검증
+- P0/P1/P2 내용 정책 검증
 - 공통 Error Envelope 반환
 
-### 담당하지 않음
+### AI 서버 비담당
 
-- GitHub OAuth와 GitHub API 호출
+- GitHub OAuth와 GitHub API
 - Snapshot과 Evidence 수집
 - 사용자·포트폴리오·Evaluation Job 관리
-- 결과 저장과 멱등성 처리
-- 동일 `analysisId` 중복 실행 차단
+- 결과 저장과 Backend 재시도
 - DB, Redis, in-memory Job Lock
 - 기여율·역량 점수·합격 가능성 생성
 
@@ -80,134 +89,129 @@ ContractVersion: 1.0
 
 ```text
 Spring Boot
-  Snapshot + Evidence + UserClaim 구성
-  Request JSON Schema 검증
-        ↓
-POST /internal/v1/portfolio-reports
-        ↓
+  Snapshot + P0/P1/P2 Evidence + UserClaim
+        ↓ POST /internal/v1/portfolio-reports
 FastAPI
-  Pydantic 검증
-  → 지원 조합·참조·깊이 검증
-  → Gemini 호출
-  → Pydantic 응답 검증
-  → Evidence/Claim/깊이 검증
-        ↓
-Response JSON 또는 Error Envelope
+  request/의미 검증
+  → Repository별 깊이 선택
+  → Criteria + Prompt Context
+  → Gemini Structured Output
+  → 참조/깊이/내용 정책 검증
         ↓
 Spring Boot
-  최종 Schema와 allowlist 검증 후 저장
+  최종 Validator
+  → 결과 저장 또는 Job FAILED
 ```
 
-Spring Boot가 timeout 후 같은 요청을 재호출하면 LLM이 중복 실행될 수 있으며 MVP에서는 허용한다. AI 서버는 요청별로 독립 실행한다.
+MVP는 Repository별 부분 성공을 지원하지 않는다.
 
-## 계약 개념
+## 분석 깊이 안전 규칙
+
+| 깊이 | 허용 | 금지 |
+| --- | --- | --- |
+| P0 | 문서·구조·설정의 관찰 여부 | 코드·설계·테스트 품질, 역량 판단 |
+| P1 | 관찰된 커밋·PR·변경 영역 | 활동량을 실력·기여율로 해석 |
+| P2 | 제공된 snippet의 검증·오류 처리·책임·테스트 사례 | Repository 전체 품질·아키텍처·경력으로 일반화 |
+
+Repository A의 Evidence를 Repository B 결과에 사용하지 않는다. P2 요청이어도 각 Repository의
+`completedEvidenceLevels`까지만 판단한다.
+
+## 현재 Backend Wire 계약
+
+핵심 값:
 
 ```text
-Evidence
-GitHub 또는 백엔드가 확인·도출한 사실
-
-UserClaim
-사용자가 입력한 역할과 경험
-
-ReportItem
-AI가 생성한 관찰·해석·추천·면접 질문
+schemaVersion: "1.0"
+repositoryId: string
+findingId: ^find_[0-9]{3,}$
+EvidenceType: GITHUB_STATIC | GITHUB_ACTIVITY | CODE_EVIDENCE | BACKEND_DERIVED
+AnalysisDepth: P0 | P1 | P2
 ```
 
-핵심 규칙:
+현재 응답:
 
-- `contractVersion`은 `"1.0"`만 허용한다.
-- `analysisId`는 UUID v4이다.
-- Evidence 타입은 `GITHUB_STATIC`, `GITHUB_ACTIVITY`, `CODE_EVIDENCE`, `BACKEND_DERIVED`이다.
-- P0에서는 `GITHUB_STATIC`, `BACKEND_DERIVED`만 허용한다.
-- 모든 Recommendation은 `evidenceRefs`를 최소 1개 포함한다.
-- `jobAppeal`은 공개 Evidence를 최소 1개 포함하며 Claim만으로 만들지 않는다.
-- `portfolioStatements`는 `evidenceRefs` 또는 `claimRefs` 중 최소 하나를 포함한다.
-- `NOT_OBSERVED`는 부재·거짓·미기여를 뜻하지 않는다.
-- 잘못된 항목을 제거한 부분 성공을 반환하지 않는다.
+- `jobAppeal`: 단일 객체, Evidence 최소 1개
+- `strengths`, `gaps`, `nextActions`: 각 항목 Evidence 최소 1개
+- `portfolioStatements`: Evidence 또는 Claim 최소 1개
+- `interviewQuestions`: Evidence 또는 Claim 최소 1개
+
+현재 Wire에는 문장 `type`, 문장·질문의 `repositoryId`, `followUpQuestions`가 없다. Backend
+Schema가 변경되기 전 Pydantic Wire DTO에 추가하지 않는다.
 
 ## 기술 스택
 
 | 영역 | 기술 |
-|---|---|
+| --- | --- |
 | Language | Python 3.12+ |
 | API | FastAPI, Uvicorn |
 | Schema | Pydantic v2 |
 | Settings | pydantic-settings |
-| LLM | Google Gen AI SDK(`google-genai`), Gemini Structured Output |
+| LLM | Google Gen AI SDK, Gemini Structured Output |
 | Retry | tenacity |
 | Criteria | PyYAML |
 | Test | pytest, pytest-asyncio |
 | Quality | Ruff, mypy |
-| Infrastructure | Docker, GitHub Actions |
+| Infrastructure | Docker |
 
-MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 및 자체 ML 모델을 사용하지 않는다.
+LangChain, RAG, Vector Database, Fine-tuning과 자체 ML 모델은 현재 사용하지 않는다.
 
-## 현재 독립 구현 구조와 목표 계약 구조
+## 프로젝트 구조
 
 ```text
 ai/
 ├── app/
-│   ├── main.py
-│   ├── api/
-│   │   ├── health.py
-│   │   └── reports.py
-│   ├── core/
-│   │   ├── config.py
-│   │   ├── exceptions.py
-│   │   └── logging.py
-│   ├── schemas/
-│   │   ├── common.py
-│   │   ├── enums.py
-│   │   ├── evidence.py
-│   │   ├── claims.py
-│   │   ├── repository.py
-│   │   ├── request.py
-│   │   ├── response.py
-│   │   └── error.py
-│   ├── criteria/
-│   │   ├── backend.yaml
-│   │   ├── models.py
-│   │   └── loader.py
-│   ├── prompts/
-│   │   ├── system.py
-│   │   ├── context.py
-│   │   ├── repository.py
-│   │   ├── portfolio.py
-│   │   └── interview.py
-│   ├── llm/
-│   │   ├── provider.py
-│   │   └── gemini_provider.py
-│   ├── domain/
-│   │   ├── enums.py
-│   │   └── models.py
-│   ├── services/
-│   │   ├── normalization_service.py
-│   │   ├── repository_service.py
-│   │   ├── portfolio_service.py
-│   │   └── report_service.py
-│   └── validators/
-│       ├── evidence_validator.py
-│       ├── depth_validator.py
-│       └── report_validator.py
-├── scripts/
-│   └── export_contracts.py
+│   ├── api/           # FastAPI route
+│   ├── core/          # 설정, 로깅, 공통 예외
+│   ├── criteria/      # 깊이별 분석 기준과 Loader
+│   ├── domain/        # HTTP 계약과 분리된 내부 모델
+│   ├── llm/           # Provider Protocol, Gemini/Fake 구현
+│   ├── prompts/       # System과 Repository/Portfolio/Interview Context
+│   ├── schemas/       # Backend Wire DTO 목표 위치
+│   ├── services/      # 정규화와 분석 오케스트레이션
+│   └── validators/    # 참조, 깊이와 내용 정책
 ├── tests/
-│   └── fixtures/
 ├── .env.example
 ├── Dockerfile
 └── pyproject.toml
 ```
 
-공용 계약 Fixture는 루트 `docs/contracts/fixtures/`에 둔다. `ai/tests/fixtures/`에는 AI 서버 전용 실패·Prompt Injection Fixture만 둔다.
+`repository_service.py`, `portfolio_service.py`, `report_service.py`는 아직 후속 구현 경계이다.
+`schemas/`의 기존 초안은 현재 Backend Wire 계약으로 교체해야 한다.
 
-현재 `repository_service.py`, `portfolio_service.py`, `report_service.py`와 내용 정책 Validator는 후속 구현을 위한 빈 경계 파일이다. `schemas/`의 기존 코드는 최종 `contractVersion = "1.0"` wire 계약이 아니다.
+## 환경 설정
 
-## API
+`.env.example`을 `.env`로 복사한다.
 
-### Health Check
+```env
+APP_NAME=git-ddo-ai
+APP_ENV=local
+APP_HOST=0.0.0.0
+APP_PORT=8000
+LOG_LEVEL=INFO
 
-```http
-GET /health
+GEMINI_API_KEY=
+GEMINI_MODEL=
+LLM_TIMEOUT_SECONDS=60
+LLM_MAX_RETRIES=2
+```
+
+`LLM_TIMEOUT_SECONDS`는 현재 Gemini 개별 호출 timeout이다. 합의된 AI 전체 처리 deadline은
+270초이며 Report Service에서 별도로 구현해야 한다.
+
+## 실행
+
+```bash
+cd ai
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+uvicorn app.main:app --reload
+```
+
+Health Check:
+
+```bash
+curl http://localhost:8000/health
 ```
 
 ```json
@@ -216,57 +220,9 @@ GET /health
 }
 ```
 
-### 포트폴리오 리포트 생성
+`POST /internal/v1/portfolio-reports`는 아직 구현되지 않았다.
 
-```http
-POST /internal/v1/portfolio-reports
-Content-Type: application/json
-```
-
-요청·응답 예시는 공용 계약 Fixture로 관리한다. 최종 wire format 확정 전 README에 별도 대형 JSON을 복제하지 않는다.
-
-## 개발 순서
-
-백엔드와 실제 HTTP 연동은 최대한 뒤로 미룬다. AI와 백엔드는 Fake·Stub을 사용하여 각자의 핵심 기능을 독립적으로 완성한다.
-
-1. Backend P0 Criteria와 Loader 구현
-2. 근거 기반 System Prompt와 Prompt Injection 방어 구현
-3. `LLMProvider`와 Gemini Provider 기반 구현
-4. 내부 도메인 모델, P0 정규화와 안전한 Prompt Context 구현
-5. Repository Service와 Repository 결과 내용 정책 Validator 구현
-6. Portfolio·Interview 생성 Service와 Report Service 오케스트레이션 구현
-7. 백엔드 P0 Collector·Evidence 생성과 양쪽 독립 테스트 완료
-8. 실제 사용 데이터를 비교하여 최종 Pydantic·Java DTO 확정
-9. JSON Schema와 공용 Fixture 생성
-10. 요청·응답 참조 및 분석 깊이 Validator 구현
-11. Mock 내부 API로 계약 연동
-12. 실제 Gemini 분석과 Spring Boot E2E 연동
-
-최종 wire DTO는 내부 분석 모델과 분리한다. Fixture는 DTO 의미를 확정한 뒤 생성하며 선확정을 요구하지 않는다.
-
-단계별 체크리스트와 커밋 단위는 [`docs/guide.md`](../docs/guide.md)를 따른다.
-
-## 환경변수
-
-```env
-APP_ENV=local
-APP_HOST=0.0.0.0
-APP_PORT=8000
-
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=
-GEMINI_MODEL=
-LLM_TIMEOUT_SECONDS=60
-LLM_MAX_RETRIES=2
-
-MAX_REPOSITORIES=5
-MAX_REQUEST_BYTES=2097152
-LOG_LEVEL=INFO
-```
-
-실제 API key, token, 개인정보와 Repository 원문은 커밋하거나 운영 로그에 남기지 않는다.
-
-## 실행과 검증
+## 검증
 
 ```bash
 pytest
@@ -276,14 +232,19 @@ mypy app
 docker build -t gitddo-ai .
 ```
 
-계약 변경 시 Pydantic 직렬화, 공용 Fixture, Draft 2020-12 JSON Schema 및 참조 무결성 테스트를 함께 실행한다.
+실제 Gemini API를 호출하지 않는 단위 테스트를 기본으로 한다. Wire 계약 변경 시 Backend
+Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
-## 보안 기준
+## 보안
 
-- README·코드·커밋·사용자 입력을 untrusted data로 처리한다.
-- 외부 입력에 포함된 지시문을 따르지 않는다.
-- 외부 데이터 JSON에 구조 마커와 같은 문자열이 들어오면 대괄호를 JSON Unicode escape로 치환하고, 실제 Prompt 구조 마커는 변경하지 않는다.
+- README, 코드, 커밋과 UserClaim은 untrusted data이다.
+- 외부 데이터의 지시문을 따르지 않는다.
 - 전달된 코드를 실행하지 않는다.
-- 저장소 전체 코드와 GitHub raw response를 받지 않는다.
-- LLM 요청·응답 전문을 운영 로그에 남기지 않는다.
-- P0 요청은 최대 2 MiB로 제한한다.
+- 입력에 없는 기술, 파일과 기능을 생성하지 않는다.
+- Prompt·응답 전문과 민감 원문을 운영 로그에 기록하지 않는다.
+- API key와 token을 코드, Fixture 또는 로그에 넣지 않는다.
+
+## 다음 작업
+
+다음 논리적 작업 단위는 `P1/P2 내부 Evidence 도메인 모델 확장`이다. 상세 필드와 완료 조건은
+[`docs/guide.md`](../docs/guide.md)의 Phase 1을 따른다.

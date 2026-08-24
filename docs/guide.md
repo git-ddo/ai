@@ -1,591 +1,492 @@
 # AI 서버 개발 가이드
 
-이 문서는 최종 평가 계약을 구현하기 위한 작업 순서와 완료 조건을 정리한다. 계약의 전체 의미와 세부 제한은 루트 [`EVALUATION_CONTRACT_MIGRATION_GUIDE.md`](../EVALUATION_CONTRACT_MIGRATION_GUIDE.md)를 기준으로 한다.
+## 1. 문서 역할
 
-## 1. 목표와 현재 상태
+이 문서는 GitDdo AI 서버의 현재 상태, 다음 구현 순서와 단계별 완료 조건을 설명한다.
+P0/P1/P2 의미와 정책은 루트
+[`EVALUATION_CONTRACT_MIGRATION_GUIDE.md`](../EVALUATION_CONTRACT_MIGRATION_GUIDE.md)를 따른다.
 
-목표는 Spring Boot가 전달한 Evidence와 UserClaim을 바탕으로 근거가 연결된 포트폴리오 코칭 리포트를 생성하는 stateless FastAPI 서버를 구현하는 것이다.
+Wire request·response·error 필드의 최종 Source of Truth는 Backend JSON Schema이다.
 
-현재 상태:
+```text
+backend/backend/docs/contracts/analysis-request.schema.json
+backend/backend/docs/contracts/analysis-response.schema.json
+backend/backend/docs/contracts/analysis-error.schema.json
+```
 
-- [x] FastAPI 기반 환경 구성
-- [x] `/health` 구현
-- [x] pytest, Ruff, mypy, Docker 기반 구성
-- [x] 양쪽 독립 개발에 필요한 계약 의미와 책임 경계 확정
-- [x] AI P0 Criteria·System Prompt·Gemini Provider 독립 구현
-- [ ] 백엔드 P0 수집·Evidence 생성 독립 구현
-- [x] AI 내부 모델·입력 정규화·안전한 Prompt Context 구현
-- [ ] AI Repository·Portfolio·Report Service와 내용 정책 Validator 구현
-- [ ] AI 내부 P0 전체 오케스트레이션과 독립 품질 테스트 구현
-- [ ] 실제 사용 데이터를 기준으로 최종 Pydantic 계약 구현
-- [ ] 공용 JSON Schema와 Fixture 생성
-- [ ] 의미·참조·분석 깊이 Validator 구현
-- [ ] Mock 연동 후 실제 E2E 연동
+Markdown과 Schema가 충돌하면 Backend Schema와 구현을 우선 확인한다. P2는 현재
+`origin/feat/portfolio-evaluation-p2`의 `bcc9a4f`를 기준으로 임시 동기화했으며 Backend
+`main` 병합 후 다시 점검한다.
 
-기존 Phase 2 Pydantic 코드는 구 계약 초안이다. reset하지 않고 새 커밋에서 최종 계약으로 교체한다.
+## 2. 목표
 
-현재 검증 기준은 전체 `pytest` 269개 통과, Ruff 검사·포맷 검사와 mypy 통과이다. 실제 Gemini 호출, 최종 wire DTO, 공용 Fixture와 Spring Boot 연동은 이 수치에 포함되지 않는다.
+Spring Boot가 전달한 Evidence와 UserClaim을 바탕으로 근거가 연결된 코칭 리포트를 생성하는
+stateless FastAPI 서버를 구현한다.
 
-## 2. MVP 범위
+개발 목표 조합:
 
 ```text
 Repository: 1~5개
 TargetJob: BACKEND
 TargetCareerLevel: ENTRY
 AnalysisPurpose: PORTFOLIO_ANALYSIS
-RequestedAnalysisDepth: P0
-ContractVersion: 1.0
+RequestedAnalysisDepth: P0 | P1 | P2
+schemaVersion: "1.0"
 ```
 
-계약 enum에는 확장 값을 정의할 수 있다.
+`FRONTEND`, `AI`, `CLOUD_INFRA`, `JUNIOR`, `MID`, `SENIOR`는 Schema에서 표현 가능하지만 현재
+분석 Criteria와 Prompt 구현 범위가 아니다.
 
-```text
-TargetJob: BACKEND, FRONTEND, AI, CLOUD_INFRA
-TargetCareerLevel: ENTRY, MID, SENIOR
-AnalysisDepth: P0, P1, P2
-```
+## 3. 현재 상태
 
-현재 런타임에서 확정 조합 이외의 요청은 `UNSUPPORTED_COMBINATION`으로 거절한다. 네 직무 동시 지원, P1/P2 실행 및 경력 수준 판정은 MVP 완료 기준이 아니다.
+### Backend
 
-## 3. 아키텍처 경계
+- [x] P0 수집과 Evidence Snapshot
+- [x] P1 커밋·PR·변경 경로 수집
+- [x] Mock AI Client, 응답 Validator와 Job 저장 흐름
+- [ ] P2 코드 snippet Collector `main` 병합
+- [ ] P2 전역 snippet/token 예산
+- [ ] AI HTTP connect 5초·read 300초 timeout 적용
+
+### AI
+
+- [x] FastAPI 환경과 `/health`
+- [x] pytest, Ruff, mypy, Docker 구성
+- [x] Backend P0 Criteria·필수 key allowlist·Loader
+- [x] 근거 기반 P0 System Prompt
+- [x] Gemini Structured Output Provider와 Fake Provider
+- [x] HTTP DTO와 분리된 P0 내부 모델
+- [x] 분석 전체 Evidence·Claim ID 중복 검증
+- [x] P0 입력 정규화
+- [x] Repository·Portfolio·Interview Prompt Context
+- [x] Prompt 예약 마커 충돌 방지
+- [x] 정책 위반 타입과 `ReportPolicyError`
+- [x] Repository Evidence·Claim 참조 Validator
+- [ ] P1/P2 내부 Evidence 모델과 Criteria
+- [ ] P1/P2 정규화·Prompt·깊이 Validator
+- [ ] Repository·Portfolio·Report Service
+- [ ] 내용 정책 Validator와 내부 전체 오케스트레이션
+- [ ] Backend Schema 기준 Pydantic Wire DTO
+- [ ] `POST /internal/v1/portfolio-reports`
+- [ ] Spring Boot Mock 및 실제 Gemini E2E
+
+현재 AI 검증 기준은 전체 `pytest` 300개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+P1/P2 분석과 Wire API를 포함하지 않는다.
+
+## 4. 아키텍처 경계
 
 ```text
 Frontend
-  → 평가 Job 생성·상태 조회
+  평가 생성 · 상태/결과 조회
+        ↓
 Spring Boot
-  → GitHub 수집, Snapshot 고정, Evidence/UserClaim 구성
-  → 요청 Schema 검증
-  → POST /internal/v1/portfolio-reports
-FastAPI AI Server
-  → Pydantic/의미 검증
+  Snapshot 고정
+  → P0/P1/P2 Evidence 수집
+  → UserClaim 구성
+  → request 조립
+        ↓ POST /internal/v1/portfolio-reports
+FastAPI
+  Pydantic/의미 검증
+  → Repository별 완료 깊이 확인
+  → Criteria/Prompt 선택
   → Gemini Structured Output
-  → 참조·분석 깊이·응답 검증
-  → JSON 또는 Error Envelope 반환
+  → 참조/깊이/내용 정책 검증
+        ↓
 Spring Boot
-  → 최종 Schema/allowlist 검증
-  → 최초 검증 성공 결과 저장
-Frontend
-  → 저장된 리포트 조회
+  최종 검증
+  → 결과 저장 또는 Job FAILED
 ```
 
-### Spring Boot 책임
+AI 서버는 GitHub API, 사용자 인증, Snapshot, Evaluation Job, DB 저장과 멱등성 정책을 관리하지
+않는다.
 
-- GitHub OAuth와 사용자·포트폴리오 소유권 관리
-- `analysisId` UUID v4 생성
-- Evaluation Job과 상태 관리
-- Snapshot SHA 고정과 Evidence ID 발급
-- P0/P1/P2 데이터 수집, Secret 및 불필요 파일 제거
-- UserClaim 저장과 AI 요청 구성
-- 요청 전 Schema 검증, 응답 최종 검증과 결과 저장
-- 클라이언트 `Idempotency-Key`, AI 재호출 및 중복 결과 정책
+## 5. 분석 깊이 처리
 
-### AI 서버 책임
+| 깊이 | Evidence | AI 허용 범위 |
+| --- | --- | --- |
+| P0 | `GITHUB_STATIC`, P0 `BACKEND_DERIVED` | 문서·구조·설정의 관찰 여부 |
+| P1 | `GITHUB_ACTIVITY`, P1 `BACKEND_DERIVED` | 관찰된 활동·변경 영역과 Claim 연결 후보 |
+| P2 | `CODE_EVIDENCE`, P2 `BACKEND_DERIVED` | 제공된 코드 구간의 검증·오류 처리·책임과 테스트 사례 |
 
-- 합의된 요청과 지원 조합 검증
-- 전달된 Evidence와 UserClaim만 해석
-- 구조화된 코칭 리포트 생성
-- Evidence/Claim 참조와 저장소별 분석 깊이 검증
-- 공통 Error Envelope 반환
-
-### AI 서버에서 금지
-
-- GitHub API 직접 호출
-- 저장소 전체 코드 또는 GitHub raw response 수신
-- 사용자·Job·결과·멱등성 정보 저장
-- DB, Redis, in-memory Job Lock
-- 기여율, 역량 점수, 합격 가능성 생성
-- 전달된 코드 실행
-
-## 4. 내부 API
-
-### Health Check
-
-```http
-GET /health
-```
-
-### 포트폴리오 리포트 생성
-
-```http
-POST /internal/v1/portfolio-reports
-Content-Type: application/json
-```
-
-- 동기 HTTP API이다.
-- 정상 응답은 `200 OK`이다.
-- Job 상태는 Spring Boot가 관리한다.
-- 같은 `analysisId`가 재호출되면 AI 서버는 독립적으로 다시 실행할 수 있다.
-- AI 서버는 중복 실행 방지를 위한 저장소나 Lock을 두지 않는다.
-
-## 5. 계약 모델
-
-### Evidence
-
-백엔드가 GitHub에서 확인하거나 규칙으로 도출한 사실이다.
+`requestedAnalysisDepth`는 요청 전체의 최대 목표이다. 실제 판단은 각 Repository의
+`completedEvidenceLevels`를 기준으로 한다.
 
 ```text
-GITHUB_STATIC    P0
-GITHUB_ACTIVITY  P1
-CODE_EVIDENCE    P2
-BACKEND_DERIVED  P0+
+requestedAnalysisDepth=P2
+Repo A=[P0,P1,P2]
+Repo B=[P0,P1]
+Repo C=[P0]
 ```
 
-P0 런타임에서는 `GITHUB_STATIC`, `BACKEND_DERIVED`만 허용한다.
+Repo B와 Repo C에 P2 판단을 생성하면 전체 리포트 실패이다.
 
-### UserClaim
+## 6. 현재 Wire 계약 요약
 
-사용자가 입력한 역할, 참여 수준, 구현 내용과 참여 기간이다. Evidence로 취급하지 않는다.
+문서에는 대형 JSON을 복제하지 않는다. 주요 필드만 다음과 같이 이해한다.
 
-### GroundedItem과 ReportItem
-
-응답 항목은 문자열 근거 ID를 통해 입력과 연결한다.
+### Request
 
 ```text
-evidenceRefs: ["ev_001"]
-claimRefs: ["claim_001"]
-```
-
-참조 규칙:
-
-| 항목 | 필수 참조 |
-|---|---|
-| `OBSERVATION` | Evidence |
-| `INTERPRETATION` | Evidence 또는 Claim |
-| `RECOMMENDATION` | Evidence 최소 1개 |
-| 프로젝트 기반 `INTERVIEW_QUESTION` | Evidence 또는 Claim |
-| `jobAppeal` | 공개 Evidence 최소 1개, Claim 단독 금지 |
-| `portfolioStatements` | Evidence 또는 Claim 최소 1개 |
-
-`portfolioStatements.statementType`은 `RESUME`, `PORTFOLIO`, `INTERVIEW`만 허용한다.
-
-### 누락 기반 판단
-
-AI는 README 섹션, 테스트, 배포 설정 등이 보이지 않았다는 사실을 직접 추론하지 않는다. Spring Boot가 다음과 같은 `BACKEND_DERIVED` Evidence를 전달한 경우에만 관련 Recommendation을 생성한다.
-
-```text
-README_SECTION_MISSING
-TEST_NOT_OBSERVED
-DEPLOYMENT_CONFIG_NOT_OBSERVED
-```
-
-`NOT_OBSERVED`는 수집 범위에서 확인하지 못했다는 뜻이며 실제 부재·거짓·미기여를 뜻하지 않는다.
-
-## 6. 버전과 식별자
-
-```text
-contractVersion: "1.0"
-snapshotSchemaVersion: integer
-extractorVersion: string
-promptVersion: string
-
-analysisId: UUID v4
-repositoryId: GitHub Repository numeric ID
-evidenceId: ^ev_[0-9]{3,}$
-claimId: ^claim_[0-9]{3,}$
-itemId: ^item_[0-9]{3,}$
-contentHash: SHA-256 lowercase hex
-```
-
-`evidenceId`, `claimId`, `itemId`는 각각 하나의 `analysisId` 전체에서 유일해야 한다. Repository별로 번호를 다시 시작하지 않는다.
-
-## 7. 분석 깊이
-
-| 깊이 | 허용 | 금지 |
-|---|---|---|
-| P0 | README 준비도, 기술 근거, 테스트·Docker·CI 존재 | 설계 품질, 사용자 역량, 테스트 품질 |
-| P1 | 관찰된 활동과 활동 영역 후보 | 기여율, 코드 품질, 활동 부재를 거짓으로 판정 |
-| P2 | 제공된 코드 구간의 검증·오류 처리·책임 분리·테스트 | 저장소 전체 품질, 경력 충족 여부 |
-
-분석 깊이는 Repository별 `completedEvidenceLevels`로 관리한다. 응답 항목의 판단 깊이가 참조 Repository의 완료 깊이를 넘으면 전체 리포트를 실패시킨다.
-
-현재는 P0만 실행한다. P1/P2 요청은 `UNSUPPORTED_COMBINATION`이다.
-
-## 8. 요청·응답 책임
-
-### 요청 필수 정보
-
-```text
-contractVersion
+schemaVersion
 analysisId
 targetJob
 targetCareerLevel
 analysisPurpose
 requestedAnalysisDepth
-repositories
+extractorVersion
+repositories[]
 ```
 
-Repository에는 다음 정보가 포함된다.
+Repository:
 
 ```text
-repositoryId
+repositoryId (string)
 repositoryFullName
 defaultBranch
-snapshotSha
 snapshotHashAlgorithm
-snapshotSchemaVersion
-extractorVersion
+snapshotSha
 completedEvidenceLevels
 collectionWarnings
 userClaims
 evidence
 ```
 
-### 응답 필수 정보
+P2 Evidence는 `value`에 snippet을 담고 `path`, `startLine`, `endLine`, `commitSha`,
+`pullRequestNumber`, `sourceEvidenceRefs`를 사용한다. `contentHash`와 `language`는 현재 Wire
+필드가 아니다.
+
+### Response
 
 ```text
-contractVersion
+schemaVersion
 analysisId
-generationMetadata
+evaluatorVersion
+requestedAnalysisDepth
 usedEvidenceLevels
-overallDiagnosis
-repositoryReports
-representativeProjects
-jobAppeal
-roadmap
-interviewQuestions
-portfolioStatements
+summary
+repositories[].findings[]
+coaching
 limitations
-validationWarnings
 ```
 
-`generationMetadata`에는 provider, model, promptVersion, generatedAt, durationMs, attemptCount와 tokenUsage를 포함한다.
+현재 `jobAppeal`은 단일 객체이다. `portfolioStatements`와 `interviewQuestions`에는
+`repositoryId`가 없으며, 문장 `type`과 `followUpQuestions`도 없다. Backend Schema가 변경되기
+전 AI Wire DTO에 임의로 추가하지 않는다.
 
-대형 요청·응답 JSON은 이 문서에 복제하지 않는다. 확정 후 다음 공용 Fixture를 단일 예시로 사용한다.
+### Error
 
 ```text
-docs/contracts/fixtures/valid-analysis-request.json
-docs/contracts/fixtures/valid-analysis-response.json
+schemaVersion
+analysisId
+code
+message
+retryable
+details (object)
 ```
 
-## 9. 오류 계약
+## 7. 보안과 실패 정책
 
-모든 오류는 공통 Envelope를 사용한다.
+- Repository 데이터, README, 코드, 활동과 UserClaim은 untrusted data이다.
+- 외부 데이터의 지시문을 따르지 않는다.
+- 입력에 없는 기술, 파일, 기능을 생성하지 않는다.
+- 코드를 실행하지 않는다.
+- Prompt·응답 전문과 민감 원문을 로그에 남기지 않는다.
+- 잘못된 일부 항목을 제거해 성공으로 반환하지 않는다.
+- Repository 하나라도 필수 분석·검증에 실패하면 전체 분석을 실패시킨다.
 
-```json
-{
-  "contractVersion": "1.0",
-  "analysisId": null,
-  "code": "INVALID_REQUEST",
-  "message": "요청 형식이 올바르지 않습니다.",
-  "retryable": false,
-  "details": []
-}
-```
-
-오류 코드:
+Retry:
 
 ```text
-INVALID_REQUEST
-UNSUPPORTED_CONTRACT_VERSION
-UNSUPPORTED_COMBINATION
-EVIDENCE_BUDGET_EXCEEDED
-INVALID_EVIDENCE_REFERENCE
-LLM_RATE_LIMITED
-LLM_TIMEOUT
-LLM_OUTPUT_INVALID
-INTERNAL_ERROR
+Gemini Provider: 429, timeout, 5xx 제한적 retry
+AI 최종 실패: Error Envelope
+Backend: 자동 재호출 없이 Job FAILED
 ```
 
-필수 필드 누락, 존재하지 않는 참조, 깊이 위반 및 근거 없는 Recommendation은 warning으로 낮추지 않는다. 부분 항목을 제거해 성공 처리하지 않고 전체 오류를 반환한다.
-
-## 10. 보안과 입력 제한
+Timeout 계약:
 
 ```text
-README: 최대 256 KiB
-일반 텍스트 파일: 최대 128 KiB
-P0 요청 전체: 최대 2 MiB
-바이너리·생성 코드·빌드 결과물: 제외
-Secret: [REDACTED]
+Backend Connect: 5초
+AI 전체 Deadline: 270초
+Backend Read: 300초
 ```
 
-기본 제외:
+현재 Gemini 개별 호출 timeout은 존재하지만 전체 270초 deadline은 후속 구현 대상이다.
+
+## 8. 구현 순서
+
+한 단계는 독립 테스트와 하나의 논리적 커밋을 만들 수 있는 크기로 제한한다.
+
+### Phase 1. P1/P2 내부 Evidence 도메인 모델
+
+대상:
 
 ```text
-.git, node_modules, dist, build, target, out, coverage, .next,
-vendor, .venv, __pycache__, .env, .env.*, *.pem, *.key,
-credentials.*, secrets.*, application-local.*
+ai/app/domain/enums.py
+ai/app/domain/models.py
+ai/tests/test_domain_models.py
 ```
 
-- README, 코드, 커밋 및 사용자 입력은 untrusted data로 직렬화한다.
-- 외부 입력의 지시문을 따르지 않는다.
-- Criteria는 신뢰된 로컬 JSON 영역으로, Repository·UserClaim·이전 분석 결과는 untrusted JSON 영역으로 분리한다.
-- untrusted JSON 안의 정확한 Prompt 예약 마커는 대괄호를 JSON Unicode escape로 바꾸고, 구조를 만드는 실제 마커는 한 번만 유지한다.
-- LLM 요청·응답 전문과 원문 전체를 운영 로그에 남기지 않는다.
-- 로그에는 `analysisId`, 단계, 처리 시간, Evidence 수, 토큰 사용량, 오류 코드만 남긴다.
+구현:
 
-## 11. 목표 구조
+- [ ] `AnalysisDepth`에 P1/P2 추가
+- [ ] `InternalEvidenceType`에 `GITHUB_ACTIVITY`, `CODE_EVIDENCE` 추가
+- [ ] `repository_id`를 Backend와 같은 문자열 표현으로 전환
+- [ ] `completed_evidence_levels` 추가
+- [ ] `fact_key`, `value`, `path`, `start_line`, `end_line` 추가
+- [ ] `commit_sha`, `pull_request_number`, `source_evidence_refs` 추가
+- [ ] Evidence 타입·깊이 조합 검증
+- [ ] P2 line range와 source Evidence 구조 검증
+- [ ] 혼합 깊이 Repository 1~5개 테스트
+
+완료 기준:
+
+- P0 기존 입력이 계속 통과한다.
+- P1/P2 필수 메타데이터가 없으면 거절한다.
+- Repository·Evidence·Claim ID 전역 중복 검증이 유지된다.
+
+### Phase 2. P1/P2 Criteria와 Loader
+
+대상:
 
 ```text
-gitddo/
-├── docs/contracts/
-│   ├── README.md
-│   ├── analysis-request.schema.json
-│   ├── analysis-response.schema.json
-│   ├── error-response.schema.json
-│   └── fixtures/
-└── ai/
-    ├── app/schemas/
-    │   ├── common.py
-    │   ├── enums.py
-    │   ├── evidence.py
-    │   ├── claims.py
-    │   ├── repository.py
-    │   ├── request.py
-    │   ├── response.py
-    │   └── error.py
-    ├── app/validators/
-    │   ├── evidence_validator.py
-    │   ├── depth_validator.py
-    │   └── report_validator.py
-    ├── scripts/export_contracts.py
-    └── tests/
+ai/app/criteria/backend.yaml
+ai/app/criteria/backend_p1.yaml
+ai/app/criteria/backend_p2.yaml
+ai/app/criteria/models.py
+ai/app/criteria/loader.py
+ai/tests/test_criteria_loader.py
 ```
 
-공용 Schema는 최종 DTO를 확정한 뒤 Pydantic에서 Draft 2020-12로 생성하고 직접 수정하지 않는다. Java DTO와 AI Pydantic은 동일 Schema와 Fixture로 검증한다.
+구현:
 
-## 12. 구현 순서
+- [ ] P0 Criteria 유지
+- [ ] P1 활동·Claim 연결 기준 추가
+- [ ] P2 snippet 범위 판단 기준 추가
+- [ ] 깊이별 고정 파일 mapping
+- [ ] P2 요청 시 P0→P1→P2 Criteria 누적 로드
+- [ ] 금지 판단 allowlist 검증
 
-백엔드와 AI는 실제 HTTP 연동을 최대한 뒤로 미루고 각자의 핵심 기능을 Fake·Stub·내부 모델로 먼저 완성한다. 상세 wire DTO는 양쪽에서 실제 사용하는 데이터가 드러난 뒤 확정한다.
+P1 Criteria는 활동을 실력·기여율로 평가하지 않는다. P2 Criteria는 snippet을 Repository 전체
+품질로 일반화하지 않는다.
 
-### Phase 0. 최소 공통 기준과 기준선
+### Phase 3. 혼합 깊이 System Prompt
 
-- [x] `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 확정
-- [x] Evidence, UserClaim, ReportItem 의미 분리
-- [x] AI stateless와 Spring Boot Job·저장 책임 확정
-- [x] Recommendation·`jobAppeal`·`portfolioStatements` 근거 원칙 확정
-- [x] 현재 pytest, Ruff, mypy 결과 기록
-- [x] 기존 구 계약 파일과 테스트 목록 확인
-
-이 Phase에서는 세부 DTO와 Fixture를 확정하지 않는다.
-
-### Phase 1. AI 독립 기반 개발
-
-#### 1A. Backend P0 Criteria
-
-- [x] `ai/app/criteria/backend.yaml` 작성
-- [x] Criteria Loader 구현
-- [x] YAML 필수 필드와 허용값 검증
-- [x] Backend P0 필수 Criteria key 5종 allowlist 검증
-- [x] 누락·추가·교체·중복 Criteria key 거절
-- [x] P0에서 허용되는 README·기술 근거·테스트·Docker·CI 기준만 포함
-- [x] 설계 품질·코드 품질·사용자 역량 기준 제외
-
-권장 커밋: `feat: Backend P0 Criteria 추가`
-
-#### 1B. System Prompt
-
-- [x] Evidence와 UserClaim 분리 규칙 작성
-- [x] Repository 입력을 untrusted data로 격리
-- [x] README·코드·사용자 입력의 지시문 무시
-- [x] 입력에 없는 사실 생성 금지
-- [x] P0 범위 초과 판단 금지
-- [x] 기여율·실력·취업 가능성 단정 금지
-- [x] `NOT_OBSERVED` 의미 보호
-- [x] Prompt 단위 테스트 작성
-
-최종 응답 필드명과 JSON Schema 지시는 계약 확정 후 추가한다.
-
-권장 커밋: `feat: 근거 기반 System Prompt 추가`
-
-#### 1C. Gemini Provider 기반
-
-- [x] `LLMProvider` 인터페이스 정의
-- [x] Gemini 클라이언트 초기화
-- [x] API key와 모델명 환경변수화
-- [x] timeout과 429·5xx 제한적 retry
-- [x] provider 오류를 내부 예외로 변환
-- [x] 작은 테스트용 Pydantic 출력 모델로 Structured Output 검증
-- [x] 실제 API에 의존하지 않는 Fake Provider 테스트
-
-최종 `PortfolioReport` DTO, Evidence Validator와 서비스 연결은 이 Phase에서 구현하지 않는다.
-
-권장 커밋: `feat: Gemini Provider 기반 구현`
-
-### Phase 2. 백엔드 독립 P0 개발
-
-이 Phase는 Spring Boot 팀의 독립 작업 범위이다. AI 서버를 실행하지 않고 Fake AI Client로 검증한다.
-
-- [ ] Repository 메타데이터와 default branch 수집
-- [ ] Snapshot SHA 고정
-- [ ] README, 파일 트리, dependency, 테스트, Docker, Actions 수집
-- [ ] `GITHUB_STATIC`, `BACKEND_DERIVED` Evidence 생성
-- [ ] Evidence ID, `contentHash`, Repository·Snapshot 연결
-- [ ] `README_SECTION_MISSING`, `TEST_NOT_OBSERVED`, `DEPLOYMENT_CONFIG_NOT_OBSERVED` 생성
-- [ ] Secret, 바이너리, 생성 파일, 대용량 파일 제거
-- [ ] Evaluation Job과 실패·재시도 흐름 구현
-- [ ] Fake AI Client로 결과 저장 흐름 검증
-
-### Phase 3. AI 내부 분석 파이프라인
-
-최종 HTTP DTO 대신 AI 전용 내부 모델과 독립 Fixture를 사용한다.
+대상:
 
 ```text
-내부 테스트 입력
-→ 정규화
-→ P0 Criteria 선택
-→ Prompt 생성
-→ Fake 또는 Gemini Provider
-→ Repository별 분석
+ai/app/prompts/system.py
+ai/tests/test_system_prompt.py
+```
+
+구현:
+
+- [ ] Repository별 `completedEvidenceLevels` 준수
+- [ ] P1 활동량의 실력·기여율 해석 금지
+- [ ] P2 snippet의 Repository 전체 일반화 금지
+- [ ] 코드 실행과 입력 밖 코드·기술 생성 금지
+- [ ] P0/P1/P2 판단 범위 명시
+- [ ] Prompt 버전 갱신
+
+System Prompt는 외부 데이터를 인자로 받지 않는 고정 정책을 유지한다.
+
+### Phase 4. P1/P2 정규화와 Prompt Context
+
+대상:
+
+```text
+ai/app/services/normalization_service.py
+ai/app/prompts/context.py
+ai/app/prompts/repository.py
+ai/app/prompts/portfolio.py
+ai/app/prompts/interview.py
+ai/tests/test_normalization.py
+ai/tests/test_prompt_context.py
+```
+
+구현:
+
+- [ ] P1/P2 Evidence 보존과 경로 정규화
+- [ ] line range·commit SHA·PR number 보존
+- [ ] `sourceEvidenceRefs` 보존
+- [ ] P0/P1/P2 data block 분리
+- [ ] code snippet도 untrusted JSON으로 직렬화
+- [ ] 기존 예약 마커 escape 회귀 테스트
+
+정규화 단계에서 새로운 기술·활동·사실을 추론하지 않는다.
+
+### Phase 5. 입력 참조·깊이 Validator
+
+대상:
+
+```text
+ai/app/validators/evidence_validator.py
+ai/app/validators/depth_validator.py
+ai/tests/test_evidence_validator.py
+ai/tests/test_depth_validator.py
+```
+
+구현:
+
+- [ ] Evidence·Claim ID 전역 유일성
+- [ ] Repository·Snapshot 소유 관계
+- [ ] `sourceEvidenceRefs`, `relatedEvidenceRefs` 존재 검증
+- [ ] 교차 Repository 참조 금지
+- [ ] P0/P1/P2 타입·깊이 조합 검증
+- [ ] `completedEvidenceLevels`와 실제 Evidence 일치
+- [ ] P2 snippet 필수 메타데이터 검증
+- [ ] 참조 순환과 상향 깊이 파생 방지
+
+### Phase 6. Repository 분석과 내용 정책 Validator
+
+대상:
+
+```text
+ai/app/services/repository_service.py
+ai/app/validators/report_validator.py
+ai/tests/test_repository_service.py
+ai/tests/test_report_policy_validator.py
+```
+
+흐름:
+
+```text
+NormalizedRepositoryContext
+→ 누적 Criteria
+→ Repository Prompt
+→ LLMProvider
+→ RepositoryAnalysis
+→ 참조·깊이·내용 정책 검증
+```
+
+구현:
+
+- [ ] Repository별 독립 생성
+- [ ] Evidence·Claim 참조 검증 연결
+- [ ] 입력에 없는 기술·파일 검출
+- [ ] P1 기여율·실력 단정 검출
+- [ ] P2 Repository 전체 일반화 검출
+- [ ] `NOT_OBSERVED` 오용 검출
+- [ ] 최초 정책 실패 시 최대 1회 재생성
+- [ ] 재검증 실패 시 전체 분석 오류
+
+### Phase 7. Portfolio·Interview·Statement 생성
+
+대상:
+
+```text
+ai/app/services/portfolio_service.py
+ai/app/prompts/portfolio.py
+ai/app/prompts/interview.py
+ai/tests/test_portfolio_service.py
+```
+
+구현:
+
+- [ ] 전체 요약
+- [ ] 대표 Repository
+- [ ] 단일 `jobAppeal`
+- [ ] Evidence 기반 strengths/gaps/nextActions
+- [ ] 면접 질문과 답변 방향
+- [ ] 포트폴리오 문장
+- [ ] 전체 범위 참조 검증
+
+현재 Wire에 없는 문장 `type`, 문장·질문의 `repositoryId`, `followUpQuestions`는 내부 모델에
+있더라도 Wire 변환 전에 Backend 계약 상태를 다시 확인한다.
+
+### Phase 8. Report Service와 전체 Deadline
+
+대상:
+
+```text
+ai/app/services/report_service.py
+ai/tests/test_report_service.py
+```
+
+흐름:
+
+```text
+입력 검증
+→ Repository 정규화
+→ Criteria/Prompt
+→ Repository 분석
 → Portfolio 종합
-→ 정책 검증
+→ 최종 정책 검증
+→ InternalPortfolioReport
 ```
 
-- [x] HTTP DTO와 분리된 P0 내부 도메인 모델 구현
-- [x] `InternalPortfolioInput`의 Repository·Evidence·Claim 전역 중복 검증
-- [x] `InterviewQuestionBatch` Structured Output wrapper 구현
-- [x] `InternalPortfolioReport`와 단계별 생성 메타데이터 모델 구현
-- [x] `normalization_service.py` 구현
-- [x] Repository·Portfolio·Interview Prompt Context 생성
-- [x] Criteria, Evidence, UserClaim과 이전 분석 결과 영역 분리
-- [x] Prompt 예약 마커 8종의 가역적 JSON Unicode escape
-- [x] 실제 구조 마커 유지와 Repository·Portfolio·Interview 충돌 테스트
-- [x] 내부 정책 위반 code와 불변 `PolicyViolation` 구현
-- [x] `ReportPolicyError` 구현
-- [x] `RepositoryAnalysis`의 Evidence·Claim 존재 및 Repository 소유 관계 검증
-- [ ] `repository_service.py` 구현
-- [ ] `portfolio_service.py` 구현
-- [ ] `report_service.py` 오케스트레이션 구현
-- [ ] Repository별 요약·어필 후보·보완 후보 생성
-- [ ] 전체 진단·대표 프로젝트·면접 소재·문장 후보 생성
-- [ ] P0 범위 초과 및 금지 표현 검사
-- [ ] Provider를 Fake로 교체할 수 있는 의존성 주입
+구현:
 
-내부 모델은 최종 wire DTO와 분리한다. 이후 API DTO가 변경되어도 변환 계층만 수정할 수 있어야 한다.
+- [ ] `LLMProvider` 의존성 주입
+- [ ] Repository 1~5개 처리
+- [ ] 혼합 깊이 처리
+- [ ] Repository 하나 실패 시 전체 실패
+- [ ] 모든 Gemini 호출·retry를 포함한 270초 전체 deadline
+- [ ] 단계별 처리 시간과 시도 횟수 집계
 
-권장 커밋: `feat: P0 포트폴리오 분석 파이프라인 추가`
+### Phase 9. Backend Wire DTO와 Error Envelope
 
-### Phase 4. 양쪽 독립 검증
-
-AI 검증:
-
-- [x] Criteria Loader 정상·실패·필수 key allowlist 테스트
-- [x] Prompt Injection과 구조 마커 충돌 테스트
-- [x] Gemini timeout·rate limit·5xx·잘못된 출력 테스트
-- [ ] P0 범위 초과 응답 차단
-- [ ] 입력에 없는 기술·파일 생성 방지
-- [ ] 내부 Repository 1개·5개 분석 테스트
-
-백엔드 검증:
-
-- [ ] Snapshot 재현성과 SHA 연결
-- [ ] Evidence 생성 및 누락 기반 Evidence 규칙
-- [ ] Secret 제거와 입력 예산
-- [ ] Repository 1개·5개 수집
-- [ ] Job 실패·재시도·중복 결과 정책
-
-### Phase 5. 최종 DTO·Schema·Fixture 확정
-
-양쪽 독립 개발에서 확인된 실제 데이터를 모아 wire contract를 확정한다.
-
-순서:
-
-1. 백엔드 P0 Evidence 출력 확인
-2. AI 내부 입력·출력 모델과 비교
-3. 미확정 wire format 합의
-4. Request·Response·Error Pydantic 구현
-5. Java DTO 구현
-6. Pydantic에서 Draft 2020-12 JSON Schema 생성
-7. 정상·경계·실패 공용 Fixture 작성
-8. 양쪽 Schema·Fixture 테스트
-
-확정 대상:
-
-- [ ] `GroundedItem` 필드, 필수 여부와 null 정책
-- [ ] `repositoryRefs` 식별자 형식
-- [ ] `portfolioStatements`의 depth/confidence/supportStatus 포함 여부
-- [ ] `tokenUsage` 하위 필드
-- [ ] `validationWarnings` 객체 구조
-- [ ] 오류 `details` 구조, 정렬과 중복 규칙
-- [ ] Evidence discriminator와 `DECIMAL` 직렬화
-- [ ] Snapshot SHA 대소문자와 hash algorithm 적용 범위
-- [ ] 참여 기간 필수 여부와 날짜 선후 관계
-- [ ] `BACKEND_DERIVED.sourceEvidenceRefs` 최소 개수와 미관찰 표현
-
-Fixture 선확정은 요구하지 않는다. Pydantic과 Java DTO의 의미를 합의한 뒤 Fixture를 생성한다.
-
-권장 커밋:
+대상:
 
 ```text
-docs: 평가 계약 v1.0 wire format 확정
-feat: 평가 API 계약 v1.0 재설계
-build: 평가 계약 JSON Schema와 Fixture 추가
+ai/app/schemas/
+ai/app/api/reports.py
+ai/tests/test_request_schema.py
+ai/tests/test_response_schema.py
+ai/tests/test_api.py
 ```
 
-### Phase 6. 계약 Validator
+구현:
 
-AI 서버:
+- [ ] `schemaVersion="1.0"`
+- [ ] 문자열 `repositoryId`
+- [ ] `findingId`와 Backend category/severity
+- [ ] Backend request·response·error Schema와 일치
+- [ ] 내부 모델↔Wire DTO 변환
+- [ ] Error Code별 HTTP status와 `retryable`
+- [ ] `POST /internal/v1/portfolio-reports`
+- [ ] 요청 크기와 민감 로그 제한
 
-- [ ] 최종 wire 요청의 Evidence·Claim ID 전역 유일성
-- [ ] 참조 존재와 Repository·Snapshot 관계
-- [ ] Evidence valueType/value 일치
-- [ ] 저장소별 `completedEvidenceLevels`
-- [ ] MVP 지원 조합
-- [ ] ReportItem 참조 규칙
-- [ ] Recommendation Evidence 필수
-- [ ] `jobAppeal` Claim 단독 금지
-- [ ] `portfolioStatements` 참조 필수
-- [ ] 응답 전체 Item ID 중복
-- [ ] 치명적 위반 전체 실패 처리
+Backend Schema에 없는 필드를 임의로 추가하지 않는다.
 
-Spring Boot:
+### Phase 10. 독립 및 E2E 검증
 
-- [ ] Response JSON Schema 검증
-- [ ] `analysisId`, Repository, Snapshot 일치
-- [ ] Evidence·Claim allowlist
-- [ ] 저장소별 분석 깊이
-- [ ] 최초 검증 성공 결과만 저장
+최소 시나리오:
 
-### Phase 7. Mock 연동
+- [ ] P0 Repository
+- [ ] P0+P1 Repository
+- [ ] P0+P1+P2 Repository
+- [ ] Repository별 깊이가 다른 요청
+- [ ] Repository 1개와 5개
+- [ ] UserClaim만 있고 공개 근거가 부족한 경우
+- [ ] collection warning이 있는 경우
+- [ ] Prompt Injection이 포함된 README·commit·code snippet
+- [ ] 교차 Repository 참조
+- [ ] 입력에 없는 기술·파일 생성
+- [ ] P2 snippet을 Repository 전체로 일반화한 출력
+- [ ] Gemini timeout·429·5xx·잘못된 Structured Output
+- [ ] Backend Example JSON과 Pydantic 호환
+- [ ] Spring Boot Mock·HTTP E2E
 
-실제 Gemini 분석 대신 계약과 전송 흐름만 확인한다.
+## 9. P2 구현 시 Backend 재확인 항목
 
-```text
-Spring Boot P0 Evidence
-→ 실제 Request DTO
-→ POST /internal/v1/portfolio-reports
-→ FastAPI 고정 Response Fixture
-→ Spring Boot 최종 검증·저장
-```
+P2 `main` 병합 전에 다음은 아직 최종 구현값이 아니다.
 
-- [ ] Repository 1개·5개
-- [ ] 지원하지 않는 조합
-- [ ] HTTP 상태와 Error Envelope
-- [ ] 요청 크기와 timeout
-- [ ] 잘못된 참조·Snapshot·깊이
-- [ ] Spring Boot 재호출과 중복 결과 저장 방지
+- 전체 요청 snippet 상한
+- 전체 Evidence/token 예산
+- P2 대상 Repository 최대 수
+- 사용자 지정 파일·역할 경로·Production/Test 쌍 우선순위
+- P2 snippet DB 보관 정책
+- Warning→Limitation 변환
+- 모든 Finding의 Evidence 최소 1개 강제
+- 문장·질문의 Repository 범위
 
-권장 커밋: `feat: 평가 리포트 Mock API 구현`
+AI는 이러한 값을 임의로 만들어 Backend 계약처럼 구현하지 않는다.
 
-### Phase 8. 실제 연동과 E2E
+## 10. 실행과 검증
 
-```text
-Spring Boot P0 Collector
-→ Request DTO
-→ FastAPI
-→ Criteria + Prompt + Gemini
-→ AI Validator
-→ Response DTO
-→ Spring Boot 최종 검증·저장
-```
-
-진행 순서:
-
-1. Repository 1개 정상 요청
-2. Evidence가 부족한 Repository
-3. Repository 5개
-4. Gemini timeout·rate limit
-5. 잘못된 Structured Output
-6. 동일 요청 재호출과 중복 LLM 실행
-7. 전체 E2E와 운영 로그 점검
-
-이 Phase 전까지 백엔드와 AI는 서로의 실행 환경에 의존하지 않아야 한다.
-
-현재 다음 구현 순서는 `repository_service.py` → Repository 결과 내용 정책 Validator → `portfolio_service.py`와 면접·문장 생성 → `report_service.py` 오케스트레이션 → 독립 품질 테스트이다.
-
-## 13. 검증 명령
+AI 디렉터리에서 실행한다.
 
 ```bash
-cd ai
 pytest
 ruff check .
 ruff format --check .
@@ -593,35 +494,25 @@ mypy app
 docker build -t gitddo-ai .
 ```
 
-계약 변경 시 추가 확인:
+단계별로 관련 단위 테스트를 먼저 실행한 뒤 전체 검증을 수행한다. 계약 변경은 Backend
+Schema·Example과 Pydantic 간 일치 테스트를 추가한다.
 
-- Pydantic serialization과 camelCase 계약 일치
-- Schema 재생성 후 예상하지 않은 diff 없음
-- 공용 정상 Fixture Schema 통과
-- 공용 실패 Fixture의 예상 규칙 위반
-- 미지원 조합의 `UNSUPPORTED_COMBINATION` 변환
+## 11. 커밋 순서
 
-## 14. 완료 기준
+권장 후속 커밋 순서는 다음과 같다.
 
-- [ ] 백엔드와 AI가 동일 JSON Schema와 Fixture를 사용한다.
-- [ ] Evidence, UserClaim, ReportItem이 분리된다.
-- [ ] UUID와 전역 ID 규칙이 적용된다.
-- [ ] P0 Evidence와 판단 범위를 넘는 결과를 차단한다.
-- [ ] 모든 Recommendation과 `jobAppeal`이 Evidence를 참조한다.
-- [ ] 모든 포트폴리오 문장이 Evidence 또는 Claim을 참조한다.
-- [ ] 저장소별 실제 분석 깊이와 limitations를 반환한다.
-- [ ] 모든 오류가 Error Envelope를 사용한다.
-- [ ] AI 서버가 stateless로 동작한다.
-- [ ] Spring Boot의 최종 검증과 저장 흐름이 통합 테스트를 통과한다.
-- [ ] pytest, Ruff, mypy, Docker 검증이 통과한다.
+```text
+1. feat: P1/P2 내부 Evidence 모델 확장
+2. feat: Backend P1/P2 Criteria 추가
+3. feat: 혼합 깊이 근거 기반 Prompt 추가
+4. feat: P1/P2 입력 정규화와 Context 추가
+5. feat: Evidence 참조와 분석 깊이 검증 추가
+6. feat: Repository P0/P1/P2 분석 서비스 추가
+7. feat: Portfolio 코칭 생성 서비스 추가
+8. feat: 전체 리포트 오케스트레이션 추가
+9. feat: Backend 평가 Wire 계약 구현
+10. feat: 포트폴리오 리포트 내부 API 추가
+```
 
-## 15. 중단 조건
-
-다음 상황에서는 임의로 결정하지 않고 현재 문서, 구현, 선택지와 영향을 보고한다.
-
-- 백엔드 DTO 또는 Fixture가 최종 가이드와 다름
-- 미확정 wire field를 구현해야 함
-- AI 서버에 DB, Redis, Job Lock 또는 결과 저장 책임이 요구됨
-- P0 요청에 P1/P2 Evidence 또는 전체 코드가 포함됨
-- JSON Schema와 Pydantic이 다름
-- 계약 의미 변경 없이는 테스트를 통과할 수 없음
+각 커밋은 관련 pytest, Ruff와 mypy를 통과한 뒤 생성한다. Push, branch 전환 또는 PR은 사용자
+요청이 있을 때만 수행한다.

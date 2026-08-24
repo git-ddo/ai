@@ -12,6 +12,7 @@
 - 다른 사람의 작업이나 기존 미커밋 변경을 임의로 수정하거나 되돌리지 않는다.
 - API key, token, 실제 `.env` 및 개인정보는 commit하지 않는다.
 - `push`, merge, rebase 및 PR 생성은 사용자의 명시적 요청이 있을 때만 수행한다.
+- Wire 계약은 Backend `docs/contracts/*.schema.json`을 Source of Truth로 사용한다.
 
 ## 2. 작업 흐름
 
@@ -181,10 +182,11 @@ PR 본문에는 다음 내용을 포함한다.
 리뷰어는 다음 항목을 확인한다.
 
 - AI 서버의 책임 범위를 벗어나지 않는가
-- 요청과 응답이 `contractVersion = "1.0"`의 Pydantic 및 공용 JSON Schema와 일치하는가
-- 공용 Fixture가 백엔드와 AI 양쪽 테스트에서 동일하게 사용되는가
+- 요청과 응답이 Backend `schemaVersion = "1.0"` JSON Schema 및 Pydantic과 일치하는가
+- Backend Example과 AI 계약 테스트가 같은 필드·enum·참조 규칙을 사용하는가
 - Evidence, UserClaim 및 ReportItem을 타입 수준에서 구분하는가
-- `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0` 이외 조합을 실행하지 않는가
+- 현재 구현 단계가 `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0/P1/P2` 목표와 일치하며,
+  구현되지 않은 직무·경력 조합을 지원한다고 표시하지 않는가
 - 모든 Recommendation이 Evidence를 참조하는가
 - `jobAppeal`이 UserClaim만으로 확정되지 않는가
 - `portfolioStatements`가 Evidence 또는 Claim을 참조하는가
@@ -228,8 +230,10 @@ PR 본문에는 다음 내용을 포함한다.
 
 ## 10. AI 코딩 에이전트 사용 규칙
 
-- AI 에이전트는 작업 시작 전 `AGENTS.md`와 `EVALUATION_CONTRACT_MIGRATION_GUIDE.md`를 우선 읽고, `docs/contracts/`, `docs/guide.md`, `README.md` 및 `ai/README.md`를 확인한다.
-- 계약 문서가 충돌하면 최종 마이그레이션 가이드와 생성된 공용 JSON Schema를 기준으로 차이를 보고하며, 미확정 wire format을 임의로 추정하지 않는다.
+- AI 에이전트는 작업 시작 전 `AGENTS.md`와 `EVALUATION_CONTRACT_MIGRATION_GUIDE.md`를 읽고,
+  Backend `docs/contracts/`, `docs/guide.md`, `README.md` 및 `ai/README.md`를 확인한다.
+- 계약 문서가 충돌하면 Backend JSON Schema와 Java DTO·Validator를 기준으로 차이를 보고하며,
+  미확정 Wire format을 임의로 추정하지 않는다.
 - AI 에이전트가 생성한 코드도 사람이 작성한 코드와 동일한 리뷰와 테스트 기준을 적용한다.
 - 에이전트는 별도 지시가 없으면 로컬 `main`에서 작업한다.
 - 에이전트는 완료하고 검증한 변경을 논리적 작업 단위별로 로컬 `main`에 commit한다.
