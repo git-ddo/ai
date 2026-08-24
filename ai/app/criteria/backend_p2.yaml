@@ -1,0 +1,102 @@
+version: "1.0"
+target_job: BACKEND
+analysis_depth: P2
+
+guardrail_codes:
+  - REPOSITORY_WIDE_GENERALIZATION
+  - USER_ABILITY_ASSERTION
+  - CONTRIBUTION_ASSERTION
+  - CAREER_LEVEL_ASSERTION
+  - CODE_EXECUTION
+
+criteria:
+  - key: SNIPPET_SCOPE
+    analysis_depth: P2
+    title: 코드 구간 범위
+    description: >-
+      전달된 path와 line range 안에서 직접 관찰되는 내용과 source Evidence로
+      연결된 설명 소재만 해석하고 snippet 밖 구현은 확인할 수 없음을 명시한다.
+    allowed_evidence_types:
+      - CODE_EVIDENCE
+      - BACKEND_DERIVED
+    allow_user_claims: false
+    allowed_judgments:
+      - 제공된 코드 구간에서 직접 관찰할 수 있는 범위
+      - source Evidence와 연결된 코드 설명 소재
+      - snippet 밖 구현을 확인할 수 없다는 한계
+    forbidden_judgments:
+      - snippet을 Repository 전체 코드 품질로 일반화
+      - 입력에 없는 코드 또는 호출 관계 생성
+      - 코드가 사용자 개인 구현이라는 사실 확정
+
+  - key: INPUT_VALIDATION_OBSERVATION
+    analysis_depth: P2
+    title: 입력 검증 관찰
+    description: >-
+      제공된 코드 구간에서 직접 확인되는 조건문, 검증 호출과 예외 발생 등
+      입력값 검증 처리를 관찰한다.
+    allowed_evidence_types:
+      - CODE_EVIDENCE
+      - BACKEND_DERIVED
+    allow_user_claims: false
+    allowed_judgments:
+      - 제공된 코드 구간에서 직접 확인되는 입력 검증
+      - 조건문, 검증 호출과 예외 발생 등 관찰 가능한 처리
+    forbidden_judgments:
+      - Repository 전체 보안 품질
+      - 입력 검증의 완전성
+      - 코드 구간만으로 사용자의 보안 역량 판단
+
+  - key: ERROR_HANDLING_OBSERVATION
+    analysis_depth: P2
+    title: 오류 처리 관찰
+    description: >-
+      제공된 코드 구간에서 직접 확인되는 예외 처리, 오류 전달 또는 fallback을
+      관찰 가능한 범위 안에서 해석한다.
+    allowed_evidence_types:
+      - CODE_EVIDENCE
+      - BACKEND_DERIVED
+    allow_user_claims: false
+    allowed_judgments:
+      - 제공된 구간에서 직접 확인되는 오류 또는 예외 처리
+      - 확인 가능한 fallback 또는 오류 전달 방식
+    forbidden_judgments:
+      - Repository 전체 오류 처리 품질
+      - 관찰되지 않은 예외 처리의 실제 부재
+      - 사용자의 오류 처리 숙련도
+
+  - key: RESPONSIBILITY_OBSERVATION
+    analysis_depth: P2
+    title: 코드 책임 관찰
+    description: >-
+      제공된 class, method 또는 function 구간에서 직접 보이는 책임과 호출 관계만
+      제한적으로 해석한다.
+    allowed_evidence_types:
+      - CODE_EVIDENCE
+      - BACKEND_DERIVED
+    allow_user_claims: false
+    allowed_judgments:
+      - 제공된 코드 구간에서 관찰되는 책임
+      - 전달된 코드에서 직접 보이는 호출 관계
+    forbidden_judgments:
+      - 전체 아키텍처 품질
+      - 계층 분리와 설계의 우수성 단정
+      - 입력에 없는 호출 관계 생성
+
+  - key: TEST_CASE_OBSERVATION
+    analysis_depth: P2
+    title: 테스트 사례 관찰
+    description: >-
+      제공된 테스트 snippet에 실제로 나타난 성공, 실패 또는 경계 조건 사례를
+      관찰 가능한 범위 안에서 해석한다.
+    allowed_evidence_types:
+      - CODE_EVIDENCE
+      - BACKEND_DERIVED
+    allow_user_claims: false
+    allowed_judgments:
+      - 제공된 테스트 snippet에서 직접 확인되는 테스트 사례
+      - 실제 코드에 나타난 성공, 실패 또는 경계 조건
+    forbidden_judgments:
+      - 테스트 커버리지
+      - Repository 전체 테스트 품질
+      - 관찰되지 않은 테스트 사례의 실제 부재

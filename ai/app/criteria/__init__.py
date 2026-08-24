@@ -6,10 +6,11 @@ from app.criteria.loader import (
     CriteriaValidationError,
     UnsupportedCriteriaError,
 )
-from app.criteria.models import CriteriaSet, Criterion
+from app.criteria.models import CriteriaGuardrailCode, CriteriaSet, Criterion
 
 __all__ = [
     "CriteriaFileNotFoundError",
+    "CriteriaGuardrailCode",
     "CriteriaLoadError",
     "CriteriaLoader",
     "CriteriaParseError",

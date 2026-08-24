@@ -2,8 +2,17 @@ version: "1.0"
 target_job: BACKEND
 analysis_depth: P0
 
+guardrail_codes:
+  - USER_ABILITY_ASSERTION
+  - CONTRIBUTION_ASSERTION
+  - CAREER_LEVEL_ASSERTION
+  - EMPLOYMENT_PROBABILITY_ASSERTION
+  - NOT_OBSERVED_AS_ABSENCE
+  - CODE_QUALITY_WITHOUT_P2
+
 criteria:
   - key: README_READINESS
+    analysis_depth: P0
     title: README 준비도
     description: >-
       README에서 프로젝트 소개, 주요 기능, 실행 방법처럼 공개적으로 확인되는
@@ -11,6 +20,7 @@ criteria:
     allowed_evidence_types:
       - GITHUB_STATIC
       - BACKEND_DERIVED
+    allow_user_claims: false
     allowed_judgments:
       - README와 백엔드가 도출한 문서 항목의 관찰 여부
       - 공개 문서만으로 설명할 수 있는 프로젝트 정보의 범위
@@ -20,6 +30,7 @@ criteria:
       - 관찰되지 않은 문서 항목의 실제 부재
 
   - key: TECH_STACK_EVIDENCE
+    analysis_depth: P0
     title: 기술스택 근거
     description: >-
       의존성 파일과 설정 파일 등에서 백엔드가 수집한 공개 근거를 바탕으로
@@ -27,6 +38,7 @@ criteria:
     allowed_evidence_types:
       - GITHUB_STATIC
       - BACKEND_DERIVED
+    allow_user_claims: false
     allowed_judgments:
       - 공개 파일에서 기술 의존성이나 설정이 관찰되었는지 여부
       - 기술 후보를 뒷받침하는 공개 근거의 종류
@@ -36,6 +48,7 @@ criteria:
       - 근거에 없는 기술 사용 여부
 
   - key: TEST_PRESENCE
+    analysis_depth: P0
     title: 테스트 존재 여부
     description: >-
       테스트 디렉터리, 테스트 파일 또는 백엔드가 도출한 미관찰 Evidence를
@@ -43,6 +56,7 @@ criteria:
     allowed_evidence_types:
       - GITHUB_STATIC
       - BACKEND_DERIVED
+    allow_user_claims: false
     allowed_judgments:
       - 수집 범위에서 테스트 파일이나 설정이 관찰되었는지 여부
       - 테스트 구성과 관련된 공개 근거의 종류
@@ -53,6 +67,7 @@ criteria:
       - 관찰되지 않은 테스트의 실제 부재
 
   - key: DOCKER_CONFIGURATION
+    analysis_depth: P0
     title: Docker 구성
     description: >-
       Dockerfile과 Compose 파일 등 공개 설정의 관찰 여부를 바탕으로
@@ -60,6 +75,7 @@ criteria:
     allowed_evidence_types:
       - GITHUB_STATIC
       - BACKEND_DERIVED
+    allow_user_claims: false
     allowed_judgments:
       - Docker 관련 파일이나 설정이 관찰되었는지 여부
       - 공개 근거에서 설명 가능한 컨테이너 구성 범위
@@ -69,6 +85,7 @@ criteria:
       - 관찰되지 않은 Docker 구성의 실제 부재
 
   - key: GITHUB_ACTIONS_CONFIGURATION
+    analysis_depth: P0
     title: GitHub Actions 구성
     description: >-
       GitHub Actions Workflow와 백엔드가 도출한 미관찰 Evidence를 바탕으로
@@ -76,6 +93,7 @@ criteria:
     allowed_evidence_types:
       - GITHUB_STATIC
       - BACKEND_DERIVED
+    allow_user_claims: false
     allowed_judgments:
       - GitHub Actions Workflow가 관찰되었는지 여부
       - 공개 Workflow에서 확인 가능한 자동화 단계의 범위

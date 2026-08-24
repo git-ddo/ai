@@ -500,7 +500,7 @@ AnalysisDepth: P0, P1, P2
 | --- | --- |
 | Backend `main` | BACKEND 중심 P0/P1 수집과 Mock 리포트 |
 | Backend P2 branch | P2 코드 snippet 수집과 Mock P2 리포트 구현, 미병합 |
-| AI 내부 구현 | P0 실행 기반과 P0/P1/P2 내부 Evidence 도메인 모델 구현 |
+| AI 내부 구현 | P0 실행 기반, P0/P1/P2 내부 Evidence 모델과 누적 Criteria·Loader 구현 |
 | AI Wire API | `/health`만 구현, 실제 portfolio report API 미구현 |
 
 개발 목표:
@@ -544,10 +544,10 @@ BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0/P1/P2
 
 ## 19. AI 구현 순서
 
-Backend P2 흐름에 맞추는 AI 후속 작업은 다음과 같다.
+Backend P2 흐름에 맞추는 AI 구현 순서는 다음과 같다. 1~2단계는 완료했다.
 
-1. P1/P2 내부 Evidence 도메인 모델 확장
-2. P1/P2 Criteria와 Loader 확장
+1. P1/P2 내부 Evidence 도메인 모델 확장 (완료)
+2. P1/P2 Criteria와 Loader 확장 (완료)
 3. 혼합 깊이 System Prompt와 Prompt Context 구현
 4. P1/P2 정규화와 입력 참조·깊이 Validator 구현
 5. Repository Service와 결과 정책 Validator 구현

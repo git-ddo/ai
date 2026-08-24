@@ -1,0 +1,68 @@
+version: "1.0"
+target_job: BACKEND
+analysis_depth: P1
+
+guardrail_codes:
+  - ACTIVITY_VOLUME_AS_SKILL
+  - ACTIVITY_VOLUME_AS_CONTRIBUTION
+  - ACTIVITY_ABSENCE_AS_NON_CONTRIBUTION
+  - CODE_QUALITY_WITHOUT_P2
+  - USER_CLAIM_AS_FACT
+
+criteria:
+  - key: ACTIVITY_SCOPE
+    analysis_depth: P1
+    title: 활동 근거 범위
+    description: >-
+      전달된 commit, PR, 변경 경로와 최근 활동에서 공개적으로 관찰되는 범위와
+      포트폴리오 또는 면접에서 설명할 수 있는 활동 소재를 해석한다.
+    allowed_evidence_types:
+      - GITHUB_ACTIVITY
+      - BACKEND_DERIVED
+    allow_user_claims: false
+    allowed_judgments:
+      - 전달된 commit, PR, 변경 경로와 최근 활동의 관찰 여부
+      - 활동 Evidence가 제공하는 범위
+      - 포트폴리오와 면접에서 설명 가능한 활동 소재
+    forbidden_judgments:
+      - commit 수나 변경량을 사용자의 실력으로 해석
+      - 활동량을 개인 기여율로 변환
+      - 관찰되지 않은 활동을 미기여로 판단
+      - P1만으로 코드 품질을 판단
+
+  - key: CLAIM_ACTIVITY_LINK
+    analysis_depth: P1
+    title: 사용자 진술과 활동 근거 연결
+    description: >-
+      UserClaim과 commit, PR, 변경 경로 사이에 직접적이거나 제한적인 연결 후보가
+      있는지 살피고 추가 설명이 필요한 부분을 제안한다.
+    allowed_evidence_types:
+      - GITHUB_ACTIVITY
+      - BACKEND_DERIVED
+    allow_user_claims: true
+    allowed_judgments:
+      - UserClaim과 commit, PR, 변경 경로 간 연결 후보
+      - 공개 근거가 직접적인지 또는 제한적인지
+      - 추가 설명이 필요한 부분
+    forbidden_judgments:
+      - UserClaim을 GitHub에서 검증된 사실로 승격
+      - NOT_OBSERVED를 거짓 또는 미기여로 판정
+      - 관련 Evidence만으로 전체 UserClaim을 사실로 확정
+
+  - key: CHANGE_AREA_OBSERVATION
+    analysis_depth: P1
+    title: 변경 영역 관찰
+    description: >-
+      전달된 변경 경로를 바탕으로 Controller, Service, Test, Config와 같이
+      공개 기록에서 설명 가능한 활동 영역 후보를 해석한다.
+    allowed_evidence_types:
+      - GITHUB_ACTIVITY
+      - BACKEND_DERIVED
+    allow_user_claims: false
+    allowed_judgments:
+      - 변경 경로에서 관찰되는 활동 영역 후보
+      - 전달된 경로로 설명 가능한 개발 영역
+    forbidden_judgments:
+      - 변경 파일의 전체 소유권 확정
+      - 변경 경로만으로 코드 또는 설계 품질 판단
+      - 활동 영역 후보를 사용자 숙련도로 해석

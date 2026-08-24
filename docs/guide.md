@@ -52,7 +52,7 @@ schemaVersion: "1.0"
 
 - [x] FastAPI 환경과 `/health`
 - [x] pytest, Ruff, mypy, Docker 구성
-- [x] Backend P0 Criteria·필수 key allowlist·Loader
+- [x] Backend P0/P1/P2 Criteria·필수 key allowlist·누적 Loader
 - [x] 근거 기반 P0 System Prompt
 - [x] Gemini Structured Output Provider와 Fake Provider
 - [x] HTTP DTO와 분리된 P0/P1/P2 내부 Evidence 모델
@@ -63,7 +63,7 @@ schemaVersion: "1.0"
 - [x] 정책 위반 타입과 `ReportPolicyError`
 - [x] Repository Evidence·Claim 참조 Validator
 - [x] P1/P2 내부 Evidence 모델
-- [ ] P1/P2 Criteria
+- [x] P1/P2 Criteria
 - [ ] P1/P2 정규화·Prompt·깊이 Validator
 - [ ] Repository·Portfolio·Report Service
 - [ ] 내용 정책 Validator와 내부 전체 오케스트레이션
@@ -71,7 +71,7 @@ schemaVersion: "1.0"
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 353개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+현재 AI 검증 기준은 전체 `pytest` 388개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
 P1/P2 분석과 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -261,12 +261,12 @@ ai/tests/test_criteria_loader.py
 
 구현:
 
-- [ ] P0 Criteria 유지
-- [ ] P1 활동·Claim 연결 기준 추가
-- [ ] P2 snippet 범위 판단 기준 추가
-- [ ] 깊이별 고정 파일 mapping
-- [ ] P2 요청 시 P0→P1→P2 Criteria 누적 로드
-- [ ] 금지 판단 allowlist 검증
+- [x] P0 Criteria 유지
+- [x] P1 활동·Claim 연결 기준 추가
+- [x] P2 snippet 범위 판단 기준 추가
+- [x] 깊이별 고정 파일 mapping
+- [x] P2 요청 시 P0→P1→P2 Criteria 누적 로드
+- [x] 기계 판독 가능한 깊이별 금지 판단 guardrail 검증
 
 P1 Criteria는 활동을 실력·기여율로 평가하지 않는다. P2 Criteria는 snippet을 Repository 전체
 품질로 일반화하지 않는다.
