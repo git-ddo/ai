@@ -55,14 +55,15 @@ schemaVersion: "1.0"
 - [x] Backend P0 Criteria·필수 key allowlist·Loader
 - [x] 근거 기반 P0 System Prompt
 - [x] Gemini Structured Output Provider와 Fake Provider
-- [x] HTTP DTO와 분리된 P0 내부 모델
+- [x] HTTP DTO와 분리된 P0/P1/P2 내부 Evidence 모델
 - [x] 분석 전체 Evidence·Claim ID 중복 검증
 - [x] P0 입력 정규화
 - [x] Repository·Portfolio·Interview Prompt Context
 - [x] Prompt 예약 마커 충돌 방지
 - [x] 정책 위반 타입과 `ReportPolicyError`
 - [x] Repository Evidence·Claim 참조 Validator
-- [ ] P1/P2 내부 Evidence 모델과 Criteria
+- [x] P1/P2 내부 Evidence 모델
+- [ ] P1/P2 Criteria
 - [ ] P1/P2 정규화·Prompt·깊이 Validator
 - [ ] Repository·Portfolio·Report Service
 - [ ] 내용 정책 Validator와 내부 전체 오케스트레이션
@@ -70,7 +71,7 @@ schemaVersion: "1.0"
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 300개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+현재 AI 검증 기준은 전체 `pytest` 353개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
 P1/P2 분석과 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -228,15 +229,16 @@ ai/tests/test_domain_models.py
 
 구현:
 
-- [ ] `AnalysisDepth`에 P1/P2 추가
-- [ ] `InternalEvidenceType`에 `GITHUB_ACTIVITY`, `CODE_EVIDENCE` 추가
-- [ ] `repository_id`를 Backend와 같은 문자열 표현으로 전환
-- [ ] `completed_evidence_levels` 추가
-- [ ] `fact_key`, `value`, `path`, `start_line`, `end_line` 추가
-- [ ] `commit_sha`, `pull_request_number`, `source_evidence_refs` 추가
-- [ ] Evidence 타입·깊이 조합 검증
-- [ ] P2 line range와 source Evidence 구조 검증
-- [ ] 혼합 깊이 Repository 1~5개 테스트
+- [x] `AnalysisDepth`에 P1/P2 추가
+- [x] `InternalEvidenceType`에 `GITHUB_ACTIVITY`, `CODE_EVIDENCE` 추가
+- [x] `repository_id`를 Backend와 같은 문자열 표현으로 전환
+- [x] `completed_evidence_levels` 추가
+- [x] Wire `factKey`·`value`에 대응하는 내부 `key`·`summary`와 `value_type` 확장
+- [x] `path`, `start_line`, `end_line` 추가
+- [x] `commit_sha`, `pull_request_number`, `source_evidence_refs` 추가
+- [x] Evidence 타입·깊이 조합 검증
+- [x] P2 line range와 source Evidence 구조 검증
+- [x] 혼합 깊이 Repository 1~5개 테스트
 
 완료 기준:
 

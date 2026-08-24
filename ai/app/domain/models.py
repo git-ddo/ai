@@ -6,10 +6,12 @@ from app.domain.enums import (
     AnalysisDepth,
     AnalysisItemType,
     EvidenceConfidence,
+    EvidenceValueType,
     InternalEvidenceType,
     InternalGenerationStage,
     PortfolioStatementType,
     RecommendationPriority,
+    SnapshotHashAlgorithm,
 )
 
 NonEmptyString = Annotated[
@@ -24,7 +26,18 @@ ClaimId = Annotated[
     str,
     StringConstraints(strip_whitespace=True, pattern=r"^claim_[0-9]{3,}$"),
 ]
-PositiveRepositoryId = Annotated[int, Field(gt=0)]
+RepositoryId = Annotated[
+    str,
+    StringConstraints(strict=True, strip_whitespace=True, pattern=r"^[1-9][0-9]*$"),
+]
+PositiveLineNumber = Annotated[int, Field(strict=True, gt=0)]
+PositivePullRequestNumber = Annotated[int, Field(strict=True, gt=0)]
+
+_COMPLETED_DEPTH_PREFIXES: dict[AnalysisDepth, tuple[AnalysisDepth, ...]] = {
+    AnalysisDepth.P0: (AnalysisDepth.P0,),
+    AnalysisDepth.P1: (AnalysisDepth.P0, AnalysisDepth.P1),
+    AnalysisDepth.P2: (AnalysisDepth.P0, AnalysisDepth.P1, AnalysisDepth.P2),
+}
 
 
 class InternalDomainModel(BaseModel):
@@ -34,20 +47,83 @@ class InternalDomainModel(BaseModel):
 
 
 class InternalEvidence(InternalDomainModel):
-    """One P0 fact observed or deterministically derived by the backend."""
+    """One backend-observed or derived fact available to the AI pipeline.
+
+    Backend ``factKey`` maps to ``key``, ``value`` maps to ``summary``, and
+    ``sourceEvidenceRefs`` maps to ``source_evidence_refs`` at the future wire boundary.
+    """
 
     evidence_id: EvidenceId
     repository_full_name: NonEmptyString
     evidence_type: InternalEvidenceType
+    analysis_depth: AnalysisDepth = AnalysisDepth.P0
     key: NonEmptyString
     summary: NonEmptyString
+    value_type: EvidenceValueType = EvidenceValueType.STRING
     source_paths: tuple[NonEmptyString, ...] = ()
     technology_names: tuple[NonEmptyString, ...] = ()
+    path: NonEmptyString | None = None
+    start_line: PositiveLineNumber | None = None
+    end_line: PositiveLineNumber | None = None
+    commit_sha: NonEmptyString | None = None
+    pull_request_number: PositivePullRequestNumber | None = None
+    source_evidence_refs: tuple[EvidenceId, ...] = ()
+    derived_from_level: AnalysisDepth | None = None
 
     @model_validator(mode="after")
-    def reject_duplicate_source_paths(self) -> Self:
+    def validate_evidence_semantics(self) -> Self:
         if len(self.source_paths) != len(set(self.source_paths)):
             raise ValueError("source_paths must not contain duplicates")
+
+        if len(self.source_evidence_refs) != len(set(self.source_evidence_refs)):
+            raise ValueError("source_evidence_refs must not contain duplicates")
+        if self.evidence_id in self.source_evidence_refs:
+            raise ValueError("evidence must not reference itself as a source")
+
+        required_depth = {
+            InternalEvidenceType.GITHUB_STATIC: AnalysisDepth.P0,
+            InternalEvidenceType.GITHUB_ACTIVITY: AnalysisDepth.P1,
+            InternalEvidenceType.CODE_EVIDENCE: AnalysisDepth.P2,
+        }.get(self.evidence_type)
+        if required_depth is not None and self.analysis_depth is not required_depth:
+            raise ValueError(
+                f"{self.evidence_type} evidence requires analysis depth {required_depth}"
+            )
+
+        if (self.start_line is None) is not (self.end_line is None):
+            raise ValueError("start_line and end_line must be provided together")
+        if (
+            self.start_line is not None
+            and self.end_line is not None
+            and self.start_line > self.end_line
+        ):
+            raise ValueError("start_line must not be greater than end_line")
+
+        if self.evidence_type is InternalEvidenceType.CODE_EVIDENCE:
+            missing_fields: list[str] = []
+            if self.path is None:
+                missing_fields.append("path")
+            if self.start_line is None:
+                missing_fields.append("start_line")
+            if self.end_line is None:
+                missing_fields.append("end_line")
+            if self.commit_sha is None:
+                missing_fields.append("commit_sha")
+            if not self.source_evidence_refs:
+                missing_fields.append("source_evidence_refs")
+            if missing_fields:
+                raise ValueError("CODE_EVIDENCE requires " + ", ".join(missing_fields))
+            if self.value_type is not EvidenceValueType.STRING:
+                raise ValueError("CODE_EVIDENCE requires STRING value_type")
+
+        if self.evidence_type is InternalEvidenceType.BACKEND_DERIVED:
+            if self.derived_from_level is None:
+                raise ValueError("BACKEND_DERIVED evidence requires derived_from_level")
+            if self.derived_from_level is not self.analysis_depth:
+                raise ValueError("BACKEND_DERIVED derived_from_level must match analysis_depth")
+        elif self.derived_from_level is not None:
+            raise ValueError("derived_from_level is only allowed for BACKEND_DERIVED evidence")
+
         return self
 
 
@@ -57,20 +133,43 @@ class InternalUserClaim(InternalDomainModel):
     claim_id: ClaimId
     repository_full_name: NonEmptyString
     statement: NonEmptyString
+    related_evidence_refs: tuple[EvidenceId, ...] = ()
+
+    @model_validator(mode="after")
+    def reject_duplicate_evidence_refs(self) -> Self:
+        if len(self.related_evidence_refs) != len(set(self.related_evidence_refs)):
+            raise ValueError("related_evidence_refs must not contain duplicates")
+        return self
 
 
 class InternalRepositoryInput(InternalDomainModel):
-    """Validated repository data awaiting canonical P0 normalization."""
+    """Validated repository evidence awaiting depth-specific normalization."""
 
-    repository_id: PositiveRepositoryId
+    repository_id: RepositoryId
     repository_full_name: NonEmptyString
     description: NonEmptyString | None = None
     analysis_depth: AnalysisDepth
+    completed_evidence_levels: tuple[AnalysisDepth, ...] = (AnalysisDepth.P0,)
+    snapshot_hash_algorithm: SnapshotHashAlgorithm | None = None
+    snapshot_sha: NonEmptyString | None = None
     evidence: tuple[InternalEvidence, ...] = Field(min_length=1)
     user_claims: tuple[InternalUserClaim, ...] = ()
 
     @model_validator(mode="after")
     def validate_repository_members(self) -> Self:
+        expected_levels = _COMPLETED_DEPTH_PREFIXES[self.analysis_depth]
+        if self.completed_evidence_levels != expected_levels:
+            raise ValueError(
+                "completed_evidence_levels must be the ordered P0-to-analysis_depth prefix"
+            )
+
+        has_snapshot_algorithm = self.snapshot_hash_algorithm is not None
+        has_snapshot_sha = self.snapshot_sha is not None
+        if has_snapshot_algorithm != has_snapshot_sha:
+            raise ValueError("snapshot_hash_algorithm and snapshot_sha must be provided together")
+        if self.analysis_depth is not AnalysisDepth.P0 and not has_snapshot_sha:
+            raise ValueError("P1/P2 repository input requires snapshot metadata")
+
         evidence_ids = [item.evidence_id for item in self.evidence]
         if len(evidence_ids) != len(set(evidence_ids)):
             raise ValueError("evidence IDs must be unique within a repository input")
@@ -90,6 +189,10 @@ class InternalRepositoryInput(InternalDomainModel):
         )
         if mismatched_claims:
             raise ValueError("user claims must belong to the parent repository")
+
+        completed_levels = set(self.completed_evidence_levels)
+        if any(item.analysis_depth not in completed_levels for item in self.evidence):
+            raise ValueError("evidence depth must be included in completed_evidence_levels")
 
         return self
 
@@ -132,7 +235,7 @@ class InternalPortfolioInput(InternalDomainModel):
 class NormalizedRepositoryContext(InternalDomainModel):
     """Canonical repository context consumed by prompt and analysis services."""
 
-    repository_id: PositiveRepositoryId
+    repository_id: RepositoryId
     repository_full_name: NonEmptyString
     description: NonEmptyString | None = None
     analysis_depth: AnalysisDepth

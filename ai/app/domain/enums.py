@@ -2,16 +2,37 @@ from enum import StrEnum
 
 
 class InternalEvidenceType(StrEnum):
-    """Evidence kinds the independent P0 analysis layer may interpret."""
+    """Evidence kinds the independent analysis layer may interpret."""
 
     GITHUB_STATIC = "GITHUB_STATIC"
+    GITHUB_ACTIVITY = "GITHUB_ACTIVITY"
+    CODE_EVIDENCE = "CODE_EVIDENCE"
     BACKEND_DERIVED = "BACKEND_DERIVED"
 
 
 class AnalysisDepth(StrEnum):
-    """Analysis depths currently supported by the internal pipeline."""
+    """Available evidence depths, not scores of repository quality."""
 
     P0 = "P0"
+    P1 = "P1"
+    P2 = "P2"
+
+
+class EvidenceValueType(StrEnum):
+    """Semantic type of an evidence value supplied by the backend."""
+
+    STRING = "STRING"
+    BOOLEAN = "BOOLEAN"
+    INTEGER = "INTEGER"
+    DECIMAL = "DECIMAL"
+    STRING_LIST = "STRING_LIST"
+
+
+class SnapshotHashAlgorithm(StrEnum):
+    """Hash algorithm used to identify a repository snapshot."""
+
+    SHA1 = "SHA1"
+    SHA256 = "SHA256"
 
 
 class AnalysisItemType(StrEnum):

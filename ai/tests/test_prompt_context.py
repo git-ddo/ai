@@ -75,7 +75,7 @@ def make_context(
         statement=claim_statement,
     )
     return NormalizedRepositoryContext(
-        repository_id=index,
+        repository_id=str(index),
         repository_full_name=repository_name,
         description=description,
         analysis_depth=AnalysisDepth.P0,

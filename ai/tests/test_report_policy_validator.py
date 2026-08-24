@@ -47,7 +47,7 @@ def make_violation(
 
 def make_context(
     *,
-    repository_id: int = 1,
+    repository_id: str = "1",
     repository_full_name: str = "git-ddo/backend",
     evidence_id: str = "ev_001",
     claim_id: str = "claim_001",
@@ -295,7 +295,7 @@ def test_repository_reference_validator_rejects_unknown_claim() -> None:
 def test_repository_reference_validator_rejects_cross_repository_evidence() -> None:
     backend = make_context()
     frontend = make_context(
-        repository_id=2,
+        repository_id="2",
         repository_full_name="git-ddo/frontend",
         evidence_id="ev_002",
         claim_id="claim_002",
@@ -317,7 +317,7 @@ def test_repository_reference_validator_rejects_cross_repository_evidence() -> N
 def test_repository_reference_validator_rejects_cross_repository_claim() -> None:
     backend = make_context()
     frontend = make_context(
-        repository_id=2,
+        repository_id="2",
         repository_full_name="git-ddo/frontend",
         evidence_id="ev_002",
         claim_id="claim_002",

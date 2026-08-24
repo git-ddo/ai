@@ -84,10 +84,19 @@ class NormalizationService:
                 evidence_id=evidence.evidence_id,
                 repository_full_name=evidence.repository_full_name,
                 evidence_type=evidence.evidence_type,
+                analysis_depth=evidence.analysis_depth,
                 key=evidence.key,
                 summary=evidence.summary,
+                value_type=evidence.value_type,
                 source_paths=normalized_paths,
                 technology_names=normalized_technologies,
+                path=evidence.path,
+                start_line=evidence.start_line,
+                end_line=evidence.end_line,
+                commit_sha=evidence.commit_sha,
+                pull_request_number=evidence.pull_request_number,
+                source_evidence_refs=evidence.source_evidence_refs,
+                derived_from_level=evidence.derived_from_level,
             )
         except ValueError as exc:
             raise NormalizationError("Evidence normalization failed.") from exc

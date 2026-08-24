@@ -48,7 +48,7 @@ def make_repository(
     user_claims: tuple[InternalUserClaim, ...] = (),
 ) -> InternalRepositoryInput:
     return InternalRepositoryInput(
-        repository_id=123,
+        repository_id="123",
         repository_full_name=REPOSITORY_NAME,
         description="GitDdo Backend",
         analysis_depth=AnalysisDepth.P0,
@@ -60,7 +60,7 @@ def make_repository(
 def test_normalizes_valid_repository_input() -> None:
     context = NormalizationService().normalize(make_repository())
 
-    assert context.repository_id == 123
+    assert context.repository_id == "123"
     assert context.repository_full_name == REPOSITORY_NAME
     assert context.description == "GitDdo Backend"
     assert context.analysis_depth is AnalysisDepth.P0
@@ -304,7 +304,7 @@ def test_rejects_non_p0_evidence_instead_of_filtering() -> None:
     invalid_evidence = make_evidence("ev_001").model_copy(
         update={"evidence_type": "GITHUB_ACTIVITY"}
     )
-    repository = make_repository(evidence=(invalid_evidence,))
+    repository = make_repository().model_copy(update={"evidence": (invalid_evidence,)})
 
     with pytest.raises(NormalizationError, match="non-P0 evidence"):
         NormalizationService().normalize(repository)

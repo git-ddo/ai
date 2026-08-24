@@ -2,10 +2,12 @@ from app.domain.enums import (
     AnalysisDepth,
     AnalysisItemType,
     EvidenceConfidence,
+    EvidenceValueType,
     InternalEvidenceType,
     InternalGenerationStage,
     PortfolioStatementType,
     RecommendationPriority,
+    SnapshotHashAlgorithm,
 )
 from app.domain.models import (
     GroundedAnalysisItem,
@@ -28,6 +30,7 @@ __all__ = [
     "AnalysisDepth",
     "AnalysisItemType",
     "EvidenceConfidence",
+    "EvidenceValueType",
     "GroundedAnalysisItem",
     "InternalEvidence",
     "InternalEvidenceType",
@@ -46,4 +49,5 @@ __all__ = [
     "RecommendationPriority",
     "RepresentativeProject",
     "RepositoryAnalysis",
+    "SnapshotHashAlgorithm",
 ]

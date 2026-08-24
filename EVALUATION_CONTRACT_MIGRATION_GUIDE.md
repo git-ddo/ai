@@ -500,7 +500,7 @@ AnalysisDepth: P0, P1, P2
 | --- | --- |
 | Backend `main` | BACKEND 중심 P0/P1 수집과 Mock 리포트 |
 | Backend P2 branch | P2 코드 snippet 수집과 Mock P2 리포트 구현, 미병합 |
-| AI 내부 구현 | BACKEND × ENTRY P0 기반 계층 구현 |
+| AI 내부 구현 | P0 실행 기반과 P0/P1/P2 내부 Evidence 도메인 모델 구현 |
 | AI Wire API | `/health`만 구현, 실제 portfolio report API 미구현 |
 
 개발 목표:

@@ -7,6 +7,7 @@ from app.domain import (
     AnalysisDepth,
     AnalysisItemType,
     EvidenceConfidence,
+    EvidenceValueType,
     GroundedAnalysisItem,
     InternalEvidence,
     InternalEvidenceType,
@@ -25,6 +26,7 @@ from app.domain import (
     RecommendationPriority,
     RepositoryAnalysis,
     RepresentativeProject,
+    SnapshotHashAlgorithm,
 )
 
 
@@ -33,16 +35,37 @@ def make_evidence(
     evidence_id: str = "ev_001",
     repository_full_name: str = "git-ddo/backend",
     evidence_type: InternalEvidenceType | str = InternalEvidenceType.GITHUB_STATIC,
+    analysis_depth: AnalysisDepth | str = AnalysisDepth.P0,
+    key: str = "README_INTRODUCTION_OBSERVED",
+    summary: str = "README에서 프로젝트 소개가 관찰되었습니다.",
+    value_type: EvidenceValueType | str = EvidenceValueType.STRING,
+    source_paths: tuple[str, ...] = ("README.md",),
     technology_names: tuple[str, ...] = (),
+    path: str | None = None,
+    start_line: int | None = None,
+    end_line: int | None = None,
+    commit_sha: str | None = None,
+    pull_request_number: int | None = None,
+    source_evidence_refs: tuple[str, ...] = (),
+    derived_from_level: AnalysisDepth | str | None = None,
 ) -> InternalEvidence:
     return InternalEvidence(
         evidence_id=evidence_id,
         repository_full_name=repository_full_name,
         evidence_type=evidence_type,
-        key="README_INTRODUCTION_OBSERVED",
-        summary="README에서 프로젝트 소개가 관찰되었습니다.",
-        source_paths=("README.md",),
+        analysis_depth=analysis_depth,
+        key=key,
+        summary=summary,
+        value_type=value_type,
+        source_paths=source_paths,
         technology_names=technology_names,
+        path=path,
+        start_line=start_line,
+        end_line=end_line,
+        commit_sha=commit_sha,
+        pull_request_number=pull_request_number,
+        source_evidence_refs=source_evidence_refs,
+        derived_from_level=derived_from_level,
     )
 
 
@@ -50,18 +73,24 @@ def make_claim(
     *,
     claim_id: str = "claim_001",
     repository_full_name: str = "git-ddo/backend",
+    related_evidence_refs: tuple[str, ...] = (),
 ) -> InternalUserClaim:
     return InternalUserClaim(
         claim_id=claim_id,
         repository_full_name=repository_full_name,
         statement="사용자는 인증 API를 담당했다고 진술했습니다.",
+        related_evidence_refs=related_evidence_refs,
     )
 
 
 def make_repository_input(
     *,
-    repository_id: int = 1,
+    repository_id: str = "1",
     repository_full_name: str = "git-ddo/backend",
+    analysis_depth: AnalysisDepth = AnalysisDepth.P0,
+    completed_evidence_levels: tuple[AnalysisDepth, ...] = (AnalysisDepth.P0,),
+    snapshot_hash_algorithm: SnapshotHashAlgorithm | None = None,
+    snapshot_sha: str | None = None,
     evidence: tuple[InternalEvidence, ...] | None = None,
     user_claims: tuple[InternalUserClaim, ...] | None = None,
 ) -> InternalRepositoryInput:
@@ -79,7 +108,10 @@ def make_repository_input(
         repository_id=repository_id,
         repository_full_name=repository_full_name,
         description="GitDdo backend",
-        analysis_depth=AnalysisDepth.P0,
+        analysis_depth=analysis_depth,
+        completed_evidence_levels=completed_evidence_levels,
+        snapshot_hash_algorithm=snapshot_hash_algorithm,
+        snapshot_sha=snapshot_sha,
         evidence=resolved_evidence,
         user_claims=resolved_claims,
     )
@@ -103,7 +135,7 @@ def make_interpretation(
 def make_portfolio_repository_input(index: int) -> InternalRepositoryInput:
     repository_full_name = f"git-ddo/repo-{index}"
     return make_repository_input(
-        repository_id=index,
+        repository_id=str(index),
         repository_full_name=repository_full_name,
         evidence=(
             make_evidence(
@@ -117,6 +149,56 @@ def make_portfolio_repository_input(index: int) -> InternalRepositoryInput:
                 repository_full_name=repository_full_name,
             ),
         ),
+    )
+
+
+def make_activity_evidence(
+    *,
+    evidence_id: str = "ev_002",
+    repository_full_name: str = "git-ddo/backend",
+    key: str = "COMMIT_SUMMARY",
+    commit_sha: str | None = "abc123",
+    pull_request_number: int | None = None,
+    source_evidence_refs: tuple[str, ...] = (),
+) -> InternalEvidence:
+    return make_evidence(
+        evidence_id=evidence_id,
+        repository_full_name=repository_full_name,
+        evidence_type=InternalEvidenceType.GITHUB_ACTIVITY,
+        analysis_depth=AnalysisDepth.P1,
+        key=key,
+        commit_sha=commit_sha,
+        pull_request_number=pull_request_number,
+        source_evidence_refs=source_evidence_refs,
+    )
+
+
+def make_code_evidence(
+    *,
+    evidence_id: str = "ev_003",
+    repository_full_name: str = "git-ddo/backend",
+    source_evidence_refs: tuple[str, ...] = ("ev_002",),
+    path: str | None = "src/AuthFilter.java",
+    start_line: int | None = 5,
+    end_line: int | None = 9,
+    commit_sha: str | None = "abc123",
+    value_type: EvidenceValueType | str = EvidenceValueType.STRING,
+    summary: str = 'public boolean matches(String path) { return path.startsWith("/api"); }',
+) -> InternalEvidence:
+    return make_evidence(
+        evidence_id=evidence_id,
+        repository_full_name=repository_full_name,
+        evidence_type=InternalEvidenceType.CODE_EVIDENCE,
+        analysis_depth=AnalysisDepth.P2,
+        key="CODE_SNIPPET",
+        summary=summary,
+        value_type=value_type,
+        source_paths=(),
+        path=path,
+        start_line=start_line,
+        end_line=end_line,
+        commit_sha=commit_sha,
+        source_evidence_refs=source_evidence_refs,
     )
 
 
@@ -259,6 +341,324 @@ def test_creates_valid_p0_repository_input() -> None:
     assert repository.user_claims[0].claim_id == "claim_001"
 
 
+def test_exposes_p0_p1_p2_depths_and_all_evidence_types() -> None:
+    assert tuple(depth.value for depth in AnalysisDepth) == ("P0", "P1", "P2")
+    assert {evidence_type.value for evidence_type in InternalEvidenceType} == {
+        "GITHUB_STATIC",
+        "GITHUB_ACTIVITY",
+        "CODE_EVIDENCE",
+        "BACKEND_DERIVED",
+    }
+
+
+@pytest.mark.parametrize("repository_id", ["1", "123456789"])
+def test_accepts_positive_numeric_repository_id_strings(repository_id: str) -> None:
+    repository = make_repository_input(repository_id=repository_id)
+
+    assert repository.repository_id == repository_id
+
+
+@pytest.mark.parametrize("repository_id", [1, "", "0", "-1", "repo-123", "001"])
+def test_rejects_invalid_repository_id_values(repository_id: object) -> None:
+    with pytest.raises(ValidationError):
+        make_repository_input(repository_id=repository_id)  # type: ignore[arg-type]
+
+
+def test_creates_valid_p0_backend_derived_evidence() -> None:
+    evidence = make_evidence(
+        evidence_type=InternalEvidenceType.BACKEND_DERIVED,
+        derived_from_level=AnalysisDepth.P0,
+    )
+
+    assert evidence.derived_from_level is AnalysisDepth.P0
+
+
+@pytest.mark.parametrize("analysis_depth", [AnalysisDepth.P1, AnalysisDepth.P2])
+def test_creates_valid_deeper_backend_derived_evidence(
+    analysis_depth: AnalysisDepth,
+) -> None:
+    evidence = make_evidence(
+        evidence_type=InternalEvidenceType.BACKEND_DERIVED,
+        analysis_depth=analysis_depth,
+        derived_from_level=analysis_depth,
+    )
+
+    assert evidence.derived_from_level is analysis_depth
+
+
+def test_creates_valid_p1_commit_evidence() -> None:
+    evidence = make_activity_evidence()
+
+    assert evidence.analysis_depth is AnalysisDepth.P1
+    assert evidence.commit_sha == "abc123"
+
+
+def test_creates_valid_p1_pull_request_evidence() -> None:
+    evidence = make_activity_evidence(
+        evidence_id="ev_004",
+        key="PULL_REQUEST",
+        commit_sha="def456",
+        pull_request_number=12,
+    )
+
+    assert evidence.pull_request_number == 12
+
+
+def test_creates_valid_p1_changed_files_evidence() -> None:
+    evidence = make_activity_evidence(
+        evidence_id="ev_003",
+        key="CHANGED_FILES",
+        source_evidence_refs=("ev_002",),
+    )
+
+    assert evidence.source_evidence_refs == ("ev_002",)
+
+
+def test_creates_valid_p2_code_evidence() -> None:
+    evidence = make_code_evidence()
+
+    assert evidence.analysis_depth is AnalysisDepth.P2
+    assert evidence.path == "src/AuthFilter.java"
+    assert (evidence.start_line, evidence.end_line) == (5, 9)
+    assert evidence.source_evidence_refs == ("ev_002",)
+
+
+def test_creates_valid_p1_repository_input() -> None:
+    repository = make_repository_input(
+        analysis_depth=AnalysisDepth.P1,
+        completed_evidence_levels=(AnalysisDepth.P0, AnalysisDepth.P1),
+        snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+        snapshot_sha="commit-sha",
+        evidence=(make_activity_evidence(),),
+    )
+
+    assert repository.completed_evidence_levels == (AnalysisDepth.P0, AnalysisDepth.P1)
+
+
+def test_creates_valid_p2_repository_input_with_p1_source() -> None:
+    repository = make_repository_input(
+        analysis_depth=AnalysisDepth.P2,
+        completed_evidence_levels=(AnalysisDepth.P0, AnalysisDepth.P1, AnalysisDepth.P2),
+        snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+        snapshot_sha="commit-sha",
+        evidence=(make_activity_evidence(), make_code_evidence()),
+    )
+
+    assert repository.analysis_depth is AnalysisDepth.P2
+
+
+def test_creates_portfolio_with_mixed_repository_depths() -> None:
+    p0_repository = make_repository_input(
+        repository_id="1",
+        repository_full_name="git-ddo/p0",
+        evidence=(make_evidence(evidence_id="ev_001", repository_full_name="git-ddo/p0"),),
+        user_claims=(make_claim(claim_id="claim_001", repository_full_name="git-ddo/p0"),),
+    )
+    p1_repository = make_repository_input(
+        repository_id="2",
+        repository_full_name="git-ddo/p1",
+        analysis_depth=AnalysisDepth.P1,
+        completed_evidence_levels=(AnalysisDepth.P0, AnalysisDepth.P1),
+        snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+        snapshot_sha="p1-snapshot",
+        evidence=(make_activity_evidence(evidence_id="ev_002", repository_full_name="git-ddo/p1"),),
+        user_claims=(make_claim(claim_id="claim_002", repository_full_name="git-ddo/p1"),),
+    )
+    p2_repository = make_repository_input(
+        repository_id="3",
+        repository_full_name="git-ddo/p2",
+        analysis_depth=AnalysisDepth.P2,
+        completed_evidence_levels=(AnalysisDepth.P0, AnalysisDepth.P1, AnalysisDepth.P2),
+        snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA256,
+        snapshot_sha="p2-snapshot",
+        evidence=(
+            make_activity_evidence(evidence_id="ev_003", repository_full_name="git-ddo/p2"),
+            make_code_evidence(
+                evidence_id="ev_004",
+                repository_full_name="git-ddo/p2",
+                source_evidence_refs=("ev_003",),
+            ),
+        ),
+        user_claims=(make_claim(claim_id="claim_003", repository_full_name="git-ddo/p2"),),
+    )
+
+    portfolio = InternalPortfolioInput(repositories=(p0_repository, p1_repository, p2_repository))
+
+    assert tuple(repository.analysis_depth for repository in portfolio.repositories) == (
+        AnalysisDepth.P0,
+        AnalysisDepth.P1,
+        AnalysisDepth.P2,
+    )
+
+
+@pytest.mark.parametrize(
+    ("evidence_type", "analysis_depth"),
+    [
+        (InternalEvidenceType.GITHUB_STATIC, AnalysisDepth.P1),
+        (InternalEvidenceType.GITHUB_STATIC, AnalysisDepth.P2),
+        (InternalEvidenceType.GITHUB_ACTIVITY, AnalysisDepth.P0),
+        (InternalEvidenceType.GITHUB_ACTIVITY, AnalysisDepth.P2),
+        (InternalEvidenceType.CODE_EVIDENCE, AnalysisDepth.P0),
+        (InternalEvidenceType.CODE_EVIDENCE, AnalysisDepth.P1),
+    ],
+)
+def test_rejects_evidence_type_depth_mismatch(
+    evidence_type: InternalEvidenceType,
+    analysis_depth: AnalysisDepth,
+) -> None:
+    with pytest.raises(ValidationError, match="requires analysis depth"):
+        make_evidence(
+            evidence_type=evidence_type,
+            analysis_depth=analysis_depth,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "field_value"),
+    [
+        ("path", None),
+        ("start_line", None),
+        ("end_line", None),
+        ("commit_sha", None),
+        ("source_evidence_refs", ()),
+    ],
+)
+def test_rejects_p2_code_evidence_missing_required_metadata(
+    field_name: str,
+    field_value: object,
+) -> None:
+    values: dict[str, object] = {
+        "path": "src/AuthFilter.java",
+        "start_line": 5,
+        "end_line": 9,
+        "commit_sha": "abc123",
+        "source_evidence_refs": ("ev_002",),
+    }
+    values[field_name] = field_value
+
+    with pytest.raises(ValidationError):
+        make_code_evidence(**values)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(("start_line", "end_line"), [(0, 1), (1, 0), (10, 9)])
+def test_rejects_invalid_p2_line_range(start_line: int, end_line: int) -> None:
+    with pytest.raises(ValidationError):
+        make_code_evidence(start_line=start_line, end_line=end_line)
+
+
+def test_rejects_non_string_p2_value_type() -> None:
+    with pytest.raises(ValidationError, match="requires STRING value_type"):
+        make_code_evidence(value_type=EvidenceValueType.INTEGER)
+
+
+def test_rejects_blank_p2_snippet_value() -> None:
+    with pytest.raises(ValidationError):
+        make_code_evidence(summary="   ")
+
+
+def test_rejects_duplicate_source_evidence_refs() -> None:
+    with pytest.raises(ValidationError, match="must not contain duplicates"):
+        make_activity_evidence(source_evidence_refs=("ev_001", "ev_001"))
+
+
+def test_rejects_invalid_source_evidence_ref_format() -> None:
+    with pytest.raises(ValidationError):
+        make_activity_evidence(source_evidence_refs=("invalid",))
+
+
+def test_rejects_self_source_evidence_ref() -> None:
+    with pytest.raises(ValidationError, match="must not reference itself"):
+        make_activity_evidence(evidence_id="ev_002", source_evidence_refs=("ev_002",))
+
+
+def test_rejects_duplicate_claim_related_evidence_refs() -> None:
+    with pytest.raises(ValidationError, match="must not contain duplicates"):
+        make_claim(related_evidence_refs=("ev_001", "ev_001"))
+
+
+def test_rejects_invalid_claim_related_evidence_ref_format() -> None:
+    with pytest.raises(ValidationError):
+        make_claim(related_evidence_refs=("invalid",))
+
+
+def test_rejects_non_positive_pull_request_number() -> None:
+    with pytest.raises(ValidationError):
+        make_activity_evidence(pull_request_number=0)
+
+
+def test_domain_model_defers_missing_reference_check_to_reference_validator() -> None:
+    evidence = make_activity_evidence(source_evidence_refs=("ev_999",))
+    claim = make_claim(related_evidence_refs=("ev_998",))
+
+    assert evidence.source_evidence_refs == ("ev_999",)
+    assert claim.related_evidence_refs == ("ev_998",)
+
+
+@pytest.mark.parametrize(
+    "completed_evidence_levels",
+    [
+        (AnalysisDepth.P1,),
+        (AnalysisDepth.P2,),
+        (AnalysisDepth.P0, AnalysisDepth.P2),
+        (AnalysisDepth.P1, AnalysisDepth.P0),
+        (AnalysisDepth.P0, AnalysisDepth.P0),
+    ],
+)
+def test_rejects_non_prefix_completed_evidence_levels(
+    completed_evidence_levels: tuple[AnalysisDepth, ...],
+) -> None:
+    with pytest.raises(ValidationError, match="ordered P0-to-analysis_depth prefix"):
+        make_repository_input(completed_evidence_levels=completed_evidence_levels)
+
+
+def test_rejects_analysis_depth_not_matching_completed_evidence_levels() -> None:
+    with pytest.raises(ValidationError, match="ordered P0-to-analysis_depth prefix"):
+        make_repository_input(
+            analysis_depth=AnalysisDepth.P1,
+            completed_evidence_levels=(AnalysisDepth.P0,),
+            snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+            snapshot_sha="commit-sha",
+        )
+
+
+def test_rejects_evidence_depth_not_declared_by_repository() -> None:
+    with pytest.raises(ValidationError, match="evidence depth must be included"):
+        make_repository_input(evidence=(make_activity_evidence(),))
+
+
+def test_rejects_p1_repository_without_snapshot_metadata() -> None:
+    with pytest.raises(ValidationError, match="requires snapshot metadata"):
+        make_repository_input(
+            analysis_depth=AnalysisDepth.P1,
+            completed_evidence_levels=(AnalysisDepth.P0, AnalysisDepth.P1),
+            evidence=(make_activity_evidence(),),
+        )
+
+
+def test_rejects_partial_snapshot_metadata() -> None:
+    with pytest.raises(ValidationError, match="must be provided together"):
+        make_repository_input(
+            snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+        )
+
+
+def test_rejects_backend_derived_evidence_without_matching_derived_level() -> None:
+    with pytest.raises(ValidationError, match="requires derived_from_level"):
+        make_evidence(evidence_type=InternalEvidenceType.BACKEND_DERIVED)
+
+    with pytest.raises(ValidationError, match="must match analysis_depth"):
+        make_evidence(
+            evidence_type=InternalEvidenceType.BACKEND_DERIVED,
+            analysis_depth=AnalysisDepth.P1,
+            derived_from_level=AnalysisDepth.P0,
+        )
+
+
+def test_rejects_derived_level_on_non_derived_evidence() -> None:
+    with pytest.raises(ValidationError, match="only allowed for BACKEND_DERIVED"):
+        make_evidence(derived_from_level=AnalysisDepth.P0)
+
+
 def test_creates_evidence_with_explicit_technology_names() -> None:
     evidence = make_evidence(technology_names=("Spring Boot", "PostgreSQL"))
 
@@ -273,7 +673,7 @@ def test_rejects_blank_technology_name() -> None:
 def test_creates_normalized_repository_context() -> None:
     evidence = make_evidence(technology_names=("Spring Boot",))
     context = NormalizedRepositoryContext(
-        repository_id=1,
+        repository_id="1",
         repository_full_name="git-ddo/backend",
         description="GitDdo backend",
         analysis_depth=AnalysisDepth.P0,
@@ -289,7 +689,7 @@ def test_creates_normalized_repository_context() -> None:
 def test_normalized_context_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         NormalizedRepositoryContext(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/backend",
             analysis_depth=AnalysisDepth.P0,
             evidence=(make_evidence(),),
@@ -299,7 +699,7 @@ def test_normalized_context_rejects_unknown_fields() -> None:
 
 def test_normalized_context_is_frozen() -> None:
     context = NormalizedRepositoryContext(
-        repository_id=1,
+        repository_id="1",
         repository_full_name="git-ddo/backend",
         analysis_depth=AnalysisDepth.P0,
         evidence=(make_evidence(),),
@@ -312,7 +712,7 @@ def test_normalized_context_is_frozen() -> None:
 def test_normalized_context_rejects_empty_evidence() -> None:
     with pytest.raises(ValidationError):
         NormalizedRepositoryContext(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/backend",
             analysis_depth=AnalysisDepth.P0,
             evidence=(),
@@ -322,7 +722,7 @@ def test_normalized_context_rejects_empty_evidence() -> None:
 def test_normalized_context_rejects_duplicate_evidence_ids() -> None:
     with pytest.raises(ValidationError, match="evidence IDs must be unique"):
         NormalizedRepositoryContext(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/backend",
             analysis_depth=AnalysisDepth.P0,
             evidence=(make_evidence(), make_evidence()),
@@ -332,7 +732,7 @@ def test_normalized_context_rejects_duplicate_evidence_ids() -> None:
 def test_normalized_context_rejects_duplicate_claim_ids() -> None:
     with pytest.raises(ValidationError, match="claim IDs must be unique"):
         NormalizedRepositoryContext(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/backend",
             analysis_depth=AnalysisDepth.P0,
             evidence=(make_evidence(),),
@@ -343,7 +743,7 @@ def test_normalized_context_rejects_duplicate_claim_ids() -> None:
 def test_normalized_context_rejects_evidence_from_another_repository() -> None:
     with pytest.raises(ValidationError, match="evidence must belong"):
         NormalizedRepositoryContext(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/backend",
             analysis_depth=AnalysisDepth.P0,
             evidence=(make_evidence(repository_full_name="git-ddo/frontend"),),
@@ -353,7 +753,7 @@ def test_normalized_context_rejects_evidence_from_another_repository() -> None:
 def test_normalized_context_rejects_claim_from_another_repository() -> None:
     with pytest.raises(ValidationError, match="user claims must belong"):
         NormalizedRepositoryContext(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/backend",
             analysis_depth=AnalysisDepth.P0,
             evidence=(make_evidence(),),
@@ -412,17 +812,17 @@ def test_models_are_frozen() -> None:
         evidence.summary = "변경할 수 없습니다."  # type: ignore[misc]
 
 
-def test_rejects_analysis_depth_other_than_p0() -> None:
+def test_rejects_unknown_analysis_depth() -> None:
     with pytest.raises(ValidationError):
         InternalRepositoryInput(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/backend",
-            analysis_depth="P1",
+            analysis_depth="P3",
             evidence=(make_evidence(),),
         )
 
 
-def test_rejects_evidence_type_not_allowed_in_p0() -> None:
+def test_rejects_activity_evidence_without_p1_depth() -> None:
     with pytest.raises(ValidationError):
         make_evidence(evidence_type="GITHUB_ACTIVITY")
 
@@ -430,7 +830,7 @@ def test_rejects_evidence_type_not_allowed_in_p0() -> None:
 def test_rejects_empty_evidence_collection() -> None:
     with pytest.raises(ValidationError):
         InternalRepositoryInput(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/backend",
             analysis_depth=AnalysisDepth.P0,
             evidence=(),
@@ -568,7 +968,7 @@ def test_internal_portfolio_input_rejects_duplicate_repository_id() -> None:
     repositories = (
         make_portfolio_repository_input(1),
         make_repository_input(
-            repository_id=1,
+            repository_id="1",
             repository_full_name="git-ddo/other",
             evidence=(make_evidence(evidence_id="ev_002", repository_full_name="git-ddo/other"),),
             user_claims=(make_claim(claim_id="claim_002", repository_full_name="git-ddo/other"),),
@@ -583,7 +983,7 @@ def test_internal_portfolio_input_rejects_duplicate_repository_full_name() -> No
     repositories = (
         make_portfolio_repository_input(1),
         make_repository_input(
-            repository_id=2,
+            repository_id="2",
             repository_full_name="git-ddo/repo-1",
             evidence=(make_evidence(evidence_id="ev_002", repository_full_name="git-ddo/repo-1"),),
             user_claims=(make_claim(claim_id="claim_002", repository_full_name="git-ddo/repo-1"),),
@@ -598,7 +998,7 @@ def test_internal_portfolio_input_rejects_evidence_id_reused_across_repositories
     first = make_portfolio_repository_input(1)
     second_name = "git-ddo/repo-2"
     second = make_repository_input(
-        repository_id=2,
+        repository_id="2",
         repository_full_name=second_name,
         evidence=(make_evidence(evidence_id="ev_001", repository_full_name=second_name),),
         user_claims=(make_claim(claim_id="claim_002", repository_full_name=second_name),),
@@ -612,7 +1012,7 @@ def test_internal_portfolio_input_rejects_claim_id_reused_across_repositories() 
     first = make_portfolio_repository_input(1)
     second_name = "git-ddo/repo-2"
     second = make_repository_input(
-        repository_id=2,
+        repository_id="2",
         repository_full_name=second_name,
         evidence=(make_evidence(evidence_id="ev_002", repository_full_name=second_name),),
         user_claims=(make_claim(claim_id="claim_001", repository_full_name=second_name),),
@@ -641,9 +1041,9 @@ def test_internal_portfolio_input_preserves_repository_order() -> None:
     portfolio_input = InternalPortfolioInput(repositories=repositories)
 
     assert tuple(repository.repository_id for repository in portfolio_input.repositories) == (
-        3,
-        1,
-        2,
+        "3",
+        "1",
+        "2",
     )
 
 
