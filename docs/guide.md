@@ -53,7 +53,7 @@ schemaVersion: "1.0"
 - [x] FastAPI 환경과 `/health`
 - [x] pytest, Ruff, mypy, Docker 구성
 - [x] Backend P0/P1/P2 Criteria·필수 key allowlist·누적 Loader
-- [x] 근거 기반 P0 System Prompt
+- [x] 근거 기반 P0/P1/P2 혼합 깊이 System Prompt
 - [x] Gemini Structured Output Provider와 Fake Provider
 - [x] HTTP DTO와 분리된 P0/P1/P2 내부 Evidence 모델
 - [x] 분석 전체 Evidence·Claim ID 중복 검증
@@ -64,14 +64,14 @@ schemaVersion: "1.0"
 - [x] Repository Evidence·Claim 참조 Validator
 - [x] P1/P2 내부 Evidence 모델
 - [x] P1/P2 Criteria
-- [ ] P1/P2 정규화·Prompt·깊이 Validator
+- [ ] P1/P2 정규화·Prompt Context·깊이 Validator
 - [ ] Repository·Portfolio·Report Service
 - [ ] 내용 정책 Validator와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 388개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+현재 AI 검증 기준은 전체 `pytest` 401개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
 P1/P2 분석과 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -282,12 +282,12 @@ ai/tests/test_system_prompt.py
 
 구현:
 
-- [ ] Repository별 `completedEvidenceLevels` 준수
-- [ ] P1 활동량의 실력·기여율 해석 금지
-- [ ] P2 snippet의 Repository 전체 일반화 금지
-- [ ] 코드 실행과 입력 밖 코드·기술 생성 금지
-- [ ] P0/P1/P2 판단 범위 명시
-- [ ] Prompt 버전 갱신
+- [x] Repository별 `completedEvidenceLevels` 준수
+- [x] P1 활동량의 실력·기여율 해석 금지
+- [x] P2 snippet의 Repository 전체 일반화 금지
+- [x] 코드 실행과 입력 밖 코드·기술 생성 금지
+- [x] P0/P1/P2 판단 범위 명시
+- [x] Prompt 버전 갱신
 
 System Prompt는 외부 데이터를 인자로 받지 않는 고정 정책을 유지한다.
 

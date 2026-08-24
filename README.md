@@ -64,7 +64,7 @@ Schema가 표현하는 enum과 실제 분석 구현 범위는 다르다. 현재 
 | --- | --- |
 | Backend `main` | P0/P1 수집, Mock AI, 응답 검증과 Job 저장 흐름 구현 |
 | Backend P2 | `origin/feat/portfolio-evaluation-p2`의 `bcc9a4f`에서 코드 snippet 수집 구현, 아직 `main` 미병합 |
-| AI 기반 | FastAPI, `/health`, Gemini Provider, P0 System Prompt 구현 |
+| AI 기반 | FastAPI, `/health`, Gemini Provider, P0/P1/P2 혼합 깊이 System Prompt 구현 |
 | AI 내부 파이프라인 | P0 정규화·Prompt Context·Repository 참조 Validator 구현 |
 | AI P1/P2 | 내부 Evidence 모델과 P0→P1→P2 누적 Criteria·Loader 구현 |
 | 실제 연동 | 최종 Pydantic Wire DTO와 리포트 API 구현 후 진행 예정 |
@@ -118,5 +118,5 @@ MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 또는 자체 ML 모�
 
 ## 다음 작업
 
-AI의 다음 작업은 `P0/P1/P2 혼합 깊이 System Prompt 확장`이다. 이후 정규화,
-깊이 Validator와 Repository·Portfolio Service를 순서대로 확장한다.
+AI의 다음 작업은 `P1/P2 정규화와 Prompt Context 확장`이다. 이후 입력 참조·깊이 Validator와
+Repository·Portfolio Service를 순서대로 구현한다.

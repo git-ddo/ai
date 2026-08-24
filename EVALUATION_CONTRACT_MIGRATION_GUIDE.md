@@ -548,14 +548,15 @@ Backend P2 흐름에 맞추는 AI 구현 순서는 다음과 같다. 1~2단계�
 
 1. P1/P2 내부 Evidence 도메인 모델 확장 (완료)
 2. P1/P2 Criteria와 Loader 확장 (완료)
-3. 혼합 깊이 System Prompt와 Prompt Context 구현
-4. P1/P2 정규화와 입력 참조·깊이 Validator 구현
-5. Repository Service와 결과 정책 Validator 구현
-6. Portfolio·Interview·Statement 생성과 Report Service 구현
-7. Backend Schema 기준 Pydantic Wire DTO와 Error Envelope 구현
-8. `POST /internal/v1/portfolio-reports` 구현
-9. Fake Provider 기반 P0/P1/P2 계약 테스트
-10. 실제 Gemini와 Spring Boot E2E 연동
+3. 혼합 깊이 System Prompt 구현 (완료)
+4. P1/P2 정규화와 Prompt Context 구현
+5. 입력 참조·깊이 Validator 구현
+6. Repository Service와 결과 정책 Validator 구현
+7. Portfolio·Interview·Statement 생성과 Report Service 구현
+8. Backend Schema 기준 Pydantic Wire DTO와 Error Envelope 구현
+9. `POST /internal/v1/portfolio-reports` 구현
+10. Fake Provider 기반 P0/P1/P2 계약 테스트
+11. 실제 Gemini와 Spring Boot E2E 연동
 
 각 작업은 별도 논리적 커밋으로 구현하고, 구현되지 않은 기능을 문서에서 완료 상태로 표시하지
 않는다.
