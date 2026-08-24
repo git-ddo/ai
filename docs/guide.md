@@ -64,14 +64,14 @@ schemaVersion: "1.0"
 - [x] Repository Evidence·Claim 참조 Validator
 - [x] P1/P2 내부 Evidence 모델
 - [x] P1/P2 Criteria
-- [ ] 입력 참조·분석 깊이 Validator
+- [x] 입력 참조·분석 깊이 Validator
 - [ ] Repository·Portfolio·Report Service
 - [ ] 내용 정책 Validator와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 420개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+현재 AI 검증 기준은 전체 `pytest` 462개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
 P1/P2 분석과 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -331,14 +331,25 @@ ai/tests/test_depth_validator.py
 
 구현:
 
-- [ ] Evidence·Claim ID 전역 유일성
-- [ ] Repository·Snapshot 소유 관계
-- [ ] `sourceEvidenceRefs`, `relatedEvidenceRefs` 존재 검증
-- [ ] 교차 Repository 참조 금지
-- [ ] P0/P1/P2 타입·깊이 조합 검증
-- [ ] `completedEvidenceLevels`와 실제 Evidence 일치
-- [ ] P2 snippet 필수 메타데이터 검증
-- [ ] 참조 순환과 상향 깊이 파생 방지
+- [x] Evidence·Claim ID 전역 유일성
+- [x] Repository 구성원 소유 관계와 Repository Snapshot 존재 검증
+- [x] `sourceEvidenceRefs`, `relatedEvidenceRefs` 존재 검증
+- [x] 교차 Repository 참조 금지
+- [x] 요청 최대 깊이와 Repository별 완료 깊이 분리
+- [x] P0/P1/P2 타입·깊이 조합 검증
+- [x] `completedEvidenceLevels`와 실제 Evidence 일치
+- [x] P2 snippet 필수 메타데이터와 P1 source 검증
+- [x] 참조 순환과 상향 깊이 파생 방지
+
+입력 Reference Validator는 Backend가 전달한 Evidence·UserClaim 그래프를 LLM 호출 전에
+검증한다. 기존 Repository Policy Validator는 LLM이 생성한 결과의 참조를 검증하므로 책임이
+다르다. 내부 `requested_analysis_depth`는 요청 전체의 최대 깊이이고 Repository의
+`analysis_depth`는 해당 Repository가 실제 완료한 최대 깊이이다.
+
+현재 내부 Evidence는 Wire의 Evidence별 `repositoryId`·`snapshotSha`를 보존하지 않는다. 따라서
+Evidence별 Repository·Snapshot 값이 부모와 같은지는 향후 Wire DTO → 내부 모델 Mapper에서
+검증한다. 이번 단계에서는 Repository Snapshot 필수 여부와 내부 구성원의 Repository 소유
+관계까지만 검증한다.
 
 ### Phase 6. Repository 분석과 내용 정책 Validator
 

@@ -1,4 +1,6 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -59,3 +61,60 @@ class ReportPolicyError(Exception):
         self.violations = immutable_violations
         violation_codes = ", ".join(violation.code.value for violation in immutable_violations)
         super().__init__(f"Report policy validation failed: {violation_codes}")
+
+
+class InputViolationCode(StrEnum):
+    """Stable codes for deterministic input graph and depth validation failures."""
+
+    DUPLICATE_REPOSITORY_ID = "DUPLICATE_REPOSITORY_ID"
+    DUPLICATE_REPOSITORY_NAME = "DUPLICATE_REPOSITORY_NAME"
+    DUPLICATE_EVIDENCE_ID = "DUPLICATE_EVIDENCE_ID"
+    DUPLICATE_CLAIM_ID = "DUPLICATE_CLAIM_ID"
+    REPOSITORY_OWNERSHIP_MISMATCH = "REPOSITORY_OWNERSHIP_MISMATCH"
+    UNKNOWN_SOURCE_EVIDENCE_REF = "UNKNOWN_SOURCE_EVIDENCE_REF"
+    UNKNOWN_RELATED_EVIDENCE_REF = "UNKNOWN_RELATED_EVIDENCE_REF"
+    CROSS_REPOSITORY_REF = "CROSS_REPOSITORY_REF"
+    REFERENCE_CYCLE = "REFERENCE_CYCLE"
+    SNAPSHOT_REQUIRED = "SNAPSHOT_REQUIRED"
+    DEPTH_EXCEEDS_REQUESTED = "DEPTH_EXCEEDS_REQUESTED"
+    COMPLETED_LEVELS_INVALID = "COMPLETED_LEVELS_INVALID"
+    EVIDENCE_TYPE_DEPTH_MISMATCH = "EVIDENCE_TYPE_DEPTH_MISMATCH"
+    EVIDENCE_DEPTH_NOT_COMPLETED = "EVIDENCE_DEPTH_NOT_COMPLETED"
+    P2_METADATA_INVALID = "P2_METADATA_INVALID"
+    P2_SOURCE_INVALID = "P2_SOURCE_INVALID"
+    UPWARD_DEPTH_DERIVATION = "UPWARD_DEPTH_DERIVATION"
+
+
+@dataclass(frozen=True, slots=True)
+class InputViolation:
+    """One non-sensitive input invariant violation."""
+
+    code: InputViolationCode
+    message: str
+    field_path: str | None = None
+
+    def __post_init__(self) -> None:
+        normalized_message = self.message.strip()
+        if not normalized_message:
+            raise ValueError("Input violation message must not be blank")
+        object.__setattr__(self, "message", normalized_message)
+
+        if self.field_path is None:
+            return
+        normalized_path = self.field_path.strip()
+        if not normalized_path:
+            raise ValueError("Input violation field_path must not be blank")
+        object.__setattr__(self, "field_path", normalized_path)
+
+
+class InputValidationError(ValueError):
+    """Raised when internal analysis input violates graph or depth invariants."""
+
+    def __init__(self, violations: Sequence[InputViolation]) -> None:
+        immutable_violations = tuple(violations)
+        if not immutable_violations:
+            raise ValueError("InputValidationError requires at least one violation")
+
+        self.violations = immutable_violations
+        violation_codes = ", ".join(violation.code.value for violation in immutable_violations)
+        super().__init__(f"Input validation failed: {violation_codes}")

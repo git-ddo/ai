@@ -200,6 +200,7 @@ class InternalRepositoryInput(InternalDomainModel):
 class InternalPortfolioInput(InternalDomainModel):
     """One to five repository inputs sharing analysis-wide identifier scopes."""
 
+    requested_analysis_depth: AnalysisDepth
     repositories: tuple[InternalRepositoryInput, ...] = Field(
         min_length=1,
         max_length=5,

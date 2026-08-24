@@ -482,7 +482,10 @@ def test_creates_portfolio_with_mixed_repository_depths() -> None:
         user_claims=(make_claim(claim_id="claim_003", repository_full_name="git-ddo/p2"),),
     )
 
-    portfolio = InternalPortfolioInput(repositories=(p0_repository, p1_repository, p2_repository))
+    portfolio = InternalPortfolioInput(
+        requested_analysis_depth=AnalysisDepth.P2,
+        repositories=(p0_repository, p1_repository, p2_repository),
+    )
 
     assert tuple(repository.analysis_depth for repository in portfolio.repositories) == (
         AnalysisDepth.P0,
@@ -1009,9 +1012,18 @@ def test_creates_internal_portfolio_input_with_one_to_five_repositories(
         make_portfolio_repository_input(index) for index in range(1, repository_count + 1)
     )
 
-    portfolio_input = InternalPortfolioInput(repositories=repositories)
+    portfolio_input = InternalPortfolioInput(
+        requested_analysis_depth=AnalysisDepth.P0,
+        repositories=repositories,
+    )
 
+    assert portfolio_input.requested_analysis_depth is AnalysisDepth.P0
     assert portfolio_input.repositories == repositories
+
+
+def test_internal_portfolio_input_requires_requested_analysis_depth() -> None:
+    with pytest.raises(ValidationError, match="requested_analysis_depth"):
+        InternalPortfolioInput(repositories=(make_portfolio_repository_input(1),))
 
 
 @pytest.mark.parametrize("repository_count", [0, 6])
@@ -1023,7 +1035,10 @@ def test_rejects_internal_portfolio_input_outside_repository_limit(
     )
 
     with pytest.raises(ValidationError):
-        InternalPortfolioInput(repositories=repositories)
+        InternalPortfolioInput(
+            requested_analysis_depth=AnalysisDepth.P0,
+            repositories=repositories,
+        )
 
 
 def test_internal_portfolio_input_rejects_duplicate_repository_id() -> None:
@@ -1038,7 +1053,10 @@ def test_internal_portfolio_input_rejects_duplicate_repository_id() -> None:
     )
 
     with pytest.raises(ValidationError, match="duplicate repository ID"):
-        InternalPortfolioInput(repositories=repositories)
+        InternalPortfolioInput(
+            requested_analysis_depth=AnalysisDepth.P0,
+            repositories=repositories,
+        )
 
 
 def test_internal_portfolio_input_rejects_duplicate_repository_full_name() -> None:
@@ -1053,7 +1071,10 @@ def test_internal_portfolio_input_rejects_duplicate_repository_full_name() -> No
     )
 
     with pytest.raises(ValidationError, match="duplicate repository full name"):
-        InternalPortfolioInput(repositories=repositories)
+        InternalPortfolioInput(
+            requested_analysis_depth=AnalysisDepth.P0,
+            repositories=repositories,
+        )
 
 
 def test_internal_portfolio_input_rejects_evidence_id_reused_across_repositories() -> None:
@@ -1067,7 +1088,10 @@ def test_internal_portfolio_input_rejects_evidence_id_reused_across_repositories
     )
 
     with pytest.raises(ValidationError, match="duplicate evidence ID across repositories"):
-        InternalPortfolioInput(repositories=(first, second))
+        InternalPortfolioInput(
+            requested_analysis_depth=AnalysisDepth.P0,
+            repositories=(first, second),
+        )
 
 
 def test_internal_portfolio_input_rejects_claim_id_reused_across_repositories() -> None:
@@ -1081,13 +1105,19 @@ def test_internal_portfolio_input_rejects_claim_id_reused_across_repositories() 
     )
 
     with pytest.raises(ValidationError, match="duplicate claim ID across repositories"):
-        InternalPortfolioInput(repositories=(first, second))
+        InternalPortfolioInput(
+            requested_analysis_depth=AnalysisDepth.P0,
+            repositories=(first, second),
+        )
 
 
 def test_internal_portfolio_input_keeps_same_evidence_content_with_distinct_ids() -> None:
     repositories = tuple(make_portfolio_repository_input(index) for index in (1, 2))
 
-    portfolio_input = InternalPortfolioInput(repositories=repositories)
+    portfolio_input = InternalPortfolioInput(
+        requested_analysis_depth=AnalysisDepth.P0,
+        repositories=repositories,
+    )
 
     assert tuple(
         repository.evidence[0].evidence_id for repository in portfolio_input.repositories
@@ -1100,7 +1130,10 @@ def test_internal_portfolio_input_keeps_same_evidence_content_with_distinct_ids(
 def test_internal_portfolio_input_preserves_repository_order() -> None:
     repositories = tuple(make_portfolio_repository_input(index) for index in (3, 1, 2))
 
-    portfolio_input = InternalPortfolioInput(repositories=repositories)
+    portfolio_input = InternalPortfolioInput(
+        requested_analysis_depth=AnalysisDepth.P0,
+        repositories=repositories,
+    )
 
     assert tuple(repository.repository_id for repository in portfolio_input.repositories) == (
         "3",
@@ -1112,13 +1145,17 @@ def test_internal_portfolio_input_preserves_repository_order() -> None:
 def test_internal_portfolio_input_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         InternalPortfolioInput(
+            requested_analysis_depth=AnalysisDepth.P0,
             repositories=(make_portfolio_repository_input(1),),
             contract_version="1.0",
         )
 
 
 def test_internal_portfolio_input_is_frozen() -> None:
-    portfolio_input = InternalPortfolioInput(repositories=(make_portfolio_repository_input(1),))
+    portfolio_input = InternalPortfolioInput(
+        requested_analysis_depth=AnalysisDepth.P0,
+        repositories=(make_portfolio_repository_input(1),),
+    )
 
     with pytest.raises(ValidationError, match="Instance is frozen"):
         portfolio_input.repositories = ()  # type: ignore[misc]
