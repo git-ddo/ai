@@ -31,15 +31,14 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] 문자열 Repository ID와 Repository별 완료 Evidence 깊이
 - [x] P2 코드 위치·commit·PR·source Evidence 구조
 - [x] Portfolio 범위 Evidence·Claim ID 중복 검증
-- [x] P0 Repository 입력 정규화
-- [x] Repository·Portfolio·Interview Prompt Context
+- [x] P0/P1/P2 Repository 입력 정규화
+- [x] P0/P1/P2 깊이별 Repository·Portfolio·Interview Prompt Context
 - [x] Prompt 예약 마커 충돌 방지
 - [x] 내부 정책 위반 타입과 `ReportPolicyError`
 - [x] Repository Finding의 Evidence·Claim 참조 Validator
 
 ### 다음 구현
 
-- [ ] P1/P2 정규화와 Prompt Context
 - [ ] 입력 참조·분석 깊이 Validator
 - [ ] Repository·Portfolio·Report Service
 - [ ] 생성 결과 내용 정책 Validator
@@ -48,8 +47,8 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 401개이다. 이 수치는 실제 Gemini 호출, P1/P2 분석과 Portfolio Report
-Wire API를 포함하지 않는다.
+현재 전체 테스트 기준은 420개이다. 이 수치는 실제 Gemini 호출, Repository·Portfolio Service와
+Portfolio Report Wire API를 포함하지 않는다.
 
 ## 목표 지원 범위
 
@@ -247,5 +246,5 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 다음 작업
 
-다음 논리적 작업 단위는 `P1/P2 정규화와 Prompt Context 확장`이다. 상세 필드와 완료 조건은
-[`docs/guide.md`](../docs/guide.md)의 Phase 4를 따른다.
+다음 논리적 작업 단위는 `입력 참조·분석 깊이 Validator 확장`이다. 상세 필드와 완료 조건은
+[`docs/guide.md`](../docs/guide.md)의 Phase 5를 따른다.

@@ -57,21 +57,21 @@ schemaVersion: "1.0"
 - [x] Gemini Structured Output Provider와 Fake Provider
 - [x] HTTP DTO와 분리된 P0/P1/P2 내부 Evidence 모델
 - [x] 분석 전체 Evidence·Claim ID 중복 검증
-- [x] P0 입력 정규화
-- [x] Repository·Portfolio·Interview Prompt Context
+- [x] P0/P1/P2 입력 정규화
+- [x] P0/P1/P2 깊이별 Repository·Portfolio·Interview Prompt Context
 - [x] Prompt 예약 마커 충돌 방지
 - [x] 정책 위반 타입과 `ReportPolicyError`
 - [x] Repository Evidence·Claim 참조 Validator
 - [x] P1/P2 내부 Evidence 모델
 - [x] P1/P2 Criteria
-- [ ] P1/P2 정규화·Prompt Context·깊이 Validator
+- [ ] 입력 참조·분석 깊이 Validator
 - [ ] Repository·Portfolio·Report Service
 - [ ] 내용 정책 Validator와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 401개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+현재 AI 검증 기준은 전체 `pytest` 420개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
 P1/P2 분석과 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -296,23 +296,25 @@ System Prompt는 외부 데이터를 인자로 받지 않는 고정 정책을 �
 대상:
 
 ```text
+ai/app/domain/models.py
 ai/app/services/normalization_service.py
 ai/app/prompts/context.py
 ai/app/prompts/repository.py
 ai/app/prompts/portfolio.py
 ai/app/prompts/interview.py
+ai/tests/test_domain_models.py
 ai/tests/test_normalization.py
 ai/tests/test_prompt_context.py
 ```
 
 구현:
 
-- [ ] P1/P2 Evidence 보존과 경로 정규화
-- [ ] line range·commit SHA·PR number 보존
-- [ ] `sourceEvidenceRefs` 보존
-- [ ] P0/P1/P2 data block 분리
-- [ ] code snippet도 untrusted JSON으로 직렬화
-- [ ] 기존 예약 마커 escape 회귀 테스트
+- [x] P1/P2 Evidence 보존과 경로 정규화
+- [x] line range·commit SHA·PR number 보존
+- [x] `sourceEvidenceRefs` 보존
+- [x] P0/P1/P2 data block 분리
+- [x] code snippet도 untrusted JSON으로 직렬화
+- [x] 기존 예약 마커 escape 회귀 테스트
 
 정규화 단계에서 새로운 기술·활동·사실을 추론하지 않는다.
 

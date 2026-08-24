@@ -51,10 +51,9 @@ UserClaim과 AI 추천은 Evidence가 아니다. `NOT_OBSERVED`는 수집 범위
 - 목표 조합은 `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0/P1/P2`이다.
 - Backend `main`은 P0/P1 수집과 Mock AI 흐름을 구현했다.
 - Backend P2는 별도 작업 브랜치에 구현되어 아직 `main`에 병합되지 않았다.
-- AI는 P0/P1/P2 누적 Criteria·Loader, 혼합 깊이 System Prompt, Provider, P0 정규화·Prompt
-  Context, Repository 참조 Validator와 P0/P1/P2 내부 Evidence 모델까지 구현했다.
-- AI의 P1/P2 정규화·Prompt Context, Service, 최종 Wire DTO와 실제 리포트 API는 후속 구현
-  대상이다.
+- AI는 P0/P1/P2 누적 Criteria·Loader, 혼합 깊이 System Prompt, Provider, P0/P1/P2
+  정규화·Prompt Context, Repository 참조 Validator와 내부 Evidence 모델까지 구현했다.
+- AI의 입력 참조·깊이 Validator, Service, 최종 Wire DTO와 실제 리포트 API는 후속 구현 대상이다.
 
 Schema에 표현 가능한 enum과 현재 실행 가능한 기능을 혼동하지 않는다. 구현되지 않은 깊이나
 기능을 완료 상태로 표시하지 않는다.

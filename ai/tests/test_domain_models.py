@@ -684,6 +684,68 @@ def test_creates_normalized_repository_context() -> None:
 
     assert context.evidence == (evidence,)
     assert context.technology_names == ("Spring Boot",)
+    assert context.completed_evidence_levels == (AnalysisDepth.P0,)
+
+
+@pytest.mark.parametrize("analysis_depth", [AnalysisDepth.P1, AnalysisDepth.P2])
+def test_normalized_context_preserves_completed_depth_and_snapshot(
+    analysis_depth: AnalysisDepth,
+) -> None:
+    completed_levels = (
+        (AnalysisDepth.P0, AnalysisDepth.P1)
+        if analysis_depth is AnalysisDepth.P1
+        else (AnalysisDepth.P0, AnalysisDepth.P1, AnalysisDepth.P2)
+    )
+    evidence = (
+        make_activity_evidence() if analysis_depth is AnalysisDepth.P1 else make_code_evidence()
+    )
+
+    context = NormalizedRepositoryContext(
+        repository_id="1",
+        repository_full_name="git-ddo/backend",
+        analysis_depth=analysis_depth,
+        completed_evidence_levels=completed_levels,
+        snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+        snapshot_sha="snapshot-sha",
+        evidence=(evidence,),
+    )
+
+    assert context.completed_evidence_levels == completed_levels
+    assert context.snapshot_hash_algorithm is SnapshotHashAlgorithm.SHA1
+    assert context.snapshot_sha == "snapshot-sha"
+
+
+def test_normalized_context_rejects_non_prefix_completed_levels() -> None:
+    with pytest.raises(ValidationError, match="ordered P0-to-analysis_depth prefix"):
+        NormalizedRepositoryContext(
+            repository_id="1",
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P2,
+            completed_evidence_levels=(AnalysisDepth.P0, AnalysisDepth.P2),
+            snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+            snapshot_sha="snapshot-sha",
+            evidence=(make_code_evidence(),),
+        )
+
+
+def test_normalized_context_rejects_missing_or_partial_p1_snapshot() -> None:
+    with pytest.raises(ValidationError, match="requires snapshot metadata"):
+        NormalizedRepositoryContext(
+            repository_id="1",
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P1,
+            completed_evidence_levels=(AnalysisDepth.P0, AnalysisDepth.P1),
+            evidence=(make_activity_evidence(),),
+        )
+
+    with pytest.raises(ValidationError, match="must be provided together"):
+        NormalizedRepositoryContext(
+            repository_id="1",
+            repository_full_name="git-ddo/backend",
+            analysis_depth=AnalysisDepth.P0,
+            snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+            evidence=(make_evidence(),),
+        )
 
 
 def test_normalized_context_rejects_unknown_fields() -> None:

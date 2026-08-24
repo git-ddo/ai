@@ -3,9 +3,7 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 
 from app.domain import (
-    AnalysisDepth,
     InternalEvidence,
-    InternalEvidenceType,
     InternalRepositoryInput,
     NormalizedRepositoryContext,
 )
@@ -28,7 +26,7 @@ DEFAULT_TECHNOLOGY_ALIASES: Mapping[str, str] = MappingProxyType(
 
 
 class NormalizationError(ValueError):
-    """Raised when validated input violates canonical P0 normalization rules."""
+    """Raised when validated input violates canonical repository normalization rules."""
 
 
 class NormalizationService:
@@ -45,25 +43,30 @@ class NormalizationService:
         self,
         repository: InternalRepositoryInput,
     ) -> NormalizedRepositoryContext:
-        self._validate_p0_boundary(repository)
+        validated_repository = self._validate_repository(repository)
 
         normalized_evidence = tuple(
             sorted(
-                (self._normalize_evidence(item) for item in repository.evidence),
+                (self._normalize_evidence(item) for item in validated_repository.evidence),
                 key=lambda item: item.evidence_id,
             )
         )
-        normalized_claims = tuple(sorted(repository.user_claims, key=lambda item: item.claim_id))
+        normalized_claims = tuple(
+            sorted(validated_repository.user_claims, key=lambda item: item.claim_id)
+        )
         repository_technologies = self._normalize_technology_names(
             technology for item in normalized_evidence for technology in item.technology_names
         )
 
         try:
             return NormalizedRepositoryContext(
-                repository_id=repository.repository_id,
-                repository_full_name=repository.repository_full_name,
-                description=repository.description,
-                analysis_depth=repository.analysis_depth,
+                repository_id=validated_repository.repository_id,
+                repository_full_name=validated_repository.repository_full_name,
+                description=validated_repository.description,
+                analysis_depth=validated_repository.analysis_depth,
+                completed_evidence_levels=validated_repository.completed_evidence_levels,
+                snapshot_hash_algorithm=validated_repository.snapshot_hash_algorithm,
+                snapshot_sha=validated_repository.snapshot_sha,
                 evidence=normalized_evidence,
                 user_claims=normalized_claims,
                 technology_names=repository_technologies,
@@ -78,6 +81,9 @@ class NormalizationService:
             sorted({self._normalize_repository_path(path) for path in evidence.source_paths})
         )
         normalized_technologies = self._normalize_technology_names(evidence.technology_names)
+        normalized_path = (
+            self._normalize_repository_path(evidence.path) if evidence.path is not None else None
+        )
 
         try:
             return InternalEvidence(
@@ -90,7 +96,7 @@ class NormalizationService:
                 value_type=evidence.value_type,
                 source_paths=normalized_paths,
                 technology_names=normalized_technologies,
-                path=evidence.path,
+                path=normalized_path,
                 start_line=evidence.start_line,
                 end_line=evidence.end_line,
                 commit_sha=evidence.commit_sha,
@@ -102,18 +108,13 @@ class NormalizationService:
             raise NormalizationError("Evidence normalization failed.") from exc
 
     @staticmethod
-    def _validate_p0_boundary(repository: InternalRepositoryInput) -> None:
-        if repository.analysis_depth is not AnalysisDepth.P0:
-            raise NormalizationError("Only P0 repository input can be normalized.")
-
-        allowed_evidence_types = {
-            InternalEvidenceType.GITHUB_STATIC,
-            InternalEvidenceType.BACKEND_DERIVED,
-        }
-        if any(
-            evidence.evidence_type not in allowed_evidence_types for evidence in repository.evidence
-        ):
-            raise NormalizationError("Repository input contains non-P0 evidence.")
+    def _validate_repository(repository: InternalRepositoryInput) -> InternalRepositoryInput:
+        try:
+            return InternalRepositoryInput.model_validate(repository.model_dump())
+        except ValueError as exc:
+            raise NormalizationError(
+                "Repository input failed depth or evidence validation."
+            ) from exc
 
     @staticmethod
     def _normalize_repository_path(path: str) -> str:

@@ -51,7 +51,14 @@ def render_section(name: str, content: str) -> str:
 
 
 def build_repository_data(context: NormalizedRepositoryContext) -> dict[str, object]:
-    """Keep repository metadata, evidence, and user claims in separate data fields."""
+    """Keep repository metadata, depth-scoped evidence, and user claims separate."""
+
+    evidence_by_depth = {
+        depth.value: tuple(
+            evidence for evidence in context.evidence if evidence.analysis_depth is depth
+        )
+        for depth in context.completed_evidence_levels
+    }
 
     return {
         "repository": {
@@ -59,9 +66,12 @@ def build_repository_data(context: NormalizedRepositoryContext) -> dict[str, obj
             "repository_full_name": context.repository_full_name,
             "description": context.description,
             "analysis_depth": context.analysis_depth,
+            "completed_evidence_levels": context.completed_evidence_levels,
+            "snapshot_hash_algorithm": context.snapshot_hash_algorithm,
+            "snapshot_sha": context.snapshot_sha,
             "technology_names": context.technology_names,
         },
-        "evidence": context.evidence,
+        "evidence_by_depth": evidence_by_depth,
         "user_claims": context.user_claims,
     }
 

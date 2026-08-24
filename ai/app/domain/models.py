@@ -239,12 +239,28 @@ class NormalizedRepositoryContext(InternalDomainModel):
     repository_full_name: NonEmptyString
     description: NonEmptyString | None = None
     analysis_depth: AnalysisDepth
+    completed_evidence_levels: tuple[AnalysisDepth, ...] = (AnalysisDepth.P0,)
+    snapshot_hash_algorithm: SnapshotHashAlgorithm | None = None
+    snapshot_sha: NonEmptyString | None = None
     evidence: tuple[InternalEvidence, ...] = Field(min_length=1)
     user_claims: tuple[InternalUserClaim, ...] = ()
     technology_names: tuple[NonEmptyString, ...] = ()
 
     @model_validator(mode="after")
     def validate_normalized_members(self) -> Self:
+        expected_levels = _COMPLETED_DEPTH_PREFIXES[self.analysis_depth]
+        if self.completed_evidence_levels != expected_levels:
+            raise ValueError(
+                "completed_evidence_levels must be the ordered P0-to-analysis_depth prefix"
+            )
+
+        has_snapshot_algorithm = self.snapshot_hash_algorithm is not None
+        has_snapshot_sha = self.snapshot_sha is not None
+        if has_snapshot_algorithm != has_snapshot_sha:
+            raise ValueError("snapshot_hash_algorithm and snapshot_sha must be provided together")
+        if self.analysis_depth is not AnalysisDepth.P0 and not has_snapshot_sha:
+            raise ValueError("P1/P2 normalized context requires snapshot metadata")
+
         evidence_ids = [item.evidence_id for item in self.evidence]
         if len(evidence_ids) != len(set(evidence_ids)):
             raise ValueError("evidence IDs must be unique within a normalized context")
@@ -257,6 +273,10 @@ class NormalizedRepositoryContext(InternalDomainModel):
             raise ValueError("evidence must belong to the normalized repository")
         if any(item.repository_full_name != self.repository_full_name for item in self.user_claims):
             raise ValueError("user claims must belong to the normalized repository")
+
+        completed_levels = set(self.completed_evidence_levels)
+        if any(item.analysis_depth not in completed_levels for item in self.evidence):
+            raise ValueError("evidence depth must be included in completed_evidence_levels")
 
         if len(self.technology_names) != len(set(self.technology_names)):
             raise ValueError("normalized technology names must be unique")
