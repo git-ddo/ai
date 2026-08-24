@@ -63,6 +63,10 @@ class ReportPolicyError(Exception):
         super().__init__(f"Report policy validation failed: {violation_codes}")
 
 
+class RepositoryAnalysisError(ValueError):
+    """Raised when repository service inputs violate orchestration boundaries."""
+
+
 class InputViolationCode(StrEnum):
     """Stable codes for deterministic input graph and depth validation failures."""
 

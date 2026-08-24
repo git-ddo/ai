@@ -67,13 +67,13 @@ schemaVersion: "1.0"
 - [x] 입력 참조·분석 깊이 Validator
 - [x] Repository 생성 결과의 Criteria·기술·파일 grounding 메타데이터
 - [x] Repository 생성 결과 내용 정책 Validator
-- [ ] Repository·Portfolio·Report Service
-- [ ] 정책 실패 재생성과 내부 전체 오케스트레이션
+- [x] Repository 분석 Service와 정책 실패 1회 재생성
+- [ ] Portfolio·Report Service와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 503개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+현재 AI 검증 기준은 전체 `pytest` 525개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
 P1/P2 분석과 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -385,15 +385,21 @@ NormalizedRepositoryContext
 - [x] P2 snippet의 Repository 전체 일반화 검출
 - [x] UserClaim 사실 승격과 `NOT_OBSERVED` 오용 검출
 - [x] 누락 Recommendation의 명시적 `BACKEND_DERIVED` Evidence 검증
-- [ ] Repository별 독립 생성
-- [ ] Evidence·Claim 참조 검증 연결
-- [ ] 최초 정책 실패 시 최대 1회 재생성
-- [ ] 재검증 실패 시 전체 분석 오류
+- [x] Repository별 독립 생성
+- [x] Evidence·Claim 참조 검증 연결
+- [x] 최초 정책 실패 시 최대 1회 재생성
+- [x] 재검증 실패 시 전체 Repository 분석 오류
 
 내용 정책 Validator는 순수 Python 규칙으로 동작한다. 기술명·파일 경로·Criteria는 구조화된
 메타데이터를 allowlist와 비교해 결정적으로 검증한다. 자연어 단정 검출은 보수적인 고정 패턴을
 사용하므로 모든 표현을 완전하게 판별하는 장치는 아니며 Prompt 제한과 Service의 1회 재생성을
 함께 사용한다.
+
+`RepositoryAnalysisService`는 Gemini 구현체가 아니라 `LLMProvider`에 의존한다. Provider의
+429·timeout·5xx retry와 생성 결과 정책 재생성은 별도 흐름이다. 정책 재생성 Prompt에는 이전
+응답이나 위반 메시지를 넣지 않고 중복을 제거한 위반 코드만 추가하며, 두 Provider 호출이
+성공하면 `duration_ms`와 `attempt_count`를 합산한다. 두 번째 정책 검증 실패 시 마지막
+`ReportPolicyError`를 그대로 반환한다.
 
 ### Phase 7. Portfolio·Interview·Statement 생성
 

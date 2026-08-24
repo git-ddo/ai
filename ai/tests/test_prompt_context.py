@@ -21,6 +21,7 @@ from app.prompts import (
     PromptContextError,
     build_interview_prompt,
     build_portfolio_prompt,
+    build_repository_correction_prompt,
     build_repository_prompt,
     build_system_prompt,
 )
@@ -31,6 +32,7 @@ from app.prompts.context import (
     TASK_SECTION,
     serialize_untrusted_data,
 )
+from app.validators import PolicyViolationCode
 
 RESERVED_SECTION_MARKERS = tuple(
     f"[{section}_{boundary}]"
@@ -246,6 +248,34 @@ def test_repository_prompt_is_non_empty_and_deterministic(criteria: CriteriaSet)
 
     assert first
     assert first == second
+
+
+def test_repository_correction_prompt_contains_only_deduplicated_policy_codes(
+    criteria: CriteriaSet,
+) -> None:
+    prompt = build_repository_correction_prompt(
+        make_context(),
+        criteria,
+        (
+            PolicyViolationCode.UNKNOWN_TECHNOLOGY,
+            PolicyViolationCode.UNKNOWN_FILE_PATH,
+            PolicyViolationCode.UNKNOWN_TECHNOLOGY,
+        ),
+    )
+    task = extract_section(prompt, TASK_SECTION)
+
+    assert task.count("- UNKNOWN_TECHNOLOGY") == 1
+    assert task.count("- UNKNOWN_FILE_PATH") == 1
+    assert task.index("UNKNOWN_TECHNOLOGY") < task.index("UNKNOWN_FILE_PATH")
+    assert "전체를 처음부터 다시 생성" in task
+    assert "일부 항목을 삭제하지 않는다" in task
+
+
+def test_repository_correction_prompt_rejects_empty_violation_codes(
+    criteria: CriteriaSet,
+) -> None:
+    with pytest.raises(PromptContextError, match="policy violation code"):
+        build_repository_correction_prompt(make_context(), criteria, ())
 
 
 def test_repository_prompt_separates_criteria_data_and_task(criteria: CriteriaSet) -> None:

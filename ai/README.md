@@ -40,17 +40,17 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] 요청 최대 깊이와 Repository별 완료 깊이 Validator
 - [x] Repository 결과의 Criteria·기술·파일 grounding 메타데이터
 - [x] P0/P1/P2 Repository 생성 결과 내용 정책 Validator
+- [x] Repository 분석 Service와 정책 실패 1회 재생성
 
 ### 다음 구현
 
-- [ ] Repository·Portfolio·Report Service
-- [ ] 정책 실패 후 Repository 결과 1회 재생성
+- [ ] Portfolio·Report Service
 - [ ] 전체 270초 분석 deadline
 - [ ] Backend Schema 기준 Pydantic Wire DTO와 Error Envelope
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 503개이다. 이 수치는 실제 Gemini 호출, Repository·Portfolio Service와
+현재 전체 테스트 기준은 525개이다. 이 수치는 실제 Gemini 호출, Portfolio Service와
 Portfolio Report Wire API를 포함하지 않는다.
 
 ## 목표 지원 범위
@@ -130,6 +130,11 @@ Criteria와 Repository Context의 기술·경로 allowlist에 대조하고, P0/P
 UserClaim의 사실 승격, `NOT_OBSERVED` 오용과 근거 없는 누락 Recommendation을 거절한다.
 자연어 정책 검출은 보수적인 고정 패턴 기반이며 모든 표현을 완전히 판별하지는 못한다.
 
+`RepositoryAnalysisService`는 정규화된 Repository Context에 맞는 누적 Criteria와 Prompt를
+선택하고 `LLMProvider`를 통해 `RepositoryAnalysis`를 생성한다. 참조 검증 후 내용 정책을
+검증하며 최초 정책 실패에 한해서만 위반 코드 기반 교정 Prompt로 전체 결과를 한 번
+재생성한다. Provider 네트워크 retry와 이 정책 재생성은 서로 다른 책임이다.
+
 Evidence별 Wire `repositoryId`·`snapshotSha`는 아직 내부 Evidence에 보존하지 않는다. 해당 값과
 부모 Repository의 일치 여부는 향후 Wire DTO → 내부 모델 Mapper에서 검증한다.
 
@@ -192,7 +197,7 @@ ai/
 └── pyproject.toml
 ```
 
-`repository_service.py`, `portfolio_service.py`, `report_service.py`는 아직 후속 구현 경계이다.
+`portfolio_service.py`, `report_service.py`는 아직 후속 구현 경계이다.
 `schemas/`의 기존 초안은 현재 Backend Wire 계약으로 교체해야 한다.
 
 ## 환경 설정

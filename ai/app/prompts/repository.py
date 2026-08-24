@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from app.criteria.models import CriteriaSet
 from app.domain import AnalysisDepth, NormalizedRepositoryContext
 from app.prompts.context import (
@@ -10,6 +12,7 @@ from app.prompts.context import (
     serialize_criteria,
     serialize_untrusted_data,
 )
+from app.validators.report_validator import PolicyViolationCode
 
 _REPOSITORY_TASK_TEMPLATE = """
 BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의 RepositoryAnalysis를 생성한다.
@@ -56,6 +59,18 @@ _P2_REPOSITORY_RULES = """
 - snippet 밖의 코드나 호출 관계를 추정하지 않는다.
 """.strip()
 
+_CORRECTION_TASK_TEMPLATE = """
+{base_task}
+
+이전 생성 결과가 다음 정책 위반 코드로 거절되었다.
+{violation_codes}
+
+- 이전 결과를 수정하거나 일부 항목을 삭제하지 않는다.
+- 입력 Evidence와 UserClaim만 사용해 RepositoryAnalysis 전체를 처음부터 다시 생성한다.
+- 위반 코드에 해당하는 정책을 모두 준수한다.
+- 이전 응답의 문장이나 오류 메시지를 추정하거나 재현하지 않는다.
+""".strip()
+
 
 def build_repository_prompt(
     context: NormalizedRepositoryContext,
@@ -70,6 +85,38 @@ def build_repository_prompt(
 
     task = _build_repository_task(context)
 
+    return "\n\n".join(
+        (
+            render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
+            render_section(
+                REPOSITORY_DATA_SECTION,
+                serialize_untrusted_data(build_repository_data(context)),
+            ),
+            render_section(TASK_SECTION, task),
+        )
+    )
+
+
+def build_repository_correction_prompt(
+    context: NormalizedRepositoryContext,
+    criteria: CriteriaSet,
+    violation_codes: Sequence[PolicyViolationCode],
+) -> str:
+    """Build a full-regeneration prompt using only stable policy codes."""
+
+    if context.analysis_depth is not criteria.analysis_depth:
+        raise PromptContextError(
+            "Repository context and criteria must use the same analysis depth."
+        )
+
+    unique_codes = tuple(dict.fromkeys(violation_codes))
+    if not unique_codes:
+        raise PromptContextError("Repository correction requires a policy violation code.")
+
+    task = _CORRECTION_TASK_TEMPLATE.format(
+        base_task=_build_repository_task(context),
+        violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
+    )
     return "\n\n".join(
         (
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
