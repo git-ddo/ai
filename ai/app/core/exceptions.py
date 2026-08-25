@@ -71,6 +71,10 @@ class PortfolioSynthesisError(ValueError):
     """Raised when portfolio synthesis inputs violate orchestration boundaries."""
 
 
+class InterviewQuestionGenerationError(ValueError):
+    """Raised when interview generation inputs violate orchestration boundaries."""
+
+
 class InputViolationCode(StrEnum):
     """Stable codes for deterministic input graph and depth validation failures."""
 

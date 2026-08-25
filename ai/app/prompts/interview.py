@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from app.criteria.models import CriteriaSet
 from app.domain import AnalysisDepth, NormalizedRepositoryContext, RepositoryAnalysis
 from app.prompts.context import (
@@ -11,6 +13,7 @@ from app.prompts.context import (
     serialize_criteria,
     serialize_untrusted_data,
 )
+from app.validators.report_validator import PolicyViolationCode
 
 _INTERVIEW_TASK_TEMPLATE = """
 BACKEND × ENTRY × {analysis_depth} 범위에서 최대 {question_count}개의 프로젝트 기반
@@ -45,6 +48,19 @@ _P2_INTERVIEW_RULES = """
   테스트 사례만 질문 소재로 사용한다.
 """.strip()
 
+_CORRECTION_TASK_TEMPLATE = """
+{base_task}
+
+이전 생성 결과가 다음 정책 위반 코드로 거절되었다.
+{violation_codes}
+
+- 이전 결과의 일부 질문을 삭제하거나 수정하지 않는다.
+- 입력 Evidence, UserClaim과 RepositoryAnalysis만 사용해 InterviewQuestionBatch 전체를
+  처음부터 다시 생성한다.
+- 위반 코드에 해당하는 정책을 모두 준수한다.
+- 이전 응답의 문장, 오류 메시지 또는 필드 경로를 추정하거나 재현하지 않는다.
+""".strip()
+
 
 def build_interview_prompt(
     context: NormalizedRepositoryContext,
@@ -55,16 +71,60 @@ def build_interview_prompt(
 ) -> str:
     """Build the user prompt for depth-scoped grounded interview questions."""
 
+    _validate_interview_inputs(context, repository_analysis, criteria, question_count)
+
+    task = _build_interview_task(context, question_count)
+    return _render_interview_prompt(context, repository_analysis, criteria, task)
+
+
+def build_interview_correction_prompt(
+    context: NormalizedRepositoryContext,
+    repository_analysis: RepositoryAnalysis,
+    criteria: CriteriaSet,
+    violation_codes: Sequence[PolicyViolationCode],
+    *,
+    question_count: int = 5,
+) -> str:
+    """Build a full interview regeneration prompt using stable policy codes only."""
+
+    _validate_interview_inputs(context, repository_analysis, criteria, question_count)
+    unique_codes = tuple(dict.fromkeys(violation_codes))
+    if not unique_codes:
+        raise PromptContextError("Interview correction requires a policy violation code.")
+
+    task = _CORRECTION_TASK_TEMPLATE.format(
+        base_task=_build_interview_task(context, question_count),
+        violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
+    )
+    return _render_interview_prompt(context, repository_analysis, criteria, task)
+
+
+def _validate_interview_inputs(
+    context: NormalizedRepositoryContext,
+    repository_analysis: RepositoryAnalysis,
+    criteria: CriteriaSet,
+    question_count: int,
+) -> None:
     if context.repository_full_name != repository_analysis.repository_full_name:
         raise PromptContextError(
             "Interview context and analysis must reference the same repository."
         )
-    if isinstance(question_count, bool) or not 1 <= question_count <= 10:
+    if (
+        isinstance(question_count, bool)
+        or not isinstance(question_count, int)
+        or not 1 <= question_count <= 10
+    ):
         raise PromptContextError("Interview question count must be between one and ten.")
     if context.analysis_depth is not criteria.analysis_depth:
         raise PromptContextError("Interview context and criteria must use the same analysis depth.")
 
-    task = _build_interview_task(context, question_count)
+
+def _render_interview_prompt(
+    context: NormalizedRepositoryContext,
+    repository_analysis: RepositoryAnalysis,
+    criteria: CriteriaSet,
+    task: str,
+) -> str:
     return "\n\n".join(
         (
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
