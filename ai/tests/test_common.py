@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from app.core.config import Settings
 from app.schemas.common import (
     AnalysisPurpose,
     ApiModel,
@@ -88,3 +89,34 @@ def test_api_model_rejects_unknown_fields() -> None:
         )
 
     assert exc_info.value.errors()[0]["type"] == "extra_forbidden"
+
+
+def test_settings_default_analysis_deadline_is_270_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AI_ANALYSIS_DEADLINE_SECONDS", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_analysis_deadline_seconds == 270.0
+
+
+def test_settings_allows_analysis_deadline_environment_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_ANALYSIS_DEADLINE_SECONDS", "120.5")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ai_analysis_deadline_seconds == 120.5
+
+
+@pytest.mark.parametrize("deadline", ["0", "-1", "300.1"])
+def test_settings_rejects_invalid_analysis_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+    deadline: str,
+) -> None:
+    monkeypatch.setenv("AI_ANALYSIS_DEADLINE_SECONDS", deadline)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

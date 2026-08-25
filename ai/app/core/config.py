@@ -26,6 +26,12 @@ class Settings(BaseSettings):
         le=5,
         validation_alias="LLM_MAX_RETRIES",
     )
+    ai_analysis_deadline_seconds: float = Field(
+        default=270.0,
+        gt=0,
+        le=300,
+        validation_alias="AI_ANALYSIS_DEADLINE_SECONDS",
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

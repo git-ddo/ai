@@ -390,7 +390,12 @@ def make_generation_records(
             question.repository_full_name for question in analysis.interview_questions
         )
     )
-    return repository_records + (portfolio_record,) + interview_records
+    statement_record = InternalGenerationRecord(
+        stage=InternalGenerationStage.STATEMENT,
+        duration_ms=15,
+        attempt_count=1,
+    )
+    return repository_records + (portfolio_record,) + interview_records + (statement_record,)
 
 
 def test_creates_valid_p0_repository_input() -> None:
@@ -1741,10 +1746,16 @@ def test_repository_scoped_generation_record_requires_repository_name(
         InternalGenerationRecord(stage=stage, duration_ms=0, attempt_count=1)
 
 
-def test_portfolio_generation_record_rejects_repository_name() -> None:
+@pytest.mark.parametrize(
+    "stage",
+    [InternalGenerationStage.PORTFOLIO, InternalGenerationStage.STATEMENT],
+)
+def test_portfolio_scoped_generation_record_rejects_repository_name(
+    stage: InternalGenerationStage,
+) -> None:
     with pytest.raises(ValidationError, match="must not reference a repository"):
         InternalGenerationRecord(
-            stage=InternalGenerationStage.PORTFOLIO,
+            stage=stage,
             repository_full_name="git-ddo/backend",
             duration_ms=0,
             attempt_count=1,
@@ -1779,9 +1790,16 @@ def test_creates_valid_internal_generation_records() -> None:
         duration_ms=20,
         attempt_count=1,
     )
+    statement_record = InternalGenerationRecord(
+        stage=InternalGenerationStage.STATEMENT,
+        duration_ms=15,
+        attempt_count=1,
+    )
 
     assert repository_record.repository_full_name == "git-ddo/backend"
     assert portfolio_record.repository_full_name is None
+    assert statement_record.repository_full_name is None
+    assert statement_record.model_dump(mode="json")["stage"] == "STATEMENT"
 
 
 @pytest.mark.parametrize("repository_count", [1, 5])
@@ -1832,6 +1850,32 @@ def test_internal_portfolio_report_rejects_duplicate_portfolio_records() -> None
         InternalPortfolioReport(
             analysis=analysis,
             generation_records=records + (portfolio_record,),
+        )
+
+
+def test_internal_portfolio_report_requires_one_statement_record() -> None:
+    analysis = make_portfolio_analysis()
+    records = tuple(
+        record
+        for record in make_generation_records(analysis)
+        if record.stage is not InternalGenerationStage.STATEMENT
+    )
+
+    with pytest.raises(ValidationError, match="exactly one STATEMENT"):
+        InternalPortfolioReport(analysis=analysis, generation_records=records)
+
+
+def test_internal_portfolio_report_rejects_duplicate_statement_records() -> None:
+    analysis = make_portfolio_analysis()
+    records = make_generation_records(analysis)
+    statement_record = next(
+        record for record in records if record.stage is InternalGenerationStage.STATEMENT
+    )
+
+    with pytest.raises(ValidationError, match="exactly one STATEMENT"):
+        InternalPortfolioReport(
+            analysis=analysis,
+            generation_records=records + (statement_record,),
         )
 
 

@@ -616,16 +616,17 @@ class InternalGenerationRecord(InternalDomainModel):
         }
         if self.stage in repository_scoped_stages and self.repository_full_name is None:
             raise ValueError(f"{self.stage} generation requires a repository full name")
-        if (
-            self.stage is InternalGenerationStage.PORTFOLIO
-            and self.repository_full_name is not None
-        ):
-            raise ValueError("PORTFOLIO generation must not reference a repository")
+        portfolio_scoped_stages = {
+            InternalGenerationStage.PORTFOLIO,
+            InternalGenerationStage.STATEMENT,
+        }
+        if self.stage in portfolio_scoped_stages and self.repository_full_name is not None:
+            raise ValueError(f"{self.stage} generation must not reference a repository")
         return self
 
 
 class InternalPortfolioReport(InternalDomainModel):
-    """Complete internal P0 result and provider-neutral generation records."""
+    """Complete internal P0/P1/P2 result and provider-neutral generation records."""
 
     analysis: PortfolioAnalysis
     generation_records: tuple[InternalGenerationRecord, ...] = Field(min_length=1)
@@ -643,6 +644,14 @@ class InternalPortfolioReport(InternalDomainModel):
         ]
         if len(portfolio_records) != 1:
             raise ValueError("internal report requires exactly one PORTFOLIO generation record")
+
+        statement_records = [
+            record
+            for record in self.generation_records
+            if record.stage is InternalGenerationStage.STATEMENT
+        ]
+        if len(statement_records) != 1:
+            raise ValueError("internal report requires exactly one STATEMENT generation record")
 
         repository_record_names = [
             record.repository_full_name

@@ -83,6 +83,10 @@ class PortfolioAnalysisAssemblyError(ValueError):
     """Raised when validated analysis components cannot form one portfolio."""
 
 
+class PortfolioReportDeadlineError(TimeoutError):
+    """Raised when the complete portfolio analysis exceeds its deadline."""
+
+
 class InputViolationCode(StrEnum):
     """Stable codes for deterministic input graph and depth validation failures."""
 

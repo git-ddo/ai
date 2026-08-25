@@ -2,6 +2,7 @@ from app.services.analysis_service import PortfolioAnalysisAssembler
 from app.services.interview_service import InterviewQuestionService
 from app.services.normalization_service import NormalizationError, NormalizationService
 from app.services.portfolio_service import PortfolioSynthesisService
+from app.services.report_service import PortfolioReportService
 from app.services.repository_service import RepositoryAnalysisService
 from app.services.statement_service import PortfolioStatementService
 
@@ -11,6 +12,7 @@ __all__ = [
     "NormalizationService",
     "PortfolioSynthesisService",
     "PortfolioAnalysisAssembler",
+    "PortfolioReportService",
     "RepositoryAnalysisService",
     "PortfolioStatementService",
 ]

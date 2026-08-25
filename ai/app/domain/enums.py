@@ -75,3 +75,4 @@ class InternalGenerationStage(StrEnum):
     REPOSITORY = "REPOSITORY"
     PORTFOLIO = "PORTFOLIO"
     INTERVIEW = "INTERVIEW"
+    STATEMENT = "STATEMENT"
