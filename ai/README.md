@@ -43,10 +43,10 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] Repository 분석 Service와 정책 실패 1회 재생성
 - [x] `PortfolioSynthesis` Structured Output과 최종 `PortfolioAnalysis` 조립 책임 분리
 - [x] 혼합 P0/P1/P2 Portfolio Prompt의 생성·제외 필드 계약
+- [x] Portfolio 전체 범위 참조·혼합 깊이·내용 정책 Validator
 
 ### 다음 구현
 
-- [ ] Portfolio 전체 범위 정책 Validator
 - [ ] Portfolio synthesis 생성과 정책 재생성 Service
 - [ ] Interview·PortfolioStatement 생성
 - [ ] Report Service
@@ -55,7 +55,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 547개이다. 이 수치는 실제 Gemini 호출, Portfolio Service와
+현재 전체 테스트 기준은 583개이다. 이 수치는 실제 Gemini 호출, Portfolio Service와
 Portfolio Report Wire API를 포함하지 않는다.
 
 ## 목표 지원 범위
@@ -140,6 +140,12 @@ UserClaim의 사실 승격, `NOT_OBSERVED` 오용과 근거 없는 누락 Recomm
 검증하며 최초 정책 실패에 한해서만 위반 코드 기반 교정 Prompt로 전체 결과를 한 번
 재생성한다. Provider 네트워크 retry와 이 정책 재생성은 서로 다른 책임이다.
 
+`PortfolioPolicyValidator`는 전체 요약·strengths·gaps·nextActions·jobAppeal에 한해 여러
+Repository 근거 참조를 허용한다. 대표 Repository의 reason과 참조는 해당 Repository로
+제한한다. 혼합 깊이 항목의 자연어 내용은 참조 Repository 중 가장 얕은 깊이를 상한으로
+검사하며, 누락 gap·nextAction은 대상 Repository와 일치하는 명시적 `BACKEND_DERIVED`
+Evidence가 있어야 한다. 실제 Portfolio 생성과 정책 실패 재생성은 아직 연결하지 않았다.
+
 Evidence별 Wire `repositoryId`·`snapshotSha`는 아직 내부 Evidence에 보존하지 않는다. 해당 값과
 부모 Repository의 일치 여부는 향후 Wire DTO → 내부 모델 Mapper에서 검증한다.
 
@@ -204,8 +210,8 @@ ai/
 
 Portfolio Prompt는 검증된 `RepositoryAnalysis`를 입력으로 받아 전체 요약, 대표
 Repository, strengths/gaps/nextActions, 단일 `jobAppeal`과 한계만 담은
-`PortfolioSynthesis`를 생성하도록 계약을 분리했다. 실제 Portfolio Validator·Service와
-`report_service.py`는 아직 후속 구현 경계이다.
+`PortfolioSynthesis`를 생성하도록 계약을 분리했다. Portfolio 전역 Validator까지 구현됐으며,
+실제 Portfolio Service와 `report_service.py`는 아직 후속 구현 경계이다.
 `schemas/`의 기존 초안은 현재 Backend Wire 계약으로 교체해야 한다.
 
 ## 환경 설정
@@ -276,6 +282,6 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 다음 작업
 
-다음 논리적 작업 단위는 `Portfolio 전체 범위 정책 Validator`이다. 그다음
-`PortfolioSynthesis` 생성 Service와 정책 실패 1회 재생성을 연결한다. 상세 순서는
+다음 논리적 작업 단위는 `PortfolioSynthesis` 생성 Service와 정책 실패 1회 재생성이다.
+그다음 면접 질문과 포트폴리오 문장 생성을 연결한다. 상세 순서는
 [`docs/guide.md`](../docs/guide.md)의 Phase 7을 따른다.

@@ -12,7 +12,9 @@ from app.domain import (
     InternalEvidence,
     InternalEvidenceType,
     NormalizedRepositoryContext,
+    PortfolioSynthesis,
     RepositoryAnalysis,
+    RepresentativeProject,
 )
 
 
@@ -173,9 +175,9 @@ class RepositoryPolicyValidator:
                 )
             )
 
-        for field_path, item in self._iter_analysis_items(analysis):
+        for field_path, item in _iter_repository_analysis_items(analysis):
             violations.extend(
-                self._find_item_reference_violations(
+                _find_repository_item_reference_violations(
                     item=item,
                     field_path=field_path,
                     expected_repository=expected_repository,
@@ -206,7 +208,7 @@ class RepositoryPolicyValidator:
         }
 
         violations: list[PolicyViolation] = []
-        for field_path, item in self._iter_analysis_items(analysis):
+        for field_path, item in _iter_repository_analysis_items(analysis):
             applied_criteria, metadata_violations = self._validate_item_metadata(
                 item=item,
                 field_path=field_path,
@@ -432,94 +434,722 @@ class RepositoryPolicyValidator:
                 )
             )
 
-        if item.item_type is AnalysisItemType.RECOMMENDATION and _matches_any(
-            content, _MISSING_RECOMMENDATION_PATTERNS
-        ):
-            for criterion in applied_criteria:
-                if criterion.key not in _MISSING_EVIDENCE_CRITERIA:
-                    continue
-                if not _has_matching_missing_evidence(
-                    criterion.key,
-                    referenced_evidence,
-                ):
-                    violations.append(
-                        _content_violation(
-                            PolicyViolationCode.MISSING_DERIVED_EVIDENCE,
-                            "Missing-item recommendation lacks explicit derived evidence.",
-                            field_path,
-                        )
-                    )
-
-        return tuple(violations)
-
-    @staticmethod
-    def _iter_analysis_items(
-        analysis: RepositoryAnalysis,
-    ) -> tuple[tuple[str, GroundedAnalysisItem], ...]:
-        indexed_items: list[tuple[str, GroundedAnalysisItem]] = [("summary", analysis.summary)]
-        collections = (
-            ("observations", analysis.observations),
-            ("strengths", analysis.strengths),
-            ("recommendations", analysis.recommendations),
-        )
-        for collection_name, items in collections:
-            indexed_items.extend(
-                (f"{collection_name}[{index}]", item) for index, item in enumerate(items)
+        if item.item_type is AnalysisItemType.RECOMMENDATION:
+            violations.extend(
+                _find_missing_evidence_violations(
+                    content=content,
+                    field_path=field_path,
+                    applied_criteria=applied_criteria,
+                    referenced_evidence=referenced_evidence,
+                )
             )
-        return tuple(indexed_items)
-
-    @staticmethod
-    def _find_item_reference_violations(
-        *,
-        item: GroundedAnalysisItem,
-        field_path: str,
-        expected_repository: str,
-        evidence_owners: dict[str, str],
-        claim_owners: dict[str, str],
-    ) -> tuple[PolicyViolation, ...]:
-        violations: list[PolicyViolation] = []
-
-        for index, evidence_ref in enumerate(item.evidence_refs):
-            owner = evidence_owners.get(evidence_ref)
-            reference_path = f"{field_path}.evidence_refs[{index}]"
-            if owner is None:
-                violations.append(
-                    PolicyViolation(
-                        code=PolicyViolationCode.UNKNOWN_EVIDENCE_REF,
-                        message="Analysis item references unknown evidence.",
-                        field_path=reference_path,
-                    )
-                )
-            elif owner != expected_repository:
-                violations.append(
-                    PolicyViolation(
-                        code=PolicyViolationCode.CROSS_REPOSITORY_REF,
-                        message="Analysis item references evidence from another repository.",
-                        field_path=reference_path,
-                    )
-                )
-
-        for index, claim_ref in enumerate(item.claim_refs):
-            owner = claim_owners.get(claim_ref)
-            reference_path = f"{field_path}.claim_refs[{index}]"
-            if owner is None:
-                violations.append(
-                    PolicyViolation(
-                        code=PolicyViolationCode.UNKNOWN_CLAIM_REF,
-                        message="Analysis item references an unknown user claim.",
-                        field_path=reference_path,
-                    )
-                )
-            elif owner != expected_repository:
-                violations.append(
-                    PolicyViolation(
-                        code=PolicyViolationCode.CROSS_REPOSITORY_REF,
-                        message="Analysis item references a user claim from another repository.",
-                        field_path=reference_path,
-                    )
-                )
 
         return tuple(violations)
+
+
+class PortfolioPolicyValidator:
+    """Validate portfolio-wide synthesis references and generated-content policy."""
+
+    def validate_references(
+        self,
+        synthesis: PortfolioSynthesis,
+        contexts: Sequence[NormalizedRepositoryContext],
+    ) -> None:
+        evidence_owners = {
+            evidence.evidence_id: context.repository_full_name
+            for context in contexts
+            for evidence in context.evidence
+        }
+        claim_owners = {
+            claim.claim_id: context.repository_full_name
+            for context in contexts
+            for claim in context.user_claims
+        }
+        known_repositories = {context.repository_full_name for context in contexts}
+
+        violations: list[PolicyViolation] = []
+        for field_path, item in _iter_synthesis_items(synthesis):
+            violations.extend(
+                _find_global_reference_violations(
+                    item=item,
+                    field_path=field_path,
+                    evidence_owners=evidence_owners,
+                    claim_owners=claim_owners,
+                )
+            )
+
+        for index, project in enumerate(synthesis.representative_projects):
+            field_path = f"representative_projects[{index}]"
+            if project.repository_full_name not in known_repositories:
+                violations.append(
+                    PolicyViolation(
+                        code=PolicyViolationCode.CROSS_REPOSITORY_REF,
+                        message="Representative project is outside the supplied repositories.",
+                        field_path=f"{field_path}.repository_full_name",
+                    )
+                )
+            violations.extend(
+                _find_representative_reference_violations(
+                    project=project,
+                    field_path=field_path,
+                    evidence_owners=evidence_owners,
+                    claim_owners=claim_owners,
+                )
+            )
+
+        deduplicated = _deduplicate_violations(violations)
+        if deduplicated:
+            raise ReportPolicyError(deduplicated)
+
+    def validate_content(
+        self,
+        synthesis: PortfolioSynthesis,
+        contexts: Sequence[NormalizedRepositoryContext],
+        criteria: CriteriaSet,
+    ) -> None:
+        if not contexts:
+            raise ValueError("Portfolio policy validation requires at least one context")
+
+        contexts_by_repository = {context.repository_full_name: context for context in contexts}
+        evidence_by_id = {
+            evidence.evidence_id: evidence for context in contexts for evidence in context.evidence
+        }
+        evidence_owners = {
+            evidence.evidence_id: context.repository_full_name
+            for context in contexts
+            for evidence in context.evidence
+        }
+        claim_owners = {
+            claim.claim_id: context.repository_full_name
+            for context in contexts
+            for claim in context.user_claims
+        }
+        criteria_by_key = {criterion.key: criterion for criterion in criteria.criteria}
+        repository_validator = RepositoryPolicyValidator()
+
+        violations: list[PolicyViolation] = []
+        for field_path, item in _iter_synthesis_items(synthesis):
+            applied_criteria, metadata_violations = _validate_portfolio_item_metadata(
+                item=item,
+                field_path=field_path,
+                contexts_by_repository=contexts_by_repository,
+                criteria_by_key=criteria_by_key,
+                evidence_by_id=evidence_by_id,
+                evidence_owners=evidence_owners,
+                claim_owners=claim_owners,
+            )
+            violations.extend(metadata_violations)
+
+            referenced_contexts = _referenced_contexts(
+                item=item,
+                contexts_by_repository=contexts_by_repository,
+                evidence_owners=evidence_owners,
+                claim_owners=claim_owners,
+            )
+            content_context = _shallowest_context(referenced_contexts or tuple(contexts))
+            content_criteria = tuple(
+                criterion
+                for criterion in applied_criteria
+                if _DEPTH_RANK[criterion.analysis_depth]
+                <= _DEPTH_RANK[content_context.analysis_depth]
+            )
+            violations.extend(
+                repository_validator._find_content_violations(
+                    item=item,
+                    field_path=field_path,
+                    context=content_context,
+                    applied_criteria=content_criteria,
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+
+            if field_path.startswith("gaps["):
+                referenced_evidence = tuple(
+                    evidence_by_id[reference]
+                    for reference in item.evidence_refs
+                    if reference in evidence_by_id
+                )
+                violations.extend(
+                    _find_missing_evidence_violations(
+                        content=item.content,
+                        field_path=field_path,
+                        applied_criteria=applied_criteria,
+                        referenced_evidence=referenced_evidence,
+                    )
+                )
+
+            if field_path.startswith(("gaps[", "next_actions[")):
+                violations.extend(
+                    _find_cross_repository_missing_evidence_violations(
+                        item=item,
+                        field_path=field_path,
+                        applied_criteria=applied_criteria,
+                        evidence_by_id=evidence_by_id,
+                        evidence_owners=evidence_owners,
+                    )
+                )
+
+        for index, project in enumerate(synthesis.representative_projects):
+            violations.extend(
+                _find_representative_content_violations(
+                    project=project,
+                    field_path=f"representative_projects[{index}]",
+                    evidence_by_id=evidence_by_id,
+                )
+            )
+
+        for index, limitation in enumerate(synthesis.limitations):
+            violations.extend(
+                _find_limitation_content_violations(
+                    content=limitation,
+                    field_path=f"limitations[{index}]",
+                )
+            )
+
+        deduplicated = _deduplicate_violations(violations)
+        if deduplicated:
+            raise ReportPolicyError(deduplicated)
+
+
+def _iter_repository_analysis_items(
+    analysis: RepositoryAnalysis,
+) -> tuple[tuple[str, GroundedAnalysisItem], ...]:
+    indexed_items: list[tuple[str, GroundedAnalysisItem]] = [("summary", analysis.summary)]
+    collections = (
+        ("observations", analysis.observations),
+        ("strengths", analysis.strengths),
+        ("recommendations", analysis.recommendations),
+    )
+    for collection_name, items in collections:
+        indexed_items.extend(
+            (f"{collection_name}[{index}]", item) for index, item in enumerate(items)
+        )
+    return tuple(indexed_items)
+
+
+def _find_repository_item_reference_violations(
+    *,
+    item: GroundedAnalysisItem,
+    field_path: str,
+    expected_repository: str,
+    evidence_owners: dict[str, str],
+    claim_owners: dict[str, str],
+) -> tuple[PolicyViolation, ...]:
+    violations: list[PolicyViolation] = []
+
+    for index, evidence_ref in enumerate(item.evidence_refs):
+        owner = evidence_owners.get(evidence_ref)
+        reference_path = f"{field_path}.evidence_refs[{index}]"
+        if owner is None:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_EVIDENCE_REF,
+                    message="Analysis item references unknown evidence.",
+                    field_path=reference_path,
+                )
+            )
+        elif owner != expected_repository:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.CROSS_REPOSITORY_REF,
+                    message="Analysis item references evidence from another repository.",
+                    field_path=reference_path,
+                )
+            )
+
+    for index, claim_ref in enumerate(item.claim_refs):
+        owner = claim_owners.get(claim_ref)
+        reference_path = f"{field_path}.claim_refs[{index}]"
+        if owner is None:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_CLAIM_REF,
+                    message="Analysis item references an unknown user claim.",
+                    field_path=reference_path,
+                )
+            )
+        elif owner != expected_repository:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.CROSS_REPOSITORY_REF,
+                    message="Analysis item references a user claim from another repository.",
+                    field_path=reference_path,
+                )
+            )
+
+    return tuple(violations)
+
+
+def _iter_synthesis_items(
+    synthesis: PortfolioSynthesis,
+) -> tuple[tuple[str, GroundedAnalysisItem], ...]:
+    indexed_items: list[tuple[str, GroundedAnalysisItem]] = [
+        ("overall_summary", synthesis.overall_summary)
+    ]
+    collections = (
+        ("strengths", synthesis.strengths),
+        ("gaps", synthesis.gaps),
+        ("next_actions", synthesis.next_actions),
+    )
+    for collection_name, items in collections:
+        indexed_items.extend(
+            (f"{collection_name}[{index}]", item) for index, item in enumerate(items)
+        )
+    indexed_items.append(("job_appeal", synthesis.job_appeal))
+    return tuple(indexed_items)
+
+
+def _find_global_reference_violations(
+    *,
+    item: GroundedAnalysisItem,
+    field_path: str,
+    evidence_owners: dict[str, str],
+    claim_owners: dict[str, str],
+) -> tuple[PolicyViolation, ...]:
+    violations: list[PolicyViolation] = []
+    for index, evidence_ref in enumerate(item.evidence_refs):
+        if evidence_ref not in evidence_owners:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_EVIDENCE_REF,
+                    message="Portfolio item references unknown evidence.",
+                    field_path=f"{field_path}.evidence_refs[{index}]",
+                )
+            )
+    for index, claim_ref in enumerate(item.claim_refs):
+        if claim_ref not in claim_owners:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_CLAIM_REF,
+                    message="Portfolio item references an unknown user claim.",
+                    field_path=f"{field_path}.claim_refs[{index}]",
+                )
+            )
+    return tuple(violations)
+
+
+def _find_representative_reference_violations(
+    *,
+    project: RepresentativeProject,
+    field_path: str,
+    evidence_owners: dict[str, str],
+    claim_owners: dict[str, str],
+) -> tuple[PolicyViolation, ...]:
+    violations: list[PolicyViolation] = []
+    expected_repository = project.repository_full_name
+    for index, evidence_ref in enumerate(project.evidence_refs):
+        owner = evidence_owners.get(evidence_ref)
+        reference_path = f"{field_path}.evidence_refs[{index}]"
+        if owner is None:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_EVIDENCE_REF,
+                    message="Representative project references unknown evidence.",
+                    field_path=reference_path,
+                )
+            )
+        elif owner != expected_repository:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.CROSS_REPOSITORY_REF,
+                    message="Representative project references evidence from another repository.",
+                    field_path=reference_path,
+                )
+            )
+    for index, claim_ref in enumerate(project.claim_refs):
+        owner = claim_owners.get(claim_ref)
+        reference_path = f"{field_path}.claim_refs[{index}]"
+        if owner is None:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_CLAIM_REF,
+                    message="Representative project references an unknown user claim.",
+                    field_path=reference_path,
+                )
+            )
+        elif owner != expected_repository:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.CROSS_REPOSITORY_REF,
+                    message="Representative project references a claim from another repository.",
+                    field_path=reference_path,
+                )
+            )
+    return tuple(violations)
+
+
+def _validate_portfolio_item_metadata(
+    *,
+    item: GroundedAnalysisItem,
+    field_path: str,
+    contexts_by_repository: dict[str, NormalizedRepositoryContext],
+    criteria_by_key: dict[str, Criterion],
+    evidence_by_id: dict[str, InternalEvidence],
+    evidence_owners: dict[str, str],
+    claim_owners: dict[str, str],
+) -> tuple[tuple[Criterion, ...], tuple[PolicyViolation, ...]]:
+    violations: list[PolicyViolation] = []
+    applied_criteria: list[Criterion] = []
+    referenced_contexts = _referenced_contexts(
+        item=item,
+        contexts_by_repository=contexts_by_repository,
+        evidence_owners=evidence_owners,
+        claim_owners=claim_owners,
+    )
+    candidate_contexts = referenced_contexts or tuple(contexts_by_repository.values())
+
+    for index, criterion_key in enumerate(item.criterion_keys):
+        criterion = criteria_by_key.get(criterion_key)
+        criterion_path = f"{field_path}.criterion_keys[{index}]"
+        if criterion is None:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_CRITERION,
+                    message="Portfolio item uses a criterion outside the supplied criteria set.",
+                    field_path=criterion_path,
+                )
+            )
+            continue
+        applied_criteria.append(criterion)
+        if candidate_contexts and not any(
+            _DEPTH_RANK[criterion.analysis_depth] <= _DEPTH_RANK[context.analysis_depth]
+            for context in candidate_contexts
+        ):
+            deepest_context = _deepest_context(candidate_contexts)
+            violations.append(
+                PolicyViolation(
+                    code=_scope_violation_code(deepest_context.analysis_depth),
+                    message="Portfolio item uses a criterion above referenced repository depth.",
+                    field_path=criterion_path,
+                )
+            )
+
+    for index, evidence_ref in enumerate(item.evidence_refs):
+        evidence = evidence_by_id.get(evidence_ref)
+        owner = evidence_owners.get(evidence_ref)
+        if evidence is None or owner is None:
+            continue
+        owner_context = contexts_by_repository.get(owner)
+        if owner_context is None:
+            continue
+        matches_criterion = any(
+            evidence.evidence_type in criterion.allowed_evidence_types
+            and evidence.analysis_depth is criterion.analysis_depth
+            and _DEPTH_RANK[criterion.analysis_depth] <= _DEPTH_RANK[owner_context.analysis_depth]
+            for criterion in applied_criteria
+        )
+        if not matches_criterion:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH,
+                    message="Referenced evidence is not allowed by the applied criteria.",
+                    field_path=f"{field_path}.evidence_refs[{index}]",
+                )
+            )
+
+    for index, claim_ref in enumerate(item.claim_refs):
+        owner = claim_owners.get(claim_ref)
+        if owner is None:
+            continue
+        owner_context = contexts_by_repository.get(owner)
+        if owner_context is None:
+            continue
+        allows_claim = any(
+            criterion.allow_user_claims
+            and _DEPTH_RANK[criterion.analysis_depth] <= _DEPTH_RANK[owner_context.analysis_depth]
+            for criterion in applied_criteria
+        )
+        if not allows_claim:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH,
+                    message="Applied criteria do not allow this repository user claim.",
+                    field_path=f"{field_path}.claim_refs[{index}]",
+                )
+            )
+
+    allowed_technologies = {
+        name.casefold() for context in candidate_contexts for name in context.technology_names
+    }
+    for index, technology_name in enumerate(item.technology_names):
+        if technology_name.casefold() not in allowed_technologies:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_TECHNOLOGY,
+                    message="Portfolio item uses technology outside referenced repositories.",
+                    field_path=f"{field_path}.technology_names[{index}]",
+                )
+            )
+
+    allowed_paths = {
+        path
+        for context in candidate_contexts
+        for evidence in context.evidence
+        for path in (*evidence.source_paths, evidence.path)
+        if path is not None
+    }
+    for index, file_path in enumerate(item.file_paths):
+        if file_path not in allowed_paths:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.UNKNOWN_FILE_PATH,
+                    message="Portfolio item uses a file path outside referenced repositories.",
+                    field_path=f"{field_path}.file_paths[{index}]",
+                )
+            )
+
+    return tuple(applied_criteria), tuple(violations)
+
+
+def _referenced_contexts(
+    *,
+    item: GroundedAnalysisItem,
+    contexts_by_repository: dict[str, NormalizedRepositoryContext],
+    evidence_owners: dict[str, str],
+    claim_owners: dict[str, str],
+) -> tuple[NormalizedRepositoryContext, ...]:
+    repository_names = {
+        owner
+        for reference in (*item.evidence_refs, *item.claim_refs)
+        if (owner := evidence_owners.get(reference) or claim_owners.get(reference)) is not None
+    }
+    return tuple(
+        contexts_by_repository[name]
+        for name in sorted(repository_names)
+        if name in contexts_by_repository
+    )
+
+
+def _deepest_context(
+    contexts: Sequence[NormalizedRepositoryContext],
+) -> NormalizedRepositoryContext:
+    return max(contexts, key=lambda context: _DEPTH_RANK[context.analysis_depth])
+
+
+def _shallowest_context(
+    contexts: Sequence[NormalizedRepositoryContext],
+) -> NormalizedRepositoryContext:
+    return min(contexts, key=lambda context: _DEPTH_RANK[context.analysis_depth])
+
+
+def _find_representative_content_violations(
+    *,
+    project: RepresentativeProject,
+    field_path: str,
+    evidence_by_id: dict[str, InternalEvidence],
+) -> tuple[PolicyViolation, ...]:
+    violations: list[PolicyViolation] = []
+    content = project.reason
+    reason_path = f"{field_path}.reason"
+    referenced_evidence = tuple(
+        evidence_by_id[reference]
+        for reference in project.evidence_refs
+        if reference in evidence_by_id
+    )
+    item_depth = min(
+        (evidence.analysis_depth for evidence in referenced_evidence),
+        key=_DEPTH_RANK.__getitem__,
+        default=AnalysisDepth.P0,
+    )
+    claim_attributed = _matches_any(content, _CLAIM_ATTRIBUTION_PATTERNS)
+
+    if item_depth is AnalysisDepth.P0 and _matches_any(content, _QUALITY_ASSERTION_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.P0_SCOPE_VIOLATION,
+                message="Representative reason makes a P0 quality judgment.",
+                field_path=reason_path,
+            )
+        )
+    if item_depth is AnalysisDepth.P1 and _matches_any(content, _QUALITY_ASSERTION_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.P1_SCOPE_VIOLATION,
+                message="Representative reason makes a P1 quality judgment.",
+                field_path=reason_path,
+            )
+        )
+    if item_depth is AnalysisDepth.P2 and _matches_any(
+        content, _REPOSITORY_GENERALIZATION_PATTERNS
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.REPOSITORY_WIDE_GENERALIZATION,
+                message="Representative reason generalizes P2 evidence to the repository.",
+                field_path=reason_path,
+            )
+        )
+    if _matches_any(content, _USER_ABILITY_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.USER_ABILITY_ASSERTION,
+                message="Representative reason asserts user ability or career outcome.",
+                field_path=reason_path,
+            )
+        )
+    if _matches_any(content, _ACTIVITY_CONTRIBUTION_PATTERNS) or (
+        not claim_attributed and _matches_any(content, _DIRECT_IMPLEMENTATION_PATTERNS)
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.CONTRIBUTION_ASSERTION,
+                message="Representative reason asserts personal contribution or ownership.",
+                field_path=reason_path,
+            )
+        )
+    if item_depth in {AnalysisDepth.P1, AnalysisDepth.P2} and _matches_any(
+        content, _P1_NON_CONTRIBUTION_PATTERNS
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.CONTRIBUTION_ASSERTION,
+                message="Representative reason treats activity as contribution.",
+                field_path=reason_path,
+            )
+        )
+    if project.claim_refs and (
+        _matches_any(content, _CLAIM_AS_FACT_PATTERNS)
+        or (not project.evidence_refs and not claim_attributed)
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.USER_CLAIM_AS_FACT,
+                message="Representative reason presents a user claim without attribution.",
+                field_path=reason_path,
+            )
+        )
+    if (
+        _contains_not_observed_evidence(referenced_evidence)
+        and _matches_any(content, _NOT_OBSERVED_ABSENCE_PATTERNS)
+        and not _matches_any(content, _OBSERVATION_SCOPE_PATTERNS)
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.NOT_OBSERVED_MISUSE,
+                message="Representative reason presents non-observation as actual absence.",
+                field_path=reason_path,
+            )
+        )
+    return tuple(violations)
+
+
+def _find_limitation_content_violations(
+    *,
+    content: str,
+    field_path: str,
+) -> tuple[PolicyViolation, ...]:
+    violations: list[PolicyViolation] = []
+    if _matches_any(content, _USER_ABILITY_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.USER_ABILITY_ASSERTION,
+                message="Limitation asserts user ability or career outcome.",
+                field_path=field_path,
+            )
+        )
+    if _matches_any(content, _ACTIVITY_CONTRIBUTION_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.CONTRIBUTION_ASSERTION,
+                message="Limitation asserts personal contribution from activity.",
+                field_path=field_path,
+            )
+        )
+    if _matches_any(content, _NOT_OBSERVED_ABSENCE_PATTERNS) and not _matches_any(
+        content, _OBSERVATION_SCOPE_PATTERNS
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.NOT_OBSERVED_MISUSE,
+                message="Limitation presents non-observation as actual absence.",
+                field_path=field_path,
+            )
+        )
+    return tuple(violations)
+
+
+def _find_missing_evidence_violations(
+    *,
+    content: str,
+    field_path: str,
+    applied_criteria: tuple[Criterion, ...],
+    referenced_evidence: tuple[InternalEvidence, ...],
+) -> tuple[PolicyViolation, ...]:
+    if not _matches_any(content, _MISSING_RECOMMENDATION_PATTERNS):
+        return ()
+
+    violations: list[PolicyViolation] = []
+    for criterion in applied_criteria:
+        if criterion.key not in _MISSING_EVIDENCE_CRITERIA:
+            continue
+        if not _has_matching_missing_evidence(criterion.key, referenced_evidence):
+            violations.append(
+                _content_violation(
+                    PolicyViolationCode.MISSING_DERIVED_EVIDENCE,
+                    "Missing-item analysis lacks explicit derived evidence.",
+                    field_path,
+                )
+            )
+    return tuple(violations)
+
+
+def _find_cross_repository_missing_evidence_violations(
+    *,
+    item: GroundedAnalysisItem,
+    field_path: str,
+    applied_criteria: tuple[Criterion, ...],
+    evidence_by_id: dict[str, InternalEvidence],
+    evidence_owners: dict[str, str],
+) -> tuple[PolicyViolation, ...]:
+    if not _matches_any(item.content, _MISSING_RECOMMENDATION_PATTERNS):
+        return ()
+
+    referenced_evidence = tuple(
+        evidence_by_id[reference] for reference in item.evidence_refs if reference in evidence_by_id
+    )
+    observed_repository_names = {
+        evidence_owners[evidence.evidence_id]
+        for evidence in referenced_evidence
+        if evidence.evidence_type is not InternalEvidenceType.BACKEND_DERIVED
+        and evidence.evidence_id in evidence_owners
+    }
+    if not observed_repository_names:
+        return ()
+
+    violations: list[PolicyViolation] = []
+    for criterion in applied_criteria:
+        if criterion.key not in _MISSING_EVIDENCE_CRITERIA:
+            continue
+        derived_repository_names = {
+            evidence_owners[evidence.evidence_id]
+            for evidence in referenced_evidence
+            if evidence.evidence_id in evidence_owners
+            and _has_matching_missing_evidence(criterion.key, (evidence,))
+        }
+        if observed_repository_names <= derived_repository_names:
+            continue
+        violations.append(
+            _content_violation(
+                PolicyViolationCode.MISSING_DERIVED_EVIDENCE,
+                "Missing-item analysis uses derived evidence from a different repository.",
+                field_path,
+            )
+        )
+    return tuple(violations)
+
+
+def _deduplicate_violations(
+    violations: Sequence[PolicyViolation],
+) -> tuple[PolicyViolation, ...]:
+    unique: list[PolicyViolation] = []
+    seen: set[tuple[PolicyViolationCode, str, str | None]] = set()
+    for violation in violations:
+        identity = (violation.code, violation.message, violation.field_path)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        unique.append(violation)
+    return tuple(unique)
 
 
 def _scope_violation_code(depth: AnalysisDepth) -> PolicyViolationCode:
@@ -616,4 +1246,9 @@ def _project_structure_value(summary: str, field: str, value: str) -> bool:
     )
 
 
-__all__ = ["PolicyViolation", "PolicyViolationCode", "RepositoryPolicyValidator"]
+__all__ = [
+    "PolicyViolation",
+    "PolicyViolationCode",
+    "PortfolioPolicyValidator",
+    "RepositoryPolicyValidator",
+]

@@ -4,6 +4,7 @@ from app.validators.evidence_validator import EvidenceReferenceValidator
 from app.validators.report_validator import (
     PolicyViolation,
     PolicyViolationCode,
+    PortfolioPolicyValidator,
     RepositoryPolicyValidator,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "InputViolationCode",
     "PolicyViolation",
     "PolicyViolationCode",
+    "PortfolioPolicyValidator",
     "RepositoryPolicyValidator",
 ]
