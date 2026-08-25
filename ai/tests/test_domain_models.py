@@ -22,6 +22,7 @@ from app.domain import (
     NormalizedRepositoryContext,
     PortfolioAnalysis,
     PortfolioStatement,
+    PortfolioStatementBatch,
     PortfolioStatementType,
     PortfolioSynthesis,
     RecommendationPriority,
@@ -254,15 +255,45 @@ def make_interview_question(
     *,
     repository_full_name: str = "git-ddo/backend",
     question: str = "README에 표시된 Spring Boot를 선택한 이유는 무엇인가요?",
+    follow_up_questions: tuple[str, ...] = (),
+    evidence_refs: tuple[str, ...] = ("ev_001",),
+    claim_refs: tuple[str, ...] = ("claim_001",),
+    criterion_keys: tuple[str, ...] = ("TECH_STACK_EVIDENCE",),
+    technology_names: tuple[str, ...] = ("Spring Boot",),
+    file_paths: tuple[str, ...] = ("build.gradle",),
 ) -> InterviewQuestion:
     return InterviewQuestion(
         repository_full_name=repository_full_name,
         question=question,
         intent="공개 기술 근거를 자신의 설명과 연결하는지 확인합니다.",
         answer_guide=("기술 선택 배경을 사용자 경험과 구분해 설명합니다.",),
-        follow_up_questions=(),
-        evidence_refs=("ev_001",),
-        claim_refs=("claim_001",),
+        follow_up_questions=follow_up_questions,
+        evidence_refs=evidence_refs,
+        claim_refs=claim_refs,
+        criterion_keys=criterion_keys,
+        technology_names=technology_names,
+        file_paths=file_paths,
+    )
+
+
+def make_portfolio_statement(
+    *,
+    statement_type: PortfolioStatementType = PortfolioStatementType.PORTFOLIO,
+    content: str = "Spring Boot 기반 백엔드 프로젝트를 구성했습니다.",
+    evidence_refs: tuple[str, ...] = ("ev_001",),
+    claim_refs: tuple[str, ...] = ("claim_001",),
+    criterion_keys: tuple[str, ...] = ("TECH_STACK_EVIDENCE",),
+    technology_names: tuple[str, ...] = ("Spring Boot",),
+    file_paths: tuple[str, ...] = ("build.gradle",),
+) -> PortfolioStatement:
+    return PortfolioStatement(
+        statement_type=statement_type,
+        content=content,
+        evidence_refs=evidence_refs,
+        claim_refs=claim_refs,
+        criterion_keys=criterion_keys,
+        technology_names=technology_names,
+        file_paths=file_paths,
     )
 
 
@@ -327,14 +358,7 @@ def make_portfolio_analysis(
         repository_analyses=analyses,
         synthesis=synthesis,
         interview_questions=resolved_interview_questions,
-        portfolio_statements=(
-            PortfolioStatement(
-                statement_type=PortfolioStatementType.PORTFOLIO,
-                content="Spring Boot 기반 백엔드 프로젝트를 구성했습니다.",
-                evidence_refs=("ev_001",),
-                claim_refs=("claim_001",),
-            ),
-        ),
+        portfolio_statements=(make_portfolio_statement(),),
     )
 
 
@@ -1107,6 +1131,7 @@ def test_interview_question_rejects_missing_references() -> None:
             question="프로젝트를 설명해 주세요.",
             intent="프로젝트 이해도를 확인합니다.",
             answer_guide=("공개 근거를 기준으로 설명합니다.",),
+            criterion_keys=("README_READINESS",),
         )
 
 
@@ -1115,7 +1140,114 @@ def test_portfolio_statement_rejects_missing_references() -> None:
         PortfolioStatement(
             statement_type=PortfolioStatementType.RESUME,
             content="근거 없는 포트폴리오 문장입니다.",
+            criterion_keys=("README_READINESS",),
         )
+
+
+@pytest.mark.parametrize("grounding", ["evidence", "claim"])
+def test_interview_question_accepts_evidence_or_claim_grounding(grounding: str) -> None:
+    question = make_interview_question(
+        evidence_refs=(("ev_001",) if grounding == "evidence" else ()),
+        claim_refs=(("claim_001",) if grounding == "claim" else ()),
+        criterion_keys=(
+            ("TECH_STACK_EVIDENCE",) if grounding == "evidence" else ("CLAIM_ACTIVITY_LINK",)
+        ),
+        technology_names=(("Spring Boot",) if grounding == "evidence" else ()),
+        file_paths=(("build.gradle",) if grounding == "evidence" else ()),
+    )
+
+    assert question.evidence_refs or question.claim_refs
+
+
+@pytest.mark.parametrize(
+    ("field_name", "values", "message"),
+    [
+        ("evidence_refs", ("ev_001", "ev_001"), "evidence_refs"),
+        ("claim_refs", ("claim_001", "claim_001"), "claim_refs"),
+        ("criterion_keys", ("README_READINESS", "README_READINESS"), "criterion_keys"),
+        ("technology_names", ("Spring Boot", "spring boot"), "technology_names"),
+        ("file_paths", ("README.md", "README.md"), "file_paths"),
+    ],
+)
+def test_interview_question_rejects_duplicate_grounding_metadata(
+    field_name: str,
+    values: tuple[str, ...],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        make_interview_question(**{field_name: values})  # type: ignore[arg-type]
+
+
+def test_interview_question_rejects_empty_criteria() -> None:
+    with pytest.raises(ValidationError):
+        make_interview_question(criterion_keys=())
+
+
+@pytest.mark.parametrize("file_path", ["../secret.env", "/etc/passwd"])
+def test_interview_question_rejects_unsafe_file_path(file_path: str) -> None:
+    with pytest.raises(ValidationError, match="repository-relative"):
+        make_interview_question(file_paths=(file_path,))
+
+
+def test_interview_question_rejects_duplicate_follow_up_questions() -> None:
+    with pytest.raises(ValidationError, match="follow_up_questions"):
+        make_interview_question(
+            follow_up_questions=("캐시 정책은 무엇인가요?", "캐시 정책은 무엇인가요?"),
+        )
+
+
+@pytest.mark.parametrize("statement_type", list(PortfolioStatementType))
+def test_portfolio_statement_accepts_each_statement_type(
+    statement_type: PortfolioStatementType,
+) -> None:
+    statement = make_portfolio_statement(statement_type=statement_type)
+
+    assert statement.statement_type is statement_type
+
+
+@pytest.mark.parametrize("grounding", ["evidence", "claim"])
+def test_portfolio_statement_accepts_evidence_or_claim_grounding(grounding: str) -> None:
+    statement = make_portfolio_statement(
+        evidence_refs=(("ev_001",) if grounding == "evidence" else ()),
+        claim_refs=(("claim_001",) if grounding == "claim" else ()),
+        criterion_keys=(
+            ("TECH_STACK_EVIDENCE",) if grounding == "evidence" else ("CLAIM_ACTIVITY_LINK",)
+        ),
+        technology_names=(("Spring Boot",) if grounding == "evidence" else ()),
+        file_paths=(("build.gradle",) if grounding == "evidence" else ()),
+    )
+
+    assert statement.evidence_refs or statement.claim_refs
+
+
+@pytest.mark.parametrize(
+    ("field_name", "values", "message"),
+    [
+        ("evidence_refs", ("ev_001", "ev_001"), "evidence_refs"),
+        ("claim_refs", ("claim_001", "claim_001"), "claim_refs"),
+        ("criterion_keys", ("README_READINESS", "README_READINESS"), "criterion_keys"),
+        ("technology_names", ("Spring Boot", "spring boot"), "technology_names"),
+        ("file_paths", ("README.md", "README.md"), "file_paths"),
+    ],
+)
+def test_portfolio_statement_rejects_duplicate_grounding_metadata(
+    field_name: str,
+    values: tuple[str, ...],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        make_portfolio_statement(**{field_name: values})  # type: ignore[arg-type]
+
+
+def test_portfolio_statement_rejects_empty_criteria() -> None:
+    with pytest.raises(ValidationError):
+        make_portfolio_statement(criterion_keys=())
+
+
+@pytest.mark.parametrize("file_path", ["../secret.env", "/etc/passwd"])
+def test_portfolio_statement_rejects_unsafe_file_path(file_path: str) -> None:
+    with pytest.raises(ValidationError, match="repository-relative"):
+        make_portfolio_statement(file_paths=(file_path,))
 
 
 def test_portfolio_synthesis_rejects_non_interpretation_summary() -> None:
@@ -1529,6 +1661,75 @@ def test_interview_question_batch_rejects_unknown_fields() -> None:
         )
 
 
+@pytest.mark.parametrize("statement_count", [1, 15])
+def test_creates_portfolio_statement_batch_with_one_to_fifteen_statements(
+    statement_count: int,
+) -> None:
+    statements = tuple(
+        make_portfolio_statement(content=f"포트폴리오 문장 {index}")
+        for index in range(statement_count)
+    )
+
+    batch = PortfolioStatementBatch(statements=statements)
+
+    assert batch.statements == statements
+
+
+@pytest.mark.parametrize("statement_count", [0, 16])
+def test_rejects_portfolio_statement_batch_outside_statement_limit(
+    statement_count: int,
+) -> None:
+    statements = tuple(
+        make_portfolio_statement(content=f"포트폴리오 문장 {index}")
+        for index in range(statement_count)
+    )
+
+    with pytest.raises(ValidationError):
+        PortfolioStatementBatch(statements=statements)
+
+
+def test_portfolio_statement_batch_rejects_duplicate_content_within_type() -> None:
+    statements = (
+        make_portfolio_statement(content="Spring Boot 프로젝트"),
+        make_portfolio_statement(content="  SPRING BOOT 프로젝트  "),
+    )
+
+    with pytest.raises(ValidationError, match="unique within each statement type"):
+        PortfolioStatementBatch(statements=statements)
+
+
+def test_portfolio_statement_batch_allows_same_content_across_types() -> None:
+    statements = (
+        make_portfolio_statement(
+            statement_type=PortfolioStatementType.RESUME,
+            content="Spring Boot 프로젝트",
+        ),
+        make_portfolio_statement(
+            statement_type=PortfolioStatementType.PORTFOLIO,
+            content="Spring Boot 프로젝트",
+        ),
+    )
+
+    batch = PortfolioStatementBatch(statements=statements)
+
+    assert batch.statements == statements
+
+
+def test_portfolio_statement_batch_preserves_statement_order() -> None:
+    statements = tuple(
+        make_portfolio_statement(content=content)
+        for content in ("세 번째 문장", "첫 번째 문장", "두 번째 문장")
+    )
+
+    batch = PortfolioStatementBatch(statements=statements)
+
+    assert tuple(statement.content for statement in batch.statements) == (
+        "세 번째 문장",
+        "첫 번째 문장",
+        "두 번째 문장",
+    )
+
+
 @pytest.mark.parametrize(
     "stage",
     [InternalGenerationStage.REPOSITORY, InternalGenerationStage.INTERVIEW],
@@ -1763,6 +1964,7 @@ def test_internal_models_do_not_expose_scoring_or_http_contract_fields() -> None
         InterviewQuestion,
         InterviewQuestionBatch,
         PortfolioStatement,
+        PortfolioStatementBatch,
         InternalGenerationRecord,
         InternalPortfolioReport,
     )

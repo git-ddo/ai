@@ -45,6 +45,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] 혼합 P0/P1/P2 Portfolio Prompt의 생성·제외 필드 계약
 - [x] Portfolio 전체 범위 참조·혼합 깊이·내용 정책 Validator
 - [x] Portfolio synthesis 생성과 정책 실패 1회 재생성 Service
+- [x] InterviewQuestion·PortfolioStatement grounding 내부 모델과 Batch
 
 ### 다음 구현
 
@@ -55,7 +56,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 613개이다. 이 수치는 실제 Gemini 호출, Interview·Statement
+현재 전체 테스트 기준은 644개이다. 이 수치는 실제 Gemini 호출, Interview·Statement
 생성 Service와 Portfolio Report Wire API를 포함하지 않는다.
 
 ## 목표 지원 범위
@@ -288,6 +289,6 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 다음 작업
 
-다음 논리적 작업 단위는 면접 질문과 포트폴리오 문장 생성이다. 그다음 최종
+다음 논리적 작업 단위는 내부 모델을 사용하는 면접 질문과 포트폴리오 문장 생성 Service이다. 그다음 최종
 `PortfolioAnalysis`와 Report Service를 조립한다. 상세 순서는
 [`docs/guide.md`](../docs/guide.md)의 Phase 7을 따른다.

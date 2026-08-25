@@ -358,6 +358,28 @@ def _is_repository_relative_path(path: str) -> bool:
     return all(part != ".." for part in re.split(r"[\\/]", path))
 
 
+def _validate_grounding_metadata(
+    *,
+    evidence_refs: tuple[str, ...],
+    claim_refs: tuple[str, ...],
+    criterion_keys: tuple[str, ...],
+    technology_names: tuple[str, ...],
+    file_paths: tuple[str, ...],
+) -> None:
+    if len(evidence_refs) != len(set(evidence_refs)):
+        raise ValueError("evidence_refs must not contain duplicates")
+    if len(claim_refs) != len(set(claim_refs)):
+        raise ValueError("claim_refs must not contain duplicates")
+    if len(criterion_keys) != len(set(criterion_keys)):
+        raise ValueError("criterion_keys must not contain duplicates")
+    if len({name.casefold() for name in technology_names}) != len(technology_names):
+        raise ValueError("technology_names must not contain duplicates")
+    if len(file_paths) != len(set(file_paths)):
+        raise ValueError("file_paths must not contain duplicates")
+    if any(not _is_repository_relative_path(path) for path in file_paths):
+        raise ValueError("file_paths must contain only safe repository-relative paths")
+
+
 class RepositoryAnalysis(InternalDomainModel):
     """P0 coaching result generated for one repository."""
 
@@ -409,11 +431,26 @@ class InterviewQuestion(InternalDomainModel):
     follow_up_questions: tuple[NonEmptyString, ...] = ()
     evidence_refs: tuple[EvidenceId, ...] = ()
     claim_refs: tuple[ClaimId, ...] = ()
+    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+    technology_names: tuple[NonEmptyString, ...] = ()
+    file_paths: tuple[NonEmptyString, ...] = ()
 
     @model_validator(mode="after")
-    def require_grounding(self) -> Self:
+    def validate_question_grounding(self) -> Self:
         if not self.evidence_refs and not self.claim_refs:
             raise ValueError("interview question requires an evidence or claim ref")
+
+        _validate_grounding_metadata(
+            evidence_refs=self.evidence_refs,
+            claim_refs=self.claim_refs,
+            criterion_keys=self.criterion_keys,
+            technology_names=self.technology_names,
+            file_paths=self.file_paths,
+        )
+
+        normalized_follow_ups = [question.casefold() for question in self.follow_up_questions]
+        if len(normalized_follow_ups) != len(set(normalized_follow_ups)):
+            raise ValueError("follow_up_questions must not contain duplicates")
         return self
 
 
@@ -445,11 +482,41 @@ class PortfolioStatement(InternalDomainModel):
     content: NonEmptyString
     evidence_refs: tuple[EvidenceId, ...] = ()
     claim_refs: tuple[ClaimId, ...] = ()
+    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+    technology_names: tuple[NonEmptyString, ...] = ()
+    file_paths: tuple[NonEmptyString, ...] = ()
 
     @model_validator(mode="after")
-    def require_grounding(self) -> Self:
+    def validate_statement_grounding(self) -> Self:
         if not self.evidence_refs and not self.claim_refs:
             raise ValueError("portfolio statement requires an evidence or claim ref")
+
+        _validate_grounding_metadata(
+            evidence_refs=self.evidence_refs,
+            claim_refs=self.claim_refs,
+            criterion_keys=self.criterion_keys,
+            technology_names=self.technology_names,
+            file_paths=self.file_paths,
+        )
+        return self
+
+
+class PortfolioStatementBatch(InternalDomainModel):
+    """Structured-output wrapper for reusable portfolio statements."""
+
+    statements: tuple[PortfolioStatement, ...] = Field(
+        min_length=1,
+        max_length=15,
+    )
+
+    @model_validator(mode="after")
+    def validate_statement_uniqueness(self) -> Self:
+        identities = [
+            (statement.statement_type, statement.content.casefold())
+            for statement in self.statements
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("portfolio statements must be unique within each statement type")
         return self
 
 
