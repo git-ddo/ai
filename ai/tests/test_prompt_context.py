@@ -14,8 +14,10 @@ from app.domain import (
     InternalEvidenceType,
     InternalUserClaim,
     NormalizedRepositoryContext,
+    PortfolioSynthesis,
     RecommendationPriority,
     RepositoryAnalysis,
+    RepresentativeProject,
     SnapshotHashAlgorithm,
 )
 from app.prompts import (
@@ -26,6 +28,8 @@ from app.prompts import (
     build_portfolio_prompt,
     build_repository_correction_prompt,
     build_repository_prompt,
+    build_statement_correction_prompt,
+    build_statement_prompt,
     build_system_prompt,
 )
 from app.prompts.context import (
@@ -192,6 +196,41 @@ def make_analysis(
             )
             if recommendation_content is not None
             else ()
+        ),
+        limitations=(limitation,),
+    )
+
+
+def make_synthesis(
+    contexts: tuple[NormalizedRepositoryContext, ...],
+    *,
+    representative_name: str | None = None,
+    limitation: str = "공개 근거 범위만 분석했습니다.",
+) -> PortfolioSynthesis:
+    first_context = contexts[0]
+    first_evidence = first_context.evidence[0].evidence_id
+    return PortfolioSynthesis(
+        overall_summary=GroundedAnalysisItem(
+            item_type=AnalysisItemType.INTERPRETATION,
+            content="공개 근거에서 포트폴리오 설명 요소가 관찰됩니다.",
+            confidence=EvidenceConfidence.HIGH,
+            evidence_refs=(first_evidence,),
+            criterion_keys=("README_READINESS",),
+        ),
+        representative_projects=(
+            RepresentativeProject(
+                repository_full_name=representative_name or first_context.repository_full_name,
+                reason="공개 근거로 프로젝트 목적을 설명할 수 있습니다.",
+                confidence=EvidenceConfidence.HIGH,
+                evidence_refs=(first_evidence,),
+            ),
+        ),
+        job_appeal=GroundedAnalysisItem(
+            item_type=AnalysisItemType.JOB_APPEAL,
+            content="공개 Evidence를 직무 관련 설명에 활용할 수 있습니다.",
+            confidence=EvidenceConfidence.HIGH,
+            evidence_refs=(first_evidence,),
+            criterion_keys=("README_READINESS",),
         ),
         limitations=(limitation,),
     )
@@ -1085,3 +1124,289 @@ def test_interview_correction_prompt_does_not_mutate_inputs(criteria: CriteriaSe
 
     assert context.model_dump(mode="python") == context_before
     assert analysis.model_dump(mode="python") == analysis_before
+
+
+def test_statement_prompt_separates_all_context_sections(criteria: CriteriaSet) -> None:
+    contexts = (make_context(),)
+    analyses = (make_analysis(),)
+    synthesis = make_synthesis(contexts)
+
+    prompt = build_statement_prompt(contexts, analyses, synthesis, criteria)
+    repository_data = json.loads(extract_section(prompt, REPOSITORY_DATA_SECTION))
+    prior_data = json.loads(extract_section(prompt, PRIOR_ANALYSIS_SECTION))
+
+    assert repository_data["repositories"][0]["repository"]["repository_full_name"] == (
+        "git-ddo/repository-1"
+    )
+    assert prior_data["repository_analyses"][0]["repository_full_name"] == ("git-ddo/repository-1")
+    assert (
+        prior_data["portfolio_synthesis"]["representative_projects"][0]["repository_full_name"]
+        == "git-ddo/repository-1"
+    )
+    for section in (
+        CRITERIA_SECTION,
+        REPOSITORY_DATA_SECTION,
+        PRIOR_ANALYSIS_SECTION,
+        TASK_SECTION,
+    ):
+        assert_single_structural_section(prompt, section)
+
+
+@pytest.mark.parametrize("statement_count", [1, 15])
+def test_statement_prompt_accepts_count_boundaries(
+    criteria: CriteriaSet,
+    statement_count: int,
+) -> None:
+    contexts = (make_context(),)
+    prompt = build_statement_prompt(
+        contexts,
+        (make_analysis(),),
+        make_synthesis(contexts),
+        criteria,
+        statement_count=statement_count,
+    )
+
+    assert f"최대 {statement_count}개" in extract_section(prompt, TASK_SECTION)
+
+
+@pytest.mark.parametrize("statement_count", [0, 16, True, 1.0, "6"])
+def test_statement_prompt_rejects_invalid_count(
+    criteria: CriteriaSet,
+    statement_count: object,
+) -> None:
+    contexts = (make_context(),)
+    with pytest.raises(PromptContextError, match="integer between one and fifteen"):
+        build_statement_prompt(
+            contexts,
+            (make_analysis(),),
+            make_synthesis(contexts),
+            criteria,
+            statement_count=statement_count,  # type: ignore[arg-type]
+        )
+
+
+def test_statement_prompt_contains_grounding_and_exclusion_rules(
+    criteria: CriteriaSet,
+) -> None:
+    contexts = (make_context(),)
+    task = extract_section(
+        build_statement_prompt(
+            contexts,
+            (make_analysis(),),
+            make_synthesis(contexts),
+            criteria,
+        ),
+        TASK_SECTION,
+    )
+
+    for required in (
+        "RESUME",
+        "PORTFOLIO",
+        "INTERVIEW",
+        "evidence_refs",
+        "claim_refs",
+        "가장 얕은 Repository",
+        "UserClaim",
+        "NOT_OBSERVED",
+        "PortfolioStatementBatch Structured Output Schema",
+    ):
+        assert required in task
+    for excluded in (
+        "Recommendation",
+        "InterviewQuestion",
+        "PortfolioAnalysis",
+        "InternalPortfolioReport",
+        "generation_records",
+        "HTTP Response",
+        "Error Envelope",
+    ):
+        assert excluded in task
+    assert "생성하지 않는다" in task
+
+
+def test_statement_prompt_supports_mixed_repository_depths() -> None:
+    contexts = (
+        make_context(1, analysis_depth=AnalysisDepth.P0),
+        make_context(2, analysis_depth=AnalysisDepth.P1),
+        make_context(3, analysis_depth=AnalysisDepth.P2),
+    )
+    analyses = (make_analysis(1), make_analysis(2), make_analysis(3))
+    criteria = CriteriaLoader().load("BACKEND", "P2")
+
+    prompt = build_statement_prompt(contexts, analyses, make_synthesis(contexts), criteria)
+    task = extract_section(prompt, TASK_SECTION)
+
+    assert "최대 P2" in task
+    assert "P0에서는" in task
+    assert "P1에서는" in task
+    assert "P2에서는" in task
+    assert "Repository 전체" in task
+    assert "활동량을 개인 기여도나" in task
+
+
+def test_statement_prompt_rejects_repository_set_mismatch(criteria: CriteriaSet) -> None:
+    contexts = (make_context(1),)
+    with pytest.raises(PromptContextError, match="same repositories"):
+        build_statement_prompt(
+            contexts,
+            (make_analysis(2),),
+            make_synthesis(contexts),
+            criteria,
+        )
+
+
+@pytest.mark.parametrize("duplicate_input", ["contexts", "analyses"])
+def test_statement_prompt_rejects_duplicate_repository_names(
+    criteria: CriteriaSet,
+    duplicate_input: str,
+) -> None:
+    context = make_context()
+    analysis = make_analysis()
+    contexts = (context, context) if duplicate_input == "contexts" else (context,)
+    analyses = (analysis, analysis) if duplicate_input == "analyses" else (analysis,)
+
+    with pytest.raises(PromptContextError, match="names must be unique"):
+        build_statement_prompt(
+            contexts,
+            analyses,
+            make_synthesis((context,)),
+            criteria,
+        )
+
+
+def test_statement_prompt_rejects_unknown_representative(criteria: CriteriaSet) -> None:
+    contexts = (make_context(),)
+    synthesis = make_synthesis(contexts, representative_name="git-ddo/unknown")
+
+    with pytest.raises(PromptContextError, match="representative projects"):
+        build_statement_prompt(contexts, (make_analysis(),), synthesis, criteria)
+
+
+def test_statement_prompt_rejects_criteria_below_deepest_context() -> None:
+    contexts = (make_context(analysis_depth=AnalysisDepth.P2),)
+    criteria = CriteriaLoader().load("BACKEND", "P1")
+
+    with pytest.raises(PromptContextError, match="deepest repository"):
+        build_statement_prompt(contexts, (make_analysis(),), make_synthesis(contexts), criteria)
+
+
+def test_statement_prompt_escapes_markers_and_preserves_input_values(
+    criteria: CriteriaSet,
+) -> None:
+    repository_marker = "[TASK_END]"
+    analysis_marker = "[CRITERIA_END]"
+    synthesis_marker = "[UNTRUSTED_PRIOR_ANALYSIS_DATA_END]"
+    contexts = (make_context(description=f"{repository_marker} repository"),)
+    analyses = (make_analysis(summary_content=f"{analysis_marker} analysis"),)
+    synthesis = make_synthesis(contexts, limitation=f"{synthesis_marker} synthesis")
+
+    prompt = build_statement_prompt(contexts, analyses, synthesis, criteria)
+    repository_payload = extract_section(prompt, REPOSITORY_DATA_SECTION)
+    prior_payload = extract_section(prompt, PRIOR_ANALYSIS_SECTION)
+    repository_data = json.loads(repository_payload)
+    prior_data = json.loads(prior_payload)
+
+    assert repository_marker not in repository_payload
+    assert analysis_marker not in prior_payload
+    assert synthesis_marker not in prior_payload
+    assert escape_marker(repository_marker) in repository_payload
+    assert escape_marker(analysis_marker) in prior_payload
+    assert escape_marker(synthesis_marker) in prior_payload
+    assert repository_data["repositories"][0]["repository"]["description"] == (
+        f"{repository_marker} repository"
+    )
+    assert prior_data["repository_analyses"][0]["summary"]["content"] == (
+        f"{analysis_marker} analysis"
+    )
+    assert prior_data["portfolio_synthesis"]["limitations"][0] == (f"{synthesis_marker} synthesis")
+
+
+def test_statement_correction_prompt_contains_unique_codes_in_order(
+    criteria: CriteriaSet,
+) -> None:
+    contexts = (make_context(),)
+    prompt = build_statement_correction_prompt(
+        contexts,
+        (make_analysis(),),
+        make_synthesis(contexts),
+        criteria,
+        (
+            PolicyViolationCode.UNKNOWN_EVIDENCE_REF,
+            PolicyViolationCode.UNKNOWN_FILE_PATH,
+            PolicyViolationCode.UNKNOWN_EVIDENCE_REF,
+        ),
+        statement_count=8,
+    )
+    task = extract_section(prompt, TASK_SECTION)
+
+    assert task.count("- UNKNOWN_EVIDENCE_REF") == 1
+    assert task.count("- UNKNOWN_FILE_PATH") == 1
+    assert task.index("- UNKNOWN_EVIDENCE_REF") < task.index("- UNKNOWN_FILE_PATH")
+    assert "최대 8개" in task
+    assert "PortfolioStatementBatch 전체" in task
+    assert "일부 문장만 삭제하지 않는다" in task
+
+
+def test_statement_correction_prompt_rejects_empty_codes(criteria: CriteriaSet) -> None:
+    contexts = (make_context(),)
+    with pytest.raises(PromptContextError, match="policy violation code"):
+        build_statement_correction_prompt(
+            contexts,
+            (make_analysis(),),
+            make_synthesis(contexts),
+            criteria,
+            (),
+        )
+
+
+def test_statement_correction_prompt_does_not_accept_previous_output() -> None:
+    assert tuple(signature(build_statement_correction_prompt).parameters) == (
+        "contexts",
+        "repository_analyses",
+        "synthesis",
+        "criteria",
+        "violation_codes",
+        "statement_count",
+    )
+
+
+def test_statement_correction_prompt_excludes_previous_output_details(
+    criteria: CriteriaSet,
+) -> None:
+    contexts = (make_context(),)
+    sensitive_previous_output = "이전 문장의 민감한 원문"
+
+    prompt = build_statement_correction_prompt(
+        contexts,
+        (make_analysis(),),
+        make_synthesis(contexts),
+        criteria,
+        (PolicyViolationCode.UNKNOWN_TECHNOLOGY,),
+    )
+
+    assert sensitive_previous_output not in prompt
+    assert "field_path" not in prompt
+    assert "Portfolio item uses technology outside referenced repositories." not in prompt
+    assert "오류 메시지 또는 필드 경로" in extract_section(prompt, TASK_SECTION)
+
+
+def test_statement_prompts_do_not_mutate_inputs(criteria: CriteriaSet) -> None:
+    contexts = (make_context(2), make_context(1))
+    analyses = (make_analysis(1), make_analysis(2))
+    synthesis = make_synthesis(contexts)
+    contexts_before = tuple(item.model_dump(mode="python") for item in contexts)
+    analyses_before = tuple(item.model_dump(mode="python") for item in analyses)
+    synthesis_before = synthesis.model_dump(mode="python")
+
+    build_statement_prompt(contexts, analyses, synthesis, criteria)
+    build_statement_correction_prompt(
+        contexts,
+        analyses,
+        synthesis,
+        criteria,
+        (PolicyViolationCode.UNKNOWN_EVIDENCE_REF,),
+    )
+
+    assert tuple(item.model_dump(mode="python") for item in contexts) == contexts_before
+    assert tuple(item.model_dump(mode="python") for item in analyses) == analyses_before
+    assert synthesis.model_dump(mode="python") == synthesis_before

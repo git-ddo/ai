@@ -73,13 +73,14 @@ schemaVersion: "1.0"
 - [x] InterviewQuestion·PortfolioStatement grounding 내부 모델과 Batch
 - [x] InterviewQuestion·PortfolioStatement 참조·깊이·내용 정책 Validator
 - [x] InterviewQuestion 생성과 정책 실패 1회 재생성 Service
+- [x] PortfolioStatement 생성과 정책 실패 1회 재생성 Service
 - [ ] Portfolio·Report Service와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 717개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
-PortfolioStatement 생성 Service와 Wire API를 포함하지 않는다.
+현재 AI 검증 기준은 전체 `pytest` 766개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+PortfolioAnalysis 최종 조립, Report Service와 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
 
@@ -427,7 +428,8 @@ ai/tests/test_portfolio_service.py
 - [x] `InterviewQuestion`·`PortfolioStatement` grounding 필드와 Batch 내부 모델
 - [x] InterviewQuestion·PortfolioStatement 참조·깊이·내용 정책 Validator
 - [x] InterviewQuestion 생성과 정책 실패 1회 재생성 Service
-- [ ] 포트폴리오 문장
+- [x] PortfolioStatement 생성과 정책 실패 1회 재생성 Service
+- [ ] PortfolioAnalysis 최종 조립
 
 Portfolio LLM 호출은 기존 `RepositoryAnalysis`를 다시 생성하지 않고, 종합 결과인
 `PortfolioSynthesis`만 Structured Output으로 생성한다. `PortfolioAnalysis`는 후속
@@ -450,6 +452,11 @@ InterviewQuestion Service는 Repository Context와 기존 `RepositoryAnalysis`�
 `InterviewQuestionBatch`를 생성한다. 대상 Repository 참조를 먼저 검증하고 Criteria·기술·파일과
 자연어 내용을 이어서 검증한다. 최초 결과가 정책 위반인 경우에만 위반 코드만 담은 교정 Prompt로
 전체 Batch를 한 번 재생성하며, Provider 오류와 입력·Prompt·Criteria 오류는 재생성하지 않는다.
+
+PortfolioStatement Service는 Repository Context, Repository별 분석과 `PortfolioSynthesis`를
+기반으로 `PortfolioStatementBatch`를 생성한다. 전체 Context 중 가장 깊은 수준의 누적 Criteria를
+사용하되 각 문장의 실제 판단 상한은 참조 Repository 중 가장 얕은 완료 깊이이다. 참조·내용 정책
+위반에만 위반 코드 기반 전체 Batch 재생성을 한 번 허용하고 Provider 오류는 그대로 전파한다.
 
 현재 Wire에 없는 문장 `type`, 문장·질문의 `repositoryId`, `followUpQuestions`는 내부 모델에
 있더라도 Wire 변환 전에 Backend 계약 상태를 다시 확인한다.
