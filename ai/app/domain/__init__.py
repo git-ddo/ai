@@ -22,6 +22,7 @@ from app.domain.models import (
     NormalizedRepositoryContext,
     PortfolioAnalysis,
     PortfolioStatement,
+    PortfolioSynthesis,
     RepositoryAnalysis,
     RepresentativeProject,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "InterviewQuestionBatch",
     "NormalizedRepositoryContext",
     "PortfolioAnalysis",
+    "PortfolioSynthesis",
     "PortfolioStatement",
     "PortfolioStatementType",
     "RecommendationPriority",

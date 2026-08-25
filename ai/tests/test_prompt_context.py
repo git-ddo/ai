@@ -650,13 +650,45 @@ def test_portfolio_task_contains_grounding_rules(criteria: CriteriaSet) -> None:
     for required in (
         "제공된 Repository 중에서만 선택",
         "job_appeal",
-        "공개 Evidence만 참조",
-        "RECOMMENDATION",
-        "PortfolioStatement",
-        "Evidence 또는 UserClaim",
-        "PortfolioAnalysis Structured Output Schema",
+        "단일 객체",
+        "공개 Evidence를 최소 하나 참조",
+        "BACKEND_DERIVED Evidence",
+        "NOT_OBSERVED",
+        "PortfolioSynthesis Structured Output Schema",
     ):
         assert required in task
+
+    for field_name in (
+        "overall_summary",
+        "representative_projects",
+        "strengths",
+        "gaps",
+        "next_actions",
+        "job_appeal",
+        "limitations",
+    ):
+        assert field_name in task
+
+    assert "PortfolioAnalysis Structured Output Schema" not in task
+
+
+def test_portfolio_task_excludes_later_assembly_outputs(criteria: CriteriaSet) -> None:
+    task = extract_section(
+        build_portfolio_prompt((make_context(),), (make_analysis(),), criteria),
+        TASK_SECTION,
+    )
+
+    for excluded_field in (
+        "repository_analyses",
+        "interview_questions",
+        "portfolio_statements",
+        "generation_records",
+        "HTTP Response",
+        "Error Envelope",
+    ):
+        assert excluded_field in task
+
+    assert "생성하지 않는다" in task
 
 
 def test_portfolio_prompt_escapes_markers_in_prior_analysis(

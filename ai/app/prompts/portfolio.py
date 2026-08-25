@@ -16,24 +16,29 @@ from app.prompts.context import (
 
 _PORTFOLIO_TASK_TEMPLATE = """
 BACKEND × ENTRY × 최대 {analysis_depth} 범위에서 Repository별 분석을 종합한
-PortfolioAnalysis를 생성한다.
+PortfolioSynthesis를 생성한다.
 
 - 각 Repository의 completedEvidenceLevels까지만 사용하고 완료되지 않은 깊이로 판단하지 않는다.
 - 한 Repository의 Evidence를 다른 Repository의 근거로 사용하지 않는다.
 - 전체 포트폴리오 진단과 Repository별 실제 분석 한계를 제시한다.
-- 대표 프로젝트는 제공된 Repository 중에서만 선택하고 Evidence 또는 UserClaim을 참조한다.
-- job_appeal 항목은 공개 Evidence만 참조하며 UserClaim만으로 확정하지 않는다.
-- 전체 개선 제안은 RECOMMENDATION으로 만들고 Evidence를 최소 하나 참조한다.
-- PortfolioStatement는 Evidence 또는 UserClaim을 최소 하나 참조한다.
-- UserClaim만 사용하는 문장은 사용자 진술 기반이라는 구분을 유지한다.
+- overall_summary, representative_projects, strengths, gaps, next_actions, job_appeal,
+  limitations만 생성한다.
+- 대표 프로젝트는 제공된 Repository 중에서만 선택하고, 해당 Repository의
+  Evidence 또는 UserClaim만 참조한다.
+- strengths, gaps, next_actions, job_appeal은 공개 Evidence를 최소 하나 참조한다.
+- strengths와 단일 객체 job_appeal은 UserClaim만으로 확정하지 않는다.
+- 누락을 기반으로 gaps 또는 next_actions을 생성하려면 명시적인
+  BACKEND_DERIVED Evidence를 참조한다.
+- NOT_OBSERVED는 실제 부재, 거짓 또는 미기여를 의미하지 않는다.
 - 이전 RepositoryAnalysis와 입력 데이터에 없는 새로운 사실을 생성하지 않는다.
 - P1 활동량을 실력이나 개인 기여율로 해석하지 않는다.
 - P2 snippet을 Repository 전체 코드·설계·테스트 품질로 일반화하지 않는다.
 - 전달된 코드를 실행하지 않는다.
-- InterviewQuestion은 별도 Interview Prompt에서 생성하므로 필수로 생성하지 않는다.
+- repository_analyses, interview_questions, portfolio_statements, generation_records, HTTP Response
+  필드와 Error Envelope는 생성하지 않는다.
 - 프로젝트 점수, 개인 기여율, 사용자 역량을 생성하지 않는다.
 - 경력 수준 충족 여부, 취업 또는 합격 가능성을 생성하지 않는다.
-- 응답은 Provider가 전달한 PortfolioAnalysis Structured Output Schema를 따른다.
+- 응답은 Provider가 전달한 PortfolioSynthesis Structured Output Schema를 따른다.
 """.strip()
 
 
@@ -42,7 +47,7 @@ def build_portfolio_prompt(
     repository_analyses: Sequence[RepositoryAnalysis],
     criteria: CriteriaSet,
 ) -> str:
-    """Build the user prompt for P0 portfolio aggregation."""
+    """Build the user prompt for depth-aware portfolio synthesis."""
 
     ordered_contexts, ordered_analyses = _validate_and_order_inputs(
         contexts,

@@ -23,6 +23,7 @@ from app.domain import (
     PortfolioAnalysis,
     PortfolioStatement,
     PortfolioStatementType,
+    PortfolioSynthesis,
     RecommendationPriority,
     RepositoryAnalysis,
     RepresentativeProject,
@@ -265,6 +266,48 @@ def make_interview_question(
     )
 
 
+def make_portfolio_synthesis(
+    *,
+    representative_name: str = "git-ddo/backend",
+    overall_summary: GroundedAnalysisItem | None = None,
+    representative_projects: tuple[RepresentativeProject, ...] | None = None,
+    strengths: tuple[GroundedAnalysisItem, ...] | None = None,
+    gaps: tuple[GroundedAnalysisItem, ...] | None = None,
+    next_actions: tuple[GroundedAnalysisItem, ...] | None = None,
+    job_appeal: GroundedAnalysisItem | None = None,
+    limitations: tuple[str, ...] = ("공개 P0 근거만 사용한 분석입니다.",),
+) -> PortfolioSynthesis:
+    return PortfolioSynthesis(
+        overall_summary=overall_summary
+        or make_interpretation(content="공개 P0 근거에서 백엔드 프로젝트 설명 요소가 관찰됩니다."),
+        representative_projects=(
+            representative_projects
+            if representative_projects is not None
+            else (
+                RepresentativeProject(
+                    repository_full_name=representative_name,
+                    reason="README와 기술 설정 근거를 함께 설명할 수 있습니다.",
+                    confidence=EvidenceConfidence.HIGH,
+                    evidence_refs=("ev_001",),
+                ),
+            )
+        ),
+        strengths=(
+            strengths
+            if strengths is not None
+            else (make_interpretation(content="공개 근거로 설명할 강점이 있습니다."),)
+        ),
+        gaps=(
+            gaps
+            if gaps is not None
+            else (make_interpretation(content="공개 근거에서 보완할 설명이 확인됩니다."),)
+        ),
+        next_actions=(next_actions if next_actions is not None else (make_recommendation(),)),
+        job_appeal=job_appeal or make_job_appeal(),
+        limitations=limitations,
+    )
+
+
 def make_portfolio_analysis(
     *,
     repository_analyses: tuple[RepositoryAnalysis, ...] | None = None,
@@ -279,21 +322,10 @@ def make_portfolio_analysis(
         if interview_questions is not None
         else (make_interview_question(repository_full_name=representative_name),)
     )
+    synthesis = make_portfolio_synthesis(representative_name=representative_name)
     return PortfolioAnalysis(
-        overall_summary=make_interpretation(
-            content="공개 P0 근거에서 백엔드 프로젝트 설명 요소가 관찰됩니다."
-        ),
         repository_analyses=analyses,
-        representative_projects=(
-            RepresentativeProject(
-                repository_full_name=representative_name,
-                reason="README와 기술 설정 근거를 함께 설명할 수 있습니다.",
-                confidence=EvidenceConfidence.HIGH,
-                evidence_refs=("ev_001",),
-            ),
-        ),
-        job_appeal=(make_job_appeal(),),
-        recommendations=(make_recommendation(),),
+        synthesis=synthesis,
         interview_questions=resolved_interview_questions,
         portfolio_statements=(
             PortfolioStatement(
@@ -303,7 +335,6 @@ def make_portfolio_analysis(
                 claim_refs=("claim_001",),
             ),
         ),
-        limitations=("공개 P0 근거만 사용한 분석입니다.",),
     )
 
 
@@ -843,8 +874,19 @@ def test_creates_valid_portfolio_analysis() -> None:
     analysis = make_portfolio_analysis()
 
     assert len(analysis.repository_analyses) == 1
-    assert analysis.job_appeal[0].item_type is AnalysisItemType.JOB_APPEAL
+    assert analysis.synthesis.job_appeal.item_type is AnalysisItemType.JOB_APPEAL
     assert analysis.portfolio_statements[0].evidence_refs == ("ev_001",)
+
+
+def test_creates_valid_portfolio_synthesis() -> None:
+    synthesis = make_portfolio_analysis().synthesis
+
+    assert synthesis.overall_summary.item_type is AnalysisItemType.INTERPRETATION
+    assert synthesis.job_appeal.item_type is AnalysisItemType.JOB_APPEAL
+    assert synthesis.strengths[0].evidence_refs == ("ev_001",)
+    assert synthesis.gaps[0].evidence_refs == ("ev_001",)
+    assert synthesis.next_actions[0].priority is RecommendationPriority.HIGH
+    assert synthesis.limitations == ("공개 P0 근거만 사용한 분석입니다.",)
 
 
 def test_rejects_unknown_fields() -> None:
@@ -1073,6 +1115,160 @@ def test_portfolio_statement_rejects_missing_references() -> None:
         PortfolioStatement(
             statement_type=PortfolioStatementType.RESUME,
             content="근거 없는 포트폴리오 문장입니다.",
+        )
+
+
+def test_portfolio_synthesis_rejects_non_interpretation_summary() -> None:
+    with pytest.raises(ValidationError, match="overall_summary must be an INTERPRETATION"):
+        make_portfolio_synthesis(overall_summary=make_observation())
+
+
+def test_portfolio_synthesis_rejects_non_interpretation_strength() -> None:
+    with pytest.raises(ValidationError, match="strengths must contain only INTERPRETATION"):
+        make_portfolio_synthesis(strengths=(make_observation(),))
+
+
+def test_portfolio_synthesis_rejects_claim_only_strength() -> None:
+    claim_only = make_interpretation(evidence_refs=(), claim_refs=("claim_001",))
+
+    with pytest.raises(ValidationError, match="strengths require at least one evidence ref"):
+        make_portfolio_synthesis(strengths=(claim_only,))
+
+
+def test_portfolio_synthesis_rejects_non_interpretation_gap() -> None:
+    with pytest.raises(ValidationError, match="gaps must contain only INTERPRETATION"):
+        make_portfolio_synthesis(gaps=(make_observation(),))
+
+
+def test_portfolio_synthesis_rejects_claim_only_gap() -> None:
+    claim_only = make_interpretation(evidence_refs=(), claim_refs=("claim_001",))
+
+    with pytest.raises(ValidationError, match="gaps require at least one evidence ref"):
+        make_portfolio_synthesis(gaps=(claim_only,))
+
+
+def test_portfolio_synthesis_rejects_non_recommendation_next_action() -> None:
+    with pytest.raises(ValidationError, match="next_actions must contain only RECOMMENDATION"):
+        make_portfolio_synthesis(next_actions=(make_interpretation(),))
+
+
+def test_portfolio_synthesis_rejects_non_job_appeal_item() -> None:
+    with pytest.raises(ValidationError, match="job_appeal must be a JOB_APPEAL"):
+        make_portfolio_synthesis(job_appeal=make_interpretation())
+
+
+@pytest.mark.parametrize("collection_type", [tuple, list])
+def test_portfolio_synthesis_rejects_job_appeal_collection(
+    collection_type: Callable[[tuple[GroundedAnalysisItem, ...]], object],
+) -> None:
+    data = make_portfolio_synthesis().model_dump()
+    data["job_appeal"] = collection_type((make_job_appeal(),))
+
+    with pytest.raises(ValidationError, match="job_appeal"):
+        PortfolioSynthesis.model_validate(data)
+
+
+@pytest.mark.parametrize("representative_count", [1, 5])
+def test_portfolio_synthesis_accepts_one_to_five_representatives(
+    representative_count: int,
+) -> None:
+    representatives = tuple(
+        RepresentativeProject(
+            repository_full_name=f"git-ddo/repo-{index}",
+            reason="공개 근거를 설명할 수 있습니다.",
+            confidence=EvidenceConfidence.HIGH,
+            evidence_refs=(f"ev_{index + 1:03d}",),
+        )
+        for index in range(representative_count)
+    )
+
+    synthesis = make_portfolio_synthesis(representative_projects=representatives)
+
+    assert len(synthesis.representative_projects) == representative_count
+
+
+@pytest.mark.parametrize("representative_count", [0, 6])
+def test_portfolio_synthesis_requires_one_to_five_representatives(
+    representative_count: int,
+) -> None:
+    representatives = tuple(
+        RepresentativeProject(
+            repository_full_name=f"git-ddo/repo-{index}",
+            reason="공개 근거를 설명할 수 있습니다.",
+            confidence=EvidenceConfidence.HIGH,
+            evidence_refs=(f"ev_{index + 1:03d}",),
+        )
+        for index in range(representative_count)
+    )
+
+    with pytest.raises(ValidationError):
+        make_portfolio_synthesis(representative_projects=representatives)
+
+
+def test_portfolio_synthesis_rejects_duplicate_representative_names() -> None:
+    representative = RepresentativeProject(
+        repository_full_name="git-ddo/backend",
+        reason="공개 근거를 설명할 수 있습니다.",
+        confidence=EvidenceConfidence.HIGH,
+        evidence_refs=("ev_001",),
+    )
+
+    with pytest.raises(ValidationError, match="representative project names must be unique"):
+        make_portfolio_synthesis(representative_projects=(representative, representative))
+
+
+def test_portfolio_synthesis_rejects_empty_limitations() -> None:
+    with pytest.raises(ValidationError):
+        make_portfolio_synthesis(limitations=())
+
+
+def test_portfolio_synthesis_rejects_blank_limitation() -> None:
+    with pytest.raises(ValidationError):
+        make_portfolio_synthesis(limitations=("   ",))
+
+
+def test_portfolio_synthesis_rejects_duplicate_limitations() -> None:
+    with pytest.raises(ValidationError, match="limitations must not contain duplicates"):
+        make_portfolio_synthesis(limitations=("공개 근거만 분석했습니다.",) * 2)
+
+
+def test_portfolio_analysis_accepts_empty_interviews_and_statements() -> None:
+    populated_analysis = make_portfolio_analysis()
+
+    analysis = PortfolioAnalysis(
+        repository_analyses=populated_analysis.repository_analyses,
+        synthesis=populated_analysis.synthesis,
+    )
+
+    assert analysis.interview_questions == ()
+    assert analysis.portfolio_statements == ()
+
+
+def test_portfolio_analysis_rejects_unanalyzed_representative_project() -> None:
+    analysis = make_portfolio_analysis()
+    unknown_synthesis = make_portfolio_synthesis(representative_name="git-ddo/unknown")
+
+    with pytest.raises(
+        ValidationError,
+        match="representative projects must reference analyzed repositories",
+    ):
+        PortfolioAnalysis(
+            repository_analyses=analysis.repository_analyses,
+            synthesis=unknown_synthesis,
+        )
+
+
+def test_portfolio_analysis_rejects_interview_for_unanalyzed_repository() -> None:
+    analysis = make_portfolio_analysis()
+
+    with pytest.raises(
+        ValidationError,
+        match="interview questions must reference analyzed repositories",
+    ):
+        PortfolioAnalysis(
+            repository_analyses=analysis.repository_analyses,
+            synthesis=analysis.synthesis,
+            interview_questions=(make_interview_question(repository_full_name="git-ddo/other"),),
         )
 
 
@@ -1563,6 +1759,7 @@ def test_internal_models_do_not_expose_scoring_or_http_contract_fields() -> None
         NormalizedRepositoryContext,
         RepositoryAnalysis,
         PortfolioAnalysis,
+        PortfolioSynthesis,
         InterviewQuestion,
         InterviewQuestionBatch,
         PortfolioStatement,

@@ -414,13 +414,18 @@ ai/tests/test_portfolio_service.py
 
 구현:
 
-- [ ] 전체 요약
-- [ ] 대표 Repository
-- [ ] 단일 `jobAppeal`
-- [ ] Evidence 기반 strengths/gaps/nextActions
+- [x] `PortfolioSynthesis` Structured Output과 최종 `PortfolioAnalysis` 조립 책임 분리
+- [x] 전체 요약·대표 Repository·strengths/gaps/nextActions·단일 `jobAppeal` 모델
+- [x] Portfolio Prompt의 생성·제외 필드와 혼합 깊이 제약
+- [ ] Portfolio 전체 범위 참조·깊이·내용 정책 Validator
+- [ ] Portfolio synthesis 생성과 정책 재생성 Service
 - [ ] 면접 질문과 답변 방향
 - [ ] 포트폴리오 문장
-- [ ] 전체 범위 참조 검증
+
+Portfolio LLM 호출은 기존 `RepositoryAnalysis`를 다시 생성하지 않고, 종합 결과인
+`PortfolioSynthesis`만 Structured Output으로 생성한다. `PortfolioAnalysis`는 후속
+Service에서 Repository 분석, synthesis, 면접 질문과 포트폴리오 문장을 조립하는
+최종 내부 결과이다.
 
 현재 Wire에 없는 문장 `type`, 문장·질문의 `repositoryId`, `followUpQuestions`는 내부 모델에
 있더라도 Wire 변환 전에 Backend 계약 상태를 다시 확인한다.
