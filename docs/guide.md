@@ -71,12 +71,13 @@ schemaVersion: "1.0"
 - [x] Portfolio 전체 범위 참조·혼합 깊이·내용 정책 Validator
 - [x] Portfolio synthesis 생성과 정책 실패 1회 재생성 Service
 - [x] InterviewQuestion·PortfolioStatement grounding 내부 모델과 Batch
+- [x] InterviewQuestion·PortfolioStatement 참조·깊이·내용 정책 Validator
 - [ ] Portfolio·Report Service와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 644개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+현재 AI 검증 기준은 전체 `pytest` 686개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
 Interview·Statement 생성 Service와 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -423,6 +424,7 @@ ai/tests/test_portfolio_service.py
 - [x] Portfolio 전체 범위 참조·깊이·내용 정책 Validator
 - [x] Portfolio synthesis 생성과 정책 재생성 Service
 - [x] `InterviewQuestion`·`PortfolioStatement` grounding 필드와 Batch 내부 모델
+- [x] InterviewQuestion·PortfolioStatement 참조·깊이·내용 정책 Validator
 - [ ] 면접 질문과 답변 방향
 - [ ] 포트폴리오 문장
 

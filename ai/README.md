@@ -46,6 +46,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] Portfolio 전체 범위 참조·혼합 깊이·내용 정책 Validator
 - [x] Portfolio synthesis 생성과 정책 실패 1회 재생성 Service
 - [x] InterviewQuestion·PortfolioStatement grounding 내부 모델과 Batch
+- [x] InterviewQuestion·PortfolioStatement 참조·깊이·내용 정책 Validator
 
 ### 다음 구현
 
@@ -56,7 +57,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 644개이다. 이 수치는 실제 Gemini 호출, Interview·Statement
+현재 전체 테스트 기준은 686개이다. 이 수치는 실제 Gemini 호출, Interview·Statement
 생성 Service와 Portfolio Report Wire API를 포함하지 않는다.
 
 ## 목표 지원 범위

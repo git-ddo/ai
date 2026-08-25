@@ -2,6 +2,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 from app.core.exceptions import ReportPolicyError
 from app.criteria import CriteriaSet, Criterion
@@ -11,11 +12,24 @@ from app.domain import (
     GroundedAnalysisItem,
     InternalEvidence,
     InternalEvidenceType,
+    InterviewQuestion,
+    InterviewQuestionBatch,
     NormalizedRepositoryContext,
+    PortfolioStatementBatch,
     PortfolioSynthesis,
     RepositoryAnalysis,
     RepresentativeProject,
 )
+
+
+class _GroundedMetadata(Protocol):
+    """Structural type shared by generated items carrying grounding metadata."""
+
+    evidence_refs: tuple[str, ...]
+    claim_refs: tuple[str, ...]
+    criterion_keys: tuple[str, ...]
+    technology_names: tuple[str, ...]
+    file_paths: tuple[str, ...]
 
 
 class PolicyViolationCode(StrEnum):
@@ -235,7 +249,7 @@ class RepositoryPolicyValidator:
     def _validate_item_metadata(
         self,
         *,
-        item: GroundedAnalysisItem,
+        item: _GroundedMetadata,
         field_path: str,
         context: NormalizedRepositoryContext,
         criteria_by_key: dict[str, Criterion],
@@ -447,6 +461,281 @@ class RepositoryPolicyValidator:
         return tuple(violations)
 
 
+class InterviewQuestionPolicyValidator:
+    """Validate repository-scoped interview question batches."""
+
+    def validate_references(
+        self,
+        batch: InterviewQuestionBatch,
+        expected_context: NormalizedRepositoryContext,
+        portfolio_contexts: Sequence[NormalizedRepositoryContext],
+    ) -> None:
+        contexts = tuple(portfolio_contexts)
+        evidence_owners = {
+            evidence.evidence_id: context.repository_full_name
+            for context in contexts
+            for evidence in context.evidence
+        }
+        claim_owners = {
+            claim.claim_id: context.repository_full_name
+            for context in contexts
+            for claim in context.user_claims
+        }
+        expected_repository = expected_context.repository_full_name
+
+        violations: list[PolicyViolation] = []
+        if sum(context == expected_context for context in contexts) != 1:
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.CROSS_REPOSITORY_REF,
+                    message="Expected interview repository context is not present exactly once.",
+                    field_path="expected_context",
+                )
+            )
+
+        for index, question in enumerate(batch.questions):
+            field_path = f"questions[{index}]"
+            if question.repository_full_name != expected_repository:
+                violations.append(
+                    PolicyViolation(
+                        code=PolicyViolationCode.CROSS_REPOSITORY_REF,
+                        message="Interview question does not match the expected repository.",
+                        field_path=f"{field_path}.repository_full_name",
+                    )
+                )
+            violations.extend(
+                _find_repository_item_reference_violations(
+                    item=question,
+                    field_path=field_path,
+                    expected_repository=expected_repository,
+                    evidence_owners=evidence_owners,
+                    claim_owners=claim_owners,
+                )
+            )
+
+        deduplicated = _deduplicate_violations(violations)
+        if deduplicated:
+            raise ReportPolicyError(deduplicated)
+
+    def validate_content(
+        self,
+        batch: InterviewQuestionBatch,
+        context: NormalizedRepositoryContext,
+        criteria: CriteriaSet,
+    ) -> None:
+        criteria_by_key = {criterion.key: criterion for criterion in criteria.criteria}
+        evidence_by_id = {evidence.evidence_id: evidence for evidence in context.evidence}
+        allowed_technologies = {name.casefold() for name in context.technology_names}
+        allowed_paths = {
+            path
+            for evidence in context.evidence
+            for path in (*evidence.source_paths, evidence.path)
+            if path is not None
+        }
+        repository_validator = RepositoryPolicyValidator()
+
+        violations: list[PolicyViolation] = []
+        for index, question in enumerate(batch.questions):
+            field_path = f"questions[{index}]"
+            applied_criteria, metadata_violations = repository_validator._validate_item_metadata(
+                item=question,
+                field_path=field_path,
+                context=context,
+                criteria_by_key=criteria_by_key,
+                evidence_by_id=evidence_by_id,
+                allowed_technologies=allowed_technologies,
+                allowed_paths=allowed_paths,
+            )
+            violations.extend(metadata_violations)
+
+            item_depth = _effective_item_depth(applied_criteria, context.analysis_depth)
+            referenced_evidence = tuple(
+                evidence_by_id[reference]
+                for reference in question.evidence_refs
+                if reference in evidence_by_id
+            )
+            text_fields = _iter_interview_question_text(question, field_path)
+            claim_attributed = any(
+                _matches_any(content, _CLAIM_ATTRIBUTION_PATTERNS)
+                for _text_path, content in text_fields
+            )
+            for text_path, content in text_fields:
+                violations.extend(
+                    _find_generated_text_violations(
+                        content=content,
+                        field_path=text_path,
+                        item_depth=item_depth,
+                        referenced_evidence=referenced_evidence,
+                        has_claim_refs=bool(question.claim_refs),
+                    )
+                )
+            violations.extend(
+                _find_unattributed_claim_violation(
+                    evidence_refs=question.evidence_refs,
+                    claim_refs=question.claim_refs,
+                    claim_attributed=claim_attributed,
+                    field_path=f"{field_path}.question",
+                )
+            )
+
+        deduplicated = _deduplicate_violations(violations)
+        if deduplicated:
+            raise ReportPolicyError(deduplicated)
+
+
+class PortfolioStatementPolicyValidator:
+    """Validate portfolio-wide reusable statement batches."""
+
+    def validate_references(
+        self,
+        batch: PortfolioStatementBatch,
+        contexts: Sequence[NormalizedRepositoryContext],
+    ) -> None:
+        evidence_owners = {
+            evidence.evidence_id: context.repository_full_name
+            for context in contexts
+            for evidence in context.evidence
+        }
+        claim_owners = {
+            claim.claim_id: context.repository_full_name
+            for context in contexts
+            for claim in context.user_claims
+        }
+
+        violations: list[PolicyViolation] = []
+        for index, statement in enumerate(batch.statements):
+            violations.extend(
+                _find_global_reference_violations(
+                    item=statement,
+                    field_path=f"statements[{index}]",
+                    evidence_owners=evidence_owners,
+                    claim_owners=claim_owners,
+                )
+            )
+
+        deduplicated = _deduplicate_violations(violations)
+        if deduplicated:
+            raise ReportPolicyError(deduplicated)
+
+    def validate_content(
+        self,
+        batch: PortfolioStatementBatch,
+        contexts: Sequence[NormalizedRepositoryContext],
+        criteria: CriteriaSet,
+    ) -> None:
+        context_items = tuple(contexts)
+        if not context_items:
+            raise ValueError("Portfolio statement policy validation requires at least one context")
+
+        contexts_by_repository = {
+            context.repository_full_name: context for context in context_items
+        }
+        evidence_by_id = {
+            evidence.evidence_id: evidence
+            for context in context_items
+            for evidence in context.evidence
+        }
+        evidence_owners = {
+            evidence.evidence_id: context.repository_full_name
+            for context in context_items
+            for evidence in context.evidence
+        }
+        claim_owners = {
+            claim.claim_id: context.repository_full_name
+            for context in context_items
+            for claim in context.user_claims
+        }
+        criteria_by_key = {criterion.key: criterion for criterion in criteria.criteria}
+
+        violations: list[PolicyViolation] = []
+        for index, statement in enumerate(batch.statements):
+            field_path = f"statements[{index}]"
+            applied_criteria, metadata_violations = _validate_portfolio_item_metadata(
+                item=statement,
+                field_path=field_path,
+                contexts_by_repository=contexts_by_repository,
+                criteria_by_key=criteria_by_key,
+                evidence_by_id=evidence_by_id,
+                evidence_owners=evidence_owners,
+                claim_owners=claim_owners,
+                fallback_to_all_contexts=False,
+            )
+            violations.extend(metadata_violations)
+
+            referenced_contexts = _referenced_contexts(
+                item=statement,
+                contexts_by_repository=contexts_by_repository,
+                evidence_owners=evidence_owners,
+                claim_owners=claim_owners,
+            )
+            content_context = _shallowest_context(referenced_contexts or context_items)
+            if len(referenced_contexts) > 1:
+                for criterion_index, criterion_key in enumerate(statement.criterion_keys):
+                    criterion = criteria_by_key.get(criterion_key)
+                    if criterion is None:
+                        continue
+                    if (
+                        _DEPTH_RANK[criterion.analysis_depth]
+                        <= _DEPTH_RANK[content_context.analysis_depth]
+                    ):
+                        continue
+                    if not any(
+                        _DEPTH_RANK[criterion.analysis_depth]
+                        <= _DEPTH_RANK[referenced_context.analysis_depth]
+                        for referenced_context in referenced_contexts
+                    ):
+                        continue
+                    violations.append(
+                        PolicyViolation(
+                            code=_scope_violation_code(content_context.analysis_depth),
+                            message=(
+                                "Portfolio statement criterion exceeds the shallowest "
+                                "referenced repository depth."
+                            ),
+                            field_path=f"{field_path}.criterion_keys[{criterion_index}]",
+                        )
+                    )
+            content_criteria = tuple(
+                criterion
+                for criterion in applied_criteria
+                if _DEPTH_RANK[criterion.analysis_depth]
+                <= _DEPTH_RANK[content_context.analysis_depth]
+            )
+            item_depth = _effective_item_depth(
+                content_criteria,
+                content_context.analysis_depth,
+            )
+            referenced_evidence = tuple(
+                evidence_by_id[reference]
+                for reference in statement.evidence_refs
+                if reference in evidence_by_id
+            )
+            violations.extend(
+                _find_generated_text_violations(
+                    content=statement.content,
+                    field_path=f"{field_path}.content",
+                    item_depth=item_depth,
+                    referenced_evidence=referenced_evidence,
+                    has_claim_refs=bool(statement.claim_refs),
+                )
+            )
+            violations.extend(
+                _find_unattributed_claim_violation(
+                    evidence_refs=statement.evidence_refs,
+                    claim_refs=statement.claim_refs,
+                    claim_attributed=_matches_any(
+                        statement.content,
+                        _CLAIM_ATTRIBUTION_PATTERNS,
+                    ),
+                    field_path=f"{field_path}.content",
+                )
+            )
+
+        deduplicated = _deduplicate_violations(violations)
+        if deduplicated:
+            raise ReportPolicyError(deduplicated)
+
+
 class PortfolioPolicyValidator:
     """Validate portfolio-wide synthesis references and generated-content policy."""
 
@@ -629,7 +918,7 @@ def _iter_repository_analysis_items(
 
 def _find_repository_item_reference_violations(
     *,
-    item: GroundedAnalysisItem,
+    item: _GroundedMetadata,
     field_path: str,
     expected_repository: str,
     evidence_owners: dict[str, str],
@@ -701,7 +990,7 @@ def _iter_synthesis_items(
 
 def _find_global_reference_violations(
     *,
-    item: GroundedAnalysisItem,
+    item: _GroundedMetadata,
     field_path: str,
     evidence_owners: dict[str, str],
     claim_owners: dict[str, str],
@@ -780,13 +1069,14 @@ def _find_representative_reference_violations(
 
 def _validate_portfolio_item_metadata(
     *,
-    item: GroundedAnalysisItem,
+    item: _GroundedMetadata,
     field_path: str,
     contexts_by_repository: dict[str, NormalizedRepositoryContext],
     criteria_by_key: dict[str, Criterion],
     evidence_by_id: dict[str, InternalEvidence],
     evidence_owners: dict[str, str],
     claim_owners: dict[str, str],
+    fallback_to_all_contexts: bool = True,
 ) -> tuple[tuple[Criterion, ...], tuple[PolicyViolation, ...]]:
     violations: list[PolicyViolation] = []
     applied_criteria: list[Criterion] = []
@@ -796,7 +1086,9 @@ def _validate_portfolio_item_metadata(
         evidence_owners=evidence_owners,
         claim_owners=claim_owners,
     )
-    candidate_contexts = referenced_contexts or tuple(contexts_by_repository.values())
+    candidate_contexts = referenced_contexts
+    if not candidate_contexts and fallback_to_all_contexts:
+        candidate_contexts = tuple(contexts_by_repository.values())
 
     for index, criterion_key in enumerate(item.criterion_keys):
         criterion = criteria_by_key.get(criterion_key)
@@ -903,7 +1195,7 @@ def _validate_portfolio_item_metadata(
 
 def _referenced_contexts(
     *,
-    item: GroundedAnalysisItem,
+    item: _GroundedMetadata,
     contexts_by_repository: dict[str, NormalizedRepositoryContext],
     evidence_owners: dict[str, str],
     claim_owners: dict[str, str],
@@ -1066,6 +1358,143 @@ def _find_limitation_content_violations(
             )
         )
     return tuple(violations)
+
+
+def _iter_interview_question_text(
+    question: InterviewQuestion,
+    field_path: str,
+) -> tuple[tuple[str, str], ...]:
+    fields: list[tuple[str, str]] = [
+        (f"{field_path}.question", question.question),
+        (f"{field_path}.intent", question.intent),
+    ]
+    fields.extend(
+        (f"{field_path}.answer_guide[{index}]", content)
+        for index, content in enumerate(question.answer_guide)
+    )
+    fields.extend(
+        (f"{field_path}.follow_up_questions[{index}]", content)
+        for index, content in enumerate(question.follow_up_questions)
+    )
+    return tuple(fields)
+
+
+def _find_generated_text_violations(
+    *,
+    content: str,
+    field_path: str,
+    item_depth: AnalysisDepth,
+    referenced_evidence: tuple[InternalEvidence, ...],
+    has_claim_refs: bool,
+) -> tuple[PolicyViolation, ...]:
+    """Apply common assertion policies to question and statement text."""
+
+    violations: list[PolicyViolation] = []
+    claim_attributed = _matches_any(content, _CLAIM_ATTRIBUTION_PATTERNS)
+
+    if item_depth is AnalysisDepth.P0 and _matches_any(content, _QUALITY_ASSERTION_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.P0_SCOPE_VIOLATION,
+                message="Generated text makes a P0 quality judgment.",
+                field_path=field_path,
+            )
+        )
+    if item_depth is AnalysisDepth.P1 and _matches_any(content, _QUALITY_ASSERTION_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.P1_SCOPE_VIOLATION,
+                message="Generated text makes a P1 quality judgment.",
+                field_path=field_path,
+            )
+        )
+    if item_depth is AnalysisDepth.P2:
+        if _matches_any(content, _REPOSITORY_GENERALIZATION_PATTERNS):
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.REPOSITORY_WIDE_GENERALIZATION,
+                    message="Generated text generalizes P2 evidence to the repository.",
+                    field_path=field_path,
+                )
+            )
+        if _matches_any(content, _P2_OUT_OF_SCOPE_PATTERNS):
+            violations.append(
+                PolicyViolation(
+                    code=PolicyViolationCode.P2_SCOPE_VIOLATION,
+                    message="Generated text asserts behavior outside the supplied snippet.",
+                    field_path=field_path,
+                )
+            )
+
+    if _matches_any(content, _USER_ABILITY_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.USER_ABILITY_ASSERTION,
+                message="Generated text asserts user ability or career outcome.",
+                field_path=field_path,
+            )
+        )
+    if _matches_any(content, _ACTIVITY_CONTRIBUTION_PATTERNS) or (
+        not claim_attributed and _matches_any(content, _DIRECT_IMPLEMENTATION_PATTERNS)
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.CONTRIBUTION_ASSERTION,
+                message="Generated text asserts personal contribution or ownership.",
+                field_path=field_path,
+            )
+        )
+    if item_depth in {AnalysisDepth.P1, AnalysisDepth.P2} and _matches_any(
+        content,
+        _P1_NON_CONTRIBUTION_PATTERNS,
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.CONTRIBUTION_ASSERTION,
+                message="Generated text treats activity as contribution.",
+                field_path=field_path,
+            )
+        )
+    if has_claim_refs and _matches_any(content, _CLAIM_AS_FACT_PATTERNS):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.USER_CLAIM_AS_FACT,
+                message="Generated text presents a user claim as a verified fact.",
+                field_path=field_path,
+            )
+        )
+    if (
+        _contains_not_observed_evidence(referenced_evidence)
+        and _matches_any(content, _NOT_OBSERVED_ABSENCE_PATTERNS)
+        and not _matches_any(content, _OBSERVATION_SCOPE_PATTERNS)
+    ):
+        violations.append(
+            PolicyViolation(
+                code=PolicyViolationCode.NOT_OBSERVED_MISUSE,
+                message="Generated text presents non-observation as actual absence.",
+                field_path=field_path,
+            )
+        )
+
+    return tuple(violations)
+
+
+def _find_unattributed_claim_violation(
+    *,
+    evidence_refs: tuple[str, ...],
+    claim_refs: tuple[str, ...],
+    claim_attributed: bool,
+    field_path: str,
+) -> tuple[PolicyViolation, ...]:
+    if not claim_refs or evidence_refs or claim_attributed:
+        return ()
+    return (
+        PolicyViolation(
+            code=PolicyViolationCode.USER_CLAIM_AS_FACT,
+            message="Claim-only generated content must identify the source as a user claim.",
+            field_path=field_path,
+        ),
+    )
 
 
 def _find_missing_evidence_violations(
@@ -1247,8 +1676,10 @@ def _project_structure_value(summary: str, field: str, value: str) -> bool:
 
 
 __all__ = [
+    "InterviewQuestionPolicyValidator",
     "PolicyViolation",
     "PolicyViolationCode",
     "PortfolioPolicyValidator",
+    "PortfolioStatementPolicyValidator",
     "RepositoryPolicyValidator",
 ]

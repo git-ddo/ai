@@ -13,14 +13,21 @@ from app.domain import (
     InternalEvidence,
     InternalEvidenceType,
     InternalUserClaim,
+    InterviewQuestion,
+    InterviewQuestionBatch,
     NormalizedRepositoryContext,
+    PortfolioStatement,
+    PortfolioStatementBatch,
+    PortfolioStatementType,
     RecommendationPriority,
     RepositoryAnalysis,
     SnapshotHashAlgorithm,
 )
 from app.validators.report_validator import (
+    InterviewQuestionPolicyValidator,
     PolicyViolation,
     PolicyViolationCode,
+    PortfolioStatementPolicyValidator,
     RepositoryPolicyValidator,
 )
 
@@ -61,6 +68,8 @@ def make_context(
     claim_id: str = "claim_001",
     evidence_summary: str = "README에서 프로젝트 소개가 관찰되었습니다.",
     claim_statement: str = "사용자는 인증 API를 담당했다고 진술했습니다.",
+    source_paths: tuple[str, ...] = ("README.md",),
+    technology_names: tuple[str, ...] = (),
 ) -> NormalizedRepositoryContext:
     evidence = InternalEvidence(
         evidence_id=evidence_id,
@@ -68,7 +77,8 @@ def make_context(
         evidence_type=InternalEvidenceType.GITHUB_STATIC,
         key="README_INTRODUCTION_OBSERVED",
         summary=evidence_summary,
-        source_paths=("README.md",),
+        source_paths=source_paths,
+        technology_names=technology_names,
     )
     claim = InternalUserClaim(
         claim_id=claim_id,
@@ -81,6 +91,7 @@ def make_context(
         analysis_depth=AnalysisDepth.P0,
         evidence=(evidence,),
         user_claims=(claim,),
+        technology_names=technology_names,
     )
 
 
@@ -122,6 +133,69 @@ def make_analysis(
         observations=observations,
         strengths=strengths,
         recommendations=recommendations,
+    )
+
+
+def make_interview_question(
+    *,
+    repository_full_name: str = "git-ddo/backend",
+    question: str = "공개 근거에 나타난 Spring Boot 선택 이유를 설명해 주세요.",
+    intent: str = "기술 선택 배경을 확인합니다.",
+    answer_guide: tuple[str, ...] = ("공개 설정 근거의 범위 안에서 설명합니다.",),
+    follow_up_questions: tuple[str, ...] = (),
+    evidence_refs: tuple[str, ...] = ("ev_001",),
+    claim_refs: tuple[str, ...] = (),
+    criterion_keys: tuple[str, ...] = ("TECH_STACK_EVIDENCE",),
+    technology_names: tuple[str, ...] = ("Spring Boot",),
+    file_paths: tuple[str, ...] = ("build.gradle",),
+) -> InterviewQuestion:
+    return InterviewQuestion(
+        repository_full_name=repository_full_name,
+        question=question,
+        intent=intent,
+        answer_guide=answer_guide,
+        follow_up_questions=follow_up_questions,
+        evidence_refs=evidence_refs,
+        claim_refs=claim_refs,
+        criterion_keys=criterion_keys,
+        technology_names=technology_names,
+        file_paths=file_paths,
+    )
+
+
+def make_interview_batch(
+    question: InterviewQuestion | None = None,
+) -> InterviewQuestionBatch:
+    return InterviewQuestionBatch(
+        questions=(question if question is not None else make_interview_question(),)
+    )
+
+
+def make_portfolio_statement(
+    *,
+    content: str = "공개 설정에서 Spring Boot 의존성이 관찰되었습니다.",
+    evidence_refs: tuple[str, ...] = ("ev_001",),
+    claim_refs: tuple[str, ...] = (),
+    criterion_keys: tuple[str, ...] = ("TECH_STACK_EVIDENCE",),
+    technology_names: tuple[str, ...] = ("Spring Boot",),
+    file_paths: tuple[str, ...] = ("build.gradle",),
+) -> PortfolioStatement:
+    return PortfolioStatement(
+        statement_type=PortfolioStatementType.PORTFOLIO,
+        content=content,
+        evidence_refs=evidence_refs,
+        claim_refs=claim_refs,
+        criterion_keys=criterion_keys,
+        technology_names=technology_names,
+        file_paths=file_paths,
+    )
+
+
+def make_statement_batch(
+    statement: PortfolioStatement | None = None,
+) -> PortfolioStatementBatch:
+    return PortfolioStatementBatch(
+        statements=(statement if statement is not None else make_portfolio_statement(),)
     )
 
 
@@ -1106,3 +1180,757 @@ def test_repository_content_validator_error_excludes_untrusted_content() -> None
     assert sensitive_content not in rendered
     assert sensitive_evidence not in rendered
     assert sensitive_claim not in rendered
+
+
+def test_interview_validator_accepts_grounded_evidence_question() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    batch = make_interview_batch()
+    validator = InterviewQuestionPolicyValidator()
+
+    assert validator.validate_references(batch, context, (context,)) is None
+    assert (
+        validator.validate_content(
+            batch,
+            context,
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+        is None
+    )
+
+
+def test_interview_validator_accepts_explicitly_attributed_claim_question() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    batch = make_interview_batch(
+        make_interview_question(
+            question="사용자 진술에 따르면 주문 API를 담당했는데 그 경험을 설명해 주세요.",
+            evidence_refs=(),
+            claim_refs=("claim_001",),
+            criterion_keys=("CLAIM_ACTIVITY_LINK",),
+            technology_names=(),
+            file_paths=(),
+        )
+    )
+    validator = InterviewQuestionPolicyValidator()
+
+    validator.validate_references(batch, context, (context,))
+    validator.validate_content(batch, context, CriteriaLoader().load("BACKEND", "P1"))
+
+
+def test_interview_reference_validator_rejects_repository_mismatch() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    batch = make_interview_batch(make_interview_question(repository_full_name="git-ddo/frontend"))
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_references(batch, context, (context,))
+
+    assert exc_info.value.violations[0] == PolicyViolation(
+        code=PolicyViolationCode.CROSS_REPOSITORY_REF,
+        message="Interview question does not match the expected repository.",
+        field_path="questions[0].repository_full_name",
+    )
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_code", "expected_path"),
+    [
+        (
+            make_interview_question(evidence_refs=("ev_999",), claim_refs=()),
+            PolicyViolationCode.UNKNOWN_EVIDENCE_REF,
+            "questions[0].evidence_refs[0]",
+        ),
+        (
+            make_interview_question(evidence_refs=(), claim_refs=("claim_999",)),
+            PolicyViolationCode.UNKNOWN_CLAIM_REF,
+            "questions[0].claim_refs[0]",
+        ),
+    ],
+)
+def test_interview_reference_validator_rejects_unknown_reference(
+    question: InterviewQuestion,
+    expected_code: PolicyViolationCode,
+    expected_path: str,
+) -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_references(
+            make_interview_batch(question),
+            context,
+            (context,),
+        )
+
+    assert any(
+        violation.code is expected_code and violation.field_path == expected_path
+        for violation in exc_info.value.violations
+    )
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        make_interview_question(evidence_refs=("ev_002",), claim_refs=()),
+        make_interview_question(evidence_refs=(), claim_refs=("claim_002",)),
+    ],
+)
+def test_interview_reference_validator_rejects_cross_repository_reference(
+    question: InterviewQuestion,
+) -> None:
+    backend = make_depth_context(AnalysisDepth.P0)
+    frontend = make_context(
+        repository_id="2",
+        repository_full_name="git-ddo/frontend",
+        evidence_id="ev_002",
+        claim_id="claim_002",
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_references(
+            make_interview_batch(question),
+            backend,
+            (backend, frontend),
+        )
+
+    assert PolicyViolationCode.CROSS_REPOSITORY_REF in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_interview_reference_validator_requires_expected_context_exactly_once() -> None:
+    expected = make_depth_context(AnalysisDepth.P0)
+    other = make_context(
+        repository_id="2",
+        repository_full_name="git-ddo/frontend",
+        evidence_id="ev_002",
+        claim_id="claim_002",
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_references(
+            make_interview_batch(),
+            expected,
+            (other,),
+        )
+
+    assert any(
+        violation.code is PolicyViolationCode.CROSS_REPOSITORY_REF
+        and violation.field_path == "expected_context"
+        for violation in exc_info.value.violations
+    )
+
+
+@pytest.mark.parametrize(
+    ("question", "context_depth", "criteria_depth", "expected_code"),
+    [
+        (
+            make_interview_question(criterion_keys=("UNKNOWN_KEY",)),
+            AnalysisDepth.P0,
+            "P0",
+            PolicyViolationCode.UNKNOWN_CRITERION,
+        ),
+        (
+            make_interview_question(criterion_keys=("SNIPPET_SCOPE",)),
+            AnalysisDepth.P0,
+            "P2",
+            PolicyViolationCode.P0_SCOPE_VIOLATION,
+        ),
+        (
+            make_interview_question(
+                evidence_refs=("ev_002",),
+                criterion_keys=("README_READINESS",),
+                technology_names=(),
+                file_paths=(),
+            ),
+            AnalysisDepth.P1,
+            "P1",
+            PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH,
+        ),
+    ],
+)
+def test_interview_content_validator_rejects_invalid_criteria(
+    question: InterviewQuestion,
+    context_depth: AnalysisDepth,
+    criteria_depth: str,
+    expected_code: PolicyViolationCode,
+) -> None:
+    context = make_depth_context(context_depth)
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_content(
+            make_interview_batch(question),
+            context,
+            CriteriaLoader().load("BACKEND", criteria_depth),
+        )
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+def test_interview_content_validator_rejects_claim_for_disallowed_criterion() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    question = make_interview_question(
+        question="사용자 진술에 따른 활동을 설명해 주세요.",
+        evidence_refs=("ev_002",),
+        claim_refs=("claim_001",),
+        criterion_keys=("ACTIVITY_SCOPE",),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_content(
+            make_interview_batch(question),
+            context,
+            CriteriaLoader().load("BACKEND", "P1"),
+        )
+
+    assert PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+@pytest.mark.parametrize(
+    ("technology_names", "file_paths", "expected_code"),
+    [
+        (("Redis",), (), PolicyViolationCode.UNKNOWN_TECHNOLOGY),
+        ((), ("src/Unknown.java",), PolicyViolationCode.UNKNOWN_FILE_PATH),
+    ],
+)
+def test_interview_content_validator_rejects_unknown_grounding_metadata(
+    technology_names: tuple[str, ...],
+    file_paths: tuple[str, ...],
+    expected_code: PolicyViolationCode,
+) -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    question = make_interview_question(
+        technology_names=technology_names,
+        file_paths=file_paths,
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_content(
+            make_interview_batch(question),
+            context,
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+@pytest.mark.parametrize(
+    ("field_name", "content", "expected_path"),
+    [
+        ("question", "이 저장소의 코드 품질이 우수한 이유는 무엇인가요?", "question"),
+        ("intent", "테스트 품질이 우수한 이유를 확인합니다.", "intent"),
+        (
+            "answer_guide",
+            "전체 아키텍처가 견고하게 설계되었다고 설명합니다.",
+            "answer_guide[0]",
+        ),
+        (
+            "follow_up_questions",
+            "보안 품질이 우수한 이유는 무엇인가요?",
+            "follow_up_questions[0]",
+        ),
+    ],
+)
+def test_interview_content_validator_checks_every_text_field(
+    field_name: str,
+    content: str,
+    expected_path: str,
+) -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    values: dict[str, object] = {}
+    values[field_name] = (
+        (content,) if field_name in {"answer_guide", "follow_up_questions"} else content
+    )
+    question = make_interview_question(**values)  # type: ignore[arg-type]
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_content(
+            make_interview_batch(question),
+            context,
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+
+    assert any(
+        violation.code is PolicyViolationCode.P0_SCOPE_VIOLATION
+        and violation.field_path == f"questions[0].{expected_path}"
+        for violation in exc_info.value.violations
+    )
+
+
+@pytest.mark.parametrize(
+    ("depth", "content", "expected_code", "criterion", "evidence_ref"),
+    [
+        (
+            AnalysisDepth.P1,
+            "커밋 수가 많아 개인 기여도가 높다고 볼 수 있나요?",
+            PolicyViolationCode.CONTRIBUTION_ASSERTION,
+            "ACTIVITY_SCOPE",
+            "ev_002",
+        ),
+        (
+            AnalysisDepth.P2,
+            "이 저장소 전체 코드 품질이 우수한 이유는 무엇인가요?",
+            PolicyViolationCode.REPOSITORY_WIDE_GENERALIZATION,
+            "SNIPPET_SCOPE",
+            "ev_003",
+        ),
+    ],
+)
+def test_interview_content_validator_rejects_depth_policy_violation(
+    depth: AnalysisDepth,
+    content: str,
+    expected_code: PolicyViolationCode,
+    criterion: str,
+    evidence_ref: str,
+) -> None:
+    context = make_depth_context(depth)
+    question = make_interview_question(
+        question=content,
+        evidence_refs=(evidence_ref,),
+        criterion_keys=(criterion,),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_content(
+            make_interview_batch(question),
+            context,
+            CriteriaLoader().load("BACKEND", depth.value),
+        )
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+def test_interview_content_validator_rejects_claim_as_verified_fact() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    question = make_interview_question(
+        question="GitHub에서 사용자의 직접 구현이 검증되었는데 이를 설명해 주세요.",
+        evidence_refs=("ev_002",),
+        claim_refs=("claim_001",),
+        criterion_keys=("CLAIM_ACTIVITY_LINK",),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_content(
+            make_interview_batch(question),
+            context,
+            CriteriaLoader().load("BACKEND", "P1"),
+        )
+
+    assert PolicyViolationCode.USER_CLAIM_AS_FACT in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_interview_content_validator_rejects_not_observed_as_absence() -> None:
+    context = make_missing_context()
+    question = make_interview_question(
+        question="테스트 코드가 실제로 없습니다. 그 이유는 무엇인가요?",
+        evidence_refs=("ev_002",),
+        criterion_keys=("TEST_PRESENCE",),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_content(
+            make_interview_batch(question),
+            context,
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+
+    assert PolicyViolationCode.NOT_OBSERVED_MISUSE in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_interview_validator_collects_violations_without_mutating_batch() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    batch = make_interview_batch(
+        make_interview_question(
+            question="사용자의 개발 역량이 우수한 이유는 무엇인가요?",
+            criterion_keys=("UNKNOWN_KEY",),
+            technology_names=("Redis",),
+            file_paths=("unknown.file",),
+        )
+    )
+    original = batch.model_dump(mode="python")
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        InterviewQuestionPolicyValidator().validate_content(
+            batch,
+            context,
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+
+    assert len(exc_info.value.violations) >= 4
+    assert batch.model_dump(mode="python") == original
+
+
+def test_statement_validator_accepts_grounded_evidence_statement() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    batch = make_statement_batch()
+    validator = PortfolioStatementPolicyValidator()
+
+    assert validator.validate_references(batch, (context,)) is None
+    assert (
+        validator.validate_content(
+            batch,
+            (context,),
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+        is None
+    )
+
+
+def test_statement_validator_accepts_explicitly_attributed_claim_statement() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    statement = make_portfolio_statement(
+        content="사용자 진술에 따르면 주문 API 구현을 담당했습니다.",
+        evidence_refs=(),
+        claim_refs=("claim_001",),
+        criterion_keys=("CLAIM_ACTIVITY_LINK",),
+        technology_names=(),
+        file_paths=(),
+    )
+    validator = PortfolioStatementPolicyValidator()
+
+    validator.validate_references(make_statement_batch(statement), (context,))
+    validator.validate_content(
+        make_statement_batch(statement),
+        (context,),
+        CriteriaLoader().load("BACKEND", "P1"),
+    )
+
+
+def test_statement_reference_validator_allows_multiple_repositories() -> None:
+    backend = make_context(technology_names=(), source_paths=("README.md",))
+    frontend = make_context(
+        repository_id="2",
+        repository_full_name="git-ddo/frontend",
+        evidence_id="ev_002",
+        claim_id="claim_002",
+        source_paths=("docs/README.md",),
+    )
+    statement = make_portfolio_statement(
+        content="두 Repository 모두 프로젝트 소개 문서를 포함합니다.",
+        evidence_refs=("ev_001", "ev_002"),
+        criterion_keys=("README_READINESS",),
+        technology_names=(),
+        file_paths=("README.md", "docs/README.md"),
+    )
+    batch = make_statement_batch(statement)
+    validator = PortfolioStatementPolicyValidator()
+
+    validator.validate_references(batch, (backend, frontend))
+    validator.validate_content(
+        batch,
+        (backend, frontend),
+        CriteriaLoader().load("BACKEND", "P0"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("statement", "expected_code"),
+    [
+        (
+            make_portfolio_statement(evidence_refs=("ev_999",), claim_refs=()),
+            PolicyViolationCode.UNKNOWN_EVIDENCE_REF,
+        ),
+        (
+            make_portfolio_statement(evidence_refs=(), claim_refs=("claim_999",)),
+            PolicyViolationCode.UNKNOWN_CLAIM_REF,
+        ),
+    ],
+)
+def test_statement_reference_validator_rejects_unknown_reference(
+    statement: PortfolioStatement,
+    expected_code: PolicyViolationCode,
+) -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_references(
+            make_statement_batch(statement),
+            (context,),
+        )
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+@pytest.mark.parametrize(
+    ("statement", "context_depth", "criteria_depth", "expected_code"),
+    [
+        (
+            make_portfolio_statement(criterion_keys=("UNKNOWN_KEY",)),
+            AnalysisDepth.P0,
+            "P0",
+            PolicyViolationCode.UNKNOWN_CRITERION,
+        ),
+        (
+            make_portfolio_statement(criterion_keys=("SNIPPET_SCOPE",)),
+            AnalysisDepth.P0,
+            "P2",
+            PolicyViolationCode.P0_SCOPE_VIOLATION,
+        ),
+        (
+            make_portfolio_statement(
+                evidence_refs=("ev_002",),
+                criterion_keys=("README_READINESS",),
+                technology_names=(),
+                file_paths=(),
+            ),
+            AnalysisDepth.P1,
+            "P1",
+            PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH,
+        ),
+    ],
+)
+def test_statement_content_validator_rejects_invalid_criteria(
+    statement: PortfolioStatement,
+    context_depth: AnalysisDepth,
+    criteria_depth: str,
+    expected_code: PolicyViolationCode,
+) -> None:
+    context = make_depth_context(context_depth)
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_content(
+            make_statement_batch(statement),
+            (context,),
+            CriteriaLoader().load("BACKEND", criteria_depth),
+        )
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+def test_statement_content_validator_rejects_claim_for_disallowed_criterion() -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    statement = make_portfolio_statement(
+        content="사용자 진술에 따른 활동입니다.",
+        evidence_refs=("ev_002",),
+        claim_refs=("claim_001",),
+        criterion_keys=("ACTIVITY_SCOPE",),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_content(
+            make_statement_batch(statement),
+            (context,),
+            CriteriaLoader().load("BACKEND", "P1"),
+        )
+
+    assert PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_statement_content_validator_uses_shallowest_referenced_repository_depth() -> None:
+    p2_context = make_depth_context(AnalysisDepth.P2)
+    p0_context = make_context(
+        repository_id="2",
+        repository_full_name="git-ddo/frontend",
+        evidence_id="ev_004",
+        claim_id="claim_004",
+    )
+    statement = make_portfolio_statement(
+        content="두 Repository의 공개 근거와 제공된 snippet을 함께 설명합니다.",
+        evidence_refs=("ev_004", "ev_003"),
+        criterion_keys=("README_READINESS", "SNIPPET_SCOPE"),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_content(
+            make_statement_batch(statement),
+            (p0_context, p2_context),
+            CriteriaLoader().load("BACKEND", "P2"),
+        )
+
+    assert any(
+        violation.code is PolicyViolationCode.P0_SCOPE_VIOLATION
+        and violation.field_path == "statements[0].criterion_keys[1]"
+        for violation in exc_info.value.violations
+    )
+
+
+@pytest.mark.parametrize(
+    ("technology_names", "file_paths", "expected_code"),
+    [
+        (("React",), (), PolicyViolationCode.UNKNOWN_TECHNOLOGY),
+        ((), ("package.json",), PolicyViolationCode.UNKNOWN_FILE_PATH),
+    ],
+)
+def test_statement_content_validator_rejects_metadata_from_unreferenced_repository(
+    technology_names: tuple[str, ...],
+    file_paths: tuple[str, ...],
+    expected_code: PolicyViolationCode,
+) -> None:
+    backend = make_context(
+        technology_names=("Spring Boot",),
+        source_paths=("build.gradle",),
+    )
+    frontend = make_context(
+        repository_id="2",
+        repository_full_name="git-ddo/frontend",
+        evidence_id="ev_002",
+        claim_id="claim_002",
+        technology_names=("React",),
+        source_paths=("package.json",),
+    )
+    statement = make_portfolio_statement(
+        evidence_refs=("ev_001",),
+        criterion_keys=("TECH_STACK_EVIDENCE",),
+        technology_names=technology_names,
+        file_paths=file_paths,
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_content(
+            make_statement_batch(statement),
+            (backend, frontend),
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+@pytest.mark.parametrize(
+    ("depth", "content", "expected_code", "criterion", "evidence_ref"),
+    [
+        (
+            AnalysisDepth.P0,
+            "이 저장소의 코드 품질은 우수합니다.",
+            PolicyViolationCode.P0_SCOPE_VIOLATION,
+            "TECH_STACK_EVIDENCE",
+            "ev_001",
+        ),
+        (
+            AnalysisDepth.P1,
+            "커밋 수가 많아 개인 기여도가 높습니다.",
+            PolicyViolationCode.CONTRIBUTION_ASSERTION,
+            "ACTIVITY_SCOPE",
+            "ev_002",
+        ),
+        (
+            AnalysisDepth.P2,
+            "이 저장소 전체 코드 품질이 우수합니다.",
+            PolicyViolationCode.REPOSITORY_WIDE_GENERALIZATION,
+            "SNIPPET_SCOPE",
+            "ev_003",
+        ),
+    ],
+)
+def test_statement_content_validator_rejects_depth_policy_violation(
+    depth: AnalysisDepth,
+    content: str,
+    expected_code: PolicyViolationCode,
+    criterion: str,
+    evidence_ref: str,
+) -> None:
+    context = make_depth_context(depth)
+    statement = make_portfolio_statement(
+        content=content,
+        evidence_refs=(evidence_ref,),
+        criterion_keys=(criterion,),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_content(
+            make_statement_batch(statement),
+            (context,),
+            CriteriaLoader().load("BACKEND", depth.value),
+        )
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_code"),
+    [
+        (
+            "사용자의 개발 역량과 경력 수준이 우수해 합격 가능성이 높습니다.",
+            PolicyViolationCode.USER_ABILITY_ASSERTION,
+        ),
+        (
+            "GitHub에서 사용자의 직접 구현이 검증되었습니다.",
+            PolicyViolationCode.USER_CLAIM_AS_FACT,
+        ),
+    ],
+)
+def test_statement_content_validator_rejects_user_assertion(
+    content: str,
+    expected_code: PolicyViolationCode,
+) -> None:
+    context = make_depth_context(AnalysisDepth.P1)
+    statement = make_portfolio_statement(
+        content=content,
+        evidence_refs=("ev_002",),
+        claim_refs=("claim_001",),
+        criterion_keys=("CLAIM_ACTIVITY_LINK",),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_content(
+            make_statement_batch(statement),
+            (context,),
+            CriteriaLoader().load("BACKEND", "P1"),
+        )
+
+    assert expected_code in {violation.code for violation in exc_info.value.violations}
+
+
+def test_statement_content_validator_rejects_not_observed_as_absence() -> None:
+    context = make_missing_context()
+    statement = make_portfolio_statement(
+        content="테스트 코드가 실제로 없습니다.",
+        evidence_refs=("ev_002",),
+        criterion_keys=("TEST_PRESENCE",),
+        technology_names=(),
+        file_paths=(),
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_content(
+            make_statement_batch(statement),
+            (context,),
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+
+    assert PolicyViolationCode.NOT_OBSERVED_MISUSE in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
+def test_statement_validator_collects_violations_without_mutating_batch() -> None:
+    context = make_depth_context(AnalysisDepth.P0)
+    batch = make_statement_batch(
+        make_portfolio_statement(
+            content="사용자의 개발 역량이 우수합니다.",
+            criterion_keys=("UNKNOWN_KEY",),
+            technology_names=("Redis",),
+            file_paths=("unknown.file",),
+        )
+    )
+    original = batch.model_dump(mode="python")
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioStatementPolicyValidator().validate_content(
+            batch,
+            (context,),
+            CriteriaLoader().load("BACKEND", "P0"),
+        )
+
+    assert len(exc_info.value.violations) >= 4
+    assert batch.model_dump(mode="python") == original
