@@ -74,13 +74,14 @@ schemaVersion: "1.0"
 - [x] InterviewQuestion·PortfolioStatement 참조·깊이·내용 정책 Validator
 - [x] InterviewQuestion 생성과 정책 실패 1회 재생성 Service
 - [x] PortfolioStatement 생성과 정책 실패 1회 재생성 Service
-- [ ] Portfolio·Report Service와 내부 전체 오케스트레이션
+- [x] 검증 완료 결과의 결정적 `PortfolioAnalysis` 최종 조립
+- [ ] Report Service와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 766개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
-PortfolioAnalysis 최종 조립, Report Service와 Wire API를 포함하지 않는다.
+현재 AI 검증 기준은 전체 `pytest` 797개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+Report Service와 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
 
@@ -413,9 +414,11 @@ NormalizedRepositoryContext
 
 ```text
 ai/app/services/portfolio_service.py
+ai/app/services/analysis_service.py
 ai/app/prompts/portfolio.py
 ai/app/prompts/interview.py
 ai/tests/test_portfolio_service.py
+ai/tests/test_analysis_service.py
 ```
 
 구현:
@@ -429,12 +432,11 @@ ai/tests/test_portfolio_service.py
 - [x] InterviewQuestion·PortfolioStatement 참조·깊이·내용 정책 Validator
 - [x] InterviewQuestion 생성과 정책 실패 1회 재생성 Service
 - [x] PortfolioStatement 생성과 정책 실패 1회 재생성 Service
-- [ ] PortfolioAnalysis 최종 조립
+- [x] PortfolioAnalysis 최종 조립
 
 Portfolio LLM 호출은 기존 `RepositoryAnalysis`를 다시 생성하지 않고, 종합 결과인
-`PortfolioSynthesis`만 Structured Output으로 생성한다. `PortfolioAnalysis`는 후속
-Service에서 Repository 분석, synthesis, 면접 질문과 포트폴리오 문장을 조립하는
-최종 내부 결과이다.
+`PortfolioSynthesis`만 Structured Output으로 생성한다. `PortfolioAnalysis`는 Assembler에서
+Repository 분석, synthesis, 면접 질문과 포트폴리오 문장을 조립한 최종 내부 결과이다.
 
 Portfolio Validator는 전체 요약·strengths·gaps·nextActions·jobAppeal의 다중 Repository
 참조를 허용하고, 대표 Repository 참조는 해당 Repository 범위로 제한한다. Criteria와
@@ -457,6 +459,11 @@ PortfolioStatement Service는 Repository Context, Repository별 분석과 `Portf
 기반으로 `PortfolioStatementBatch`를 생성한다. 전체 Context 중 가장 깊은 수준의 누적 Criteria를
 사용하되 각 문장의 실제 판단 상한은 참조 Repository 중 가장 얕은 완료 깊이이다. 참조·내용 정책
 위반에만 위반 코드 기반 전체 Batch 재생성을 한 번 허용하고 Provider 오류는 그대로 전파한다.
+
+PortfolioAnalysis Assembler는 Context 입력 순서에 맞춰 Repository 분석과 Interview Batch를
+결정적으로 배치하고, Statement 순서를 그대로 유지한다. 조립 전 Repository별 실제 깊이 Criteria와
+전체 최대 깊이 Criteria를 선택해 네 결과 종류의 참조·내용 정책을 다시 검증한다. 이 단계는 LLM을
+호출하거나 결과를 수정하지 않으며, Provider 메타데이터와 generation record 조립은 Phase 8에 남긴다.
 
 현재 Wire에 없는 문장 `type`, 문장·질문의 `repositoryId`, `followUpQuestions`는 내부 모델에
 있더라도 Wire 변환 전에 Backend 계약 상태를 다시 확인한다.

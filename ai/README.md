@@ -49,18 +49,18 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] InterviewQuestion·PortfolioStatement 참조·깊이·내용 정책 Validator
 - [x] InterviewQuestion 생성과 정책 실패 1회 재생성 Service
 - [x] PortfolioStatement 생성과 정책 실패 1회 재생성 Service
+- [x] 검증 완료 결과의 결정적 `PortfolioAnalysis` 최종 조립
 
 ### 다음 구현
 
-- [ ] PortfolioAnalysis 최종 조립
 - [ ] Report Service
 - [ ] 전체 270초 분석 deadline
 - [ ] Backend Schema 기준 Pydantic Wire DTO와 Error Envelope
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 766개이다. 이 수치는 실제 Gemini 호출, PortfolioAnalysis 최종 조립,
-Report Service와 Portfolio Report Wire API를 포함하지 않는다.
+현재 전체 테스트 기준은 797개이다. 이 수치는 실제 Gemini 호출, Report Service와 Portfolio
+Report Wire API를 포함하지 않는다.
 
 ## 목표 지원 범위
 
@@ -220,8 +220,9 @@ ai/
 Portfolio Prompt는 검증된 `RepositoryAnalysis`를 입력으로 받아 전체 요약, 대표
 Repository, strengths/gaps/nextActions, 단일 `jobAppeal`과 한계만 담은
 `PortfolioSynthesis`를 생성하도록 계약을 분리했다. Portfolio 전역 Validator와 생성
-Service까지 구현됐으며, Interview·Statement 생성과 `report_service.py`는 아직 후속 구현
-경계이다.
+Service, Interview·Statement 생성 및 검증 완료 결과를 `PortfolioAnalysis`로 결정적으로
+조립하는 Service까지 구현됐다. Provider 메타데이터와 generation record를 합치는
+`report_service.py`는 아직 후속 구현 경계이다.
 `schemas/`의 기존 초안은 현재 Backend Wire 계약으로 교체해야 한다.
 
 ## 환경 설정
@@ -292,7 +293,6 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 다음 작업
 
-다음 논리적 작업 단위는 검증된 Repository 분석, Portfolio synthesis, InterviewQuestion과
-PortfolioStatement를 최종 `PortfolioAnalysis`로 조립하는 Service이다. 그다음 Report Service를
-구현한다. 상세 순서는
-[`docs/guide.md`](../docs/guide.md)의 Phase 7을 따른다.
+다음 논리적 작업 단위는 Repository·Portfolio·Interview·Statement 생성 결과와 Provider
+메타데이터를 `InternalPortfolioReport`로 조립하고 전체 270초 deadline을 관리하는 Report
+Service이다. 상세 순서는 [`docs/guide.md`](../docs/guide.md)의 Phase 8을 따른다.

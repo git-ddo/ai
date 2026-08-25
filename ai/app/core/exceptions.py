@@ -79,6 +79,10 @@ class PortfolioStatementGenerationError(ValueError):
     """Raised when statement generation inputs violate orchestration boundaries."""
 
 
+class PortfolioAnalysisAssemblyError(ValueError):
+    """Raised when validated analysis components cannot form one portfolio."""
+
+
 class InputViolationCode(StrEnum):
     """Stable codes for deterministic input graph and depth validation failures."""
 
