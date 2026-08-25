@@ -13,6 +13,7 @@ from app.prompts.context import (
     serialize_criteria,
     serialize_untrusted_data,
 )
+from app.validators.report_validator import PolicyViolationCode
 
 _PORTFOLIO_TASK_TEMPLATE = """
 BACKEND × ENTRY × 최대 {analysis_depth} 범위에서 Repository별 분석을 종합한
@@ -41,6 +42,19 @@ PortfolioSynthesis를 생성한다.
 - 응답은 Provider가 전달한 PortfolioSynthesis Structured Output Schema를 따른다.
 """.strip()
 
+_CORRECTION_TASK_TEMPLATE = """
+{base_task}
+
+이전 생성 결과가 다음 정책 위반 코드로 거절되었다.
+{violation_codes}
+
+- 이전 결과를 수정하거나 일부 항목을 삭제하지 않는다.
+- 입력 Evidence, UserClaim과 검증된 RepositoryAnalysis만 사용해 PortfolioSynthesis 전체를
+  처음부터 다시 생성한다.
+- 위반 코드에 해당하는 정책을 모두 준수한다.
+- 이전 응답의 문장, 오류 메시지 또는 필드 경로를 추정하거나 재현하지 않는다.
+""".strip()
+
 
 def build_portfolio_prompt(
     contexts: Sequence[NormalizedRepositoryContext],
@@ -49,6 +63,59 @@ def build_portfolio_prompt(
 ) -> str:
     """Build the user prompt for depth-aware portfolio synthesis."""
 
+    ordered_contexts, ordered_analyses, maximum_depth = _prepare_portfolio_inputs(
+        contexts,
+        repository_analyses,
+        criteria,
+    )
+    task = _PORTFOLIO_TASK_TEMPLATE.format(analysis_depth=maximum_depth.value)
+    return _render_portfolio_prompt(
+        ordered_contexts,
+        ordered_analyses,
+        criteria,
+        task,
+    )
+
+
+def build_portfolio_correction_prompt(
+    contexts: Sequence[NormalizedRepositoryContext],
+    repository_analyses: Sequence[RepositoryAnalysis],
+    criteria: CriteriaSet,
+    violation_codes: Sequence[PolicyViolationCode],
+) -> str:
+    """Build a full-regeneration prompt using only stable policy codes."""
+
+    unique_codes = tuple(dict.fromkeys(violation_codes))
+    if not unique_codes:
+        raise PromptContextError("Portfolio correction requires a policy violation code.")
+
+    ordered_contexts, ordered_analyses, maximum_depth = _prepare_portfolio_inputs(
+        contexts,
+        repository_analyses,
+        criteria,
+    )
+    base_task = _PORTFOLIO_TASK_TEMPLATE.format(analysis_depth=maximum_depth.value)
+    task = _CORRECTION_TASK_TEMPLATE.format(
+        base_task=base_task,
+        violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
+    )
+    return _render_portfolio_prompt(
+        ordered_contexts,
+        ordered_analyses,
+        criteria,
+        task,
+    )
+
+
+def _prepare_portfolio_inputs(
+    contexts: Sequence[NormalizedRepositoryContext],
+    repository_analyses: Sequence[RepositoryAnalysis],
+    criteria: CriteriaSet,
+) -> tuple[
+    tuple[NormalizedRepositoryContext, ...],
+    tuple[RepositoryAnalysis, ...],
+    AnalysisDepth,
+]:
     ordered_contexts, ordered_analyses = _validate_and_order_inputs(
         contexts,
         repository_analyses,
@@ -58,8 +125,16 @@ def build_portfolio_prompt(
         raise PromptContextError(
             "Portfolio criteria must match the deepest repository analysis depth."
         )
+    return ordered_contexts, ordered_analyses, maximum_depth
+
+
+def _render_portfolio_prompt(
+    ordered_contexts: Sequence[NormalizedRepositoryContext],
+    ordered_analyses: Sequence[RepositoryAnalysis],
+    criteria: CriteriaSet,
+    task: str,
+) -> str:
     repository_data = [build_repository_data(context) for context in ordered_contexts]
-    task = _PORTFOLIO_TASK_TEMPLATE.format(analysis_depth=maximum_depth.value)
 
     return "\n\n".join(
         (

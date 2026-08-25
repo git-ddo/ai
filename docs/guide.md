@@ -69,13 +69,14 @@ schemaVersion: "1.0"
 - [x] Repository 생성 결과 내용 정책 Validator
 - [x] Repository 분석 Service와 정책 실패 1회 재생성
 - [x] Portfolio 전체 범위 참조·혼합 깊이·내용 정책 Validator
+- [x] Portfolio synthesis 생성과 정책 실패 1회 재생성 Service
 - [ ] Portfolio·Report Service와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 583개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
-Portfolio Service와 Wire API를 포함하지 않는다.
+현재 AI 검증 기준은 전체 `pytest` 613개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
+Interview·Statement 생성 Service와 Wire API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
 
@@ -419,7 +420,7 @@ ai/tests/test_portfolio_service.py
 - [x] 전체 요약·대표 Repository·strengths/gaps/nextActions·단일 `jobAppeal` 모델
 - [x] Portfolio Prompt의 생성·제외 필드와 혼합 깊이 제약
 - [x] Portfolio 전체 범위 참조·깊이·내용 정책 Validator
-- [ ] Portfolio synthesis 생성과 정책 재생성 Service
+- [x] Portfolio synthesis 생성과 정책 재생성 Service
 - [ ] 면접 질문과 답변 방향
 - [ ] 포트폴리오 문장
 
@@ -434,6 +435,11 @@ Evidence는 각 소유 Repository의 실제 완료 깊이에 맞춰 검증한다
 깊이의 Repository를 함께 참조하면 자연어 내용 정책은 가장 얕은 깊이를 상한으로 적용한다.
 누락 gap·nextAction은 대상 Repository와 일치하는 명시적 `BACKEND_DERIVED` Evidence가
 필요하다. 이 Validator는 결과를 수정하지 않고 위반을 모아 `ReportPolicyError`를 발생시킨다.
+
+Portfolio synthesis Service는 가장 깊은 Repository에 맞는 누적 Criteria를 로드하고
+`PortfolioSynthesis`만 Structured Output으로 생성한다. 참조·내용 정책 실패 시 위반 코드만
+담은 교정 Prompt로 전체 synthesis를 한 번 재생성한다. Provider retry와 정책 재생성은 별도
+흐름이며, 재생성 성공 시 두 호출의 `duration_ms`와 `attempt_count`를 합산한다.
 
 현재 Wire에 없는 문장 `type`, 문장·질문의 `repositoryId`, `followUpQuestions`는 내부 모델에
 있더라도 Wire 변환 전에 Backend 계약 상태를 다시 확인한다.

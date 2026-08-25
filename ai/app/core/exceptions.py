@@ -67,6 +67,10 @@ class RepositoryAnalysisError(ValueError):
     """Raised when repository service inputs violate orchestration boundaries."""
 
 
+class PortfolioSynthesisError(ValueError):
+    """Raised when portfolio synthesis inputs violate orchestration boundaries."""
+
+
 class InputViolationCode(StrEnum):
     """Stable codes for deterministic input graph and depth validation failures."""
 
