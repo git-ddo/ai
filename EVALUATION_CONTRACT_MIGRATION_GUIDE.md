@@ -500,7 +500,9 @@ AnalysisDepth: P0, P1, P2
 | --- | --- |
 | Backend `main` | BACKEND 중심 P0/P1 수집과 Mock 리포트 |
 | Backend P2 branch | P2 코드 snippet 수집과 Mock P2 리포트 구현, 미병합 |
-| AI 내부 구현 | P0/P1/P2 내부 Evidence·Criteria·System Prompt·정규화·Prompt Context 구현 |
+| AI 입력 계층 | P0/P1/P2 내부 Evidence·Criteria·System Prompt·정규화·Prompt Context와 입력 Validator 구현 |
+| AI 분석 계층 | Repository·Portfolio·Interview·Statement 생성, 정책 재생성과 최종 `PortfolioAnalysis` 조립 구현 |
+| AI 전체 오케스트레이션 | Report Service, 270초 deadline과 generation metadata 집계 구현 |
 | AI Wire API | `/health`만 구현, 실제 portfolio report API 미구현 |
 
 개발 목표:
@@ -544,19 +546,26 @@ BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0/P1/P2
 
 ## 19. AI 구현 순서
 
-Backend P2 흐름에 맞추는 AI 구현 순서는 다음과 같다. 1~2단계는 완료했다.
+Backend P2 흐름에 맞추는 AI 구현 순서는 다음과 같다. 현재 내부 분석 코어와 전체
+오케스트레이션인 1~8단계는 완료했고, 9단계부터가 다음 구현 범위이다.
 
 1. P1/P2 내부 Evidence 도메인 모델 확장 (완료)
 2. P1/P2 Criteria와 Loader 확장 (완료)
 3. 혼합 깊이 System Prompt 구현 (완료)
 4. P1/P2 정규화와 Prompt Context 구현 (완료)
-5. 입력 참조·깊이 Validator 구현
-6. Repository Service와 결과 정책 Validator 구현
-7. Portfolio·Interview·Statement 생성과 Report Service 구현
-8. Backend Schema 기준 Pydantic Wire DTO와 Error Envelope 구현
-9. `POST /internal/v1/portfolio-reports` 구현
-10. Fake Provider 기반 P0/P1/P2 계약 테스트
-11. 실제 Gemini와 Spring Boot E2E 연동
+5. 입력 참조·깊이 Validator 구현 (완료)
+6. Repository Service와 결과 정책 Validator 구현 (완료)
+7. Portfolio·Interview·Statement 생성과 `PortfolioAnalysis` 최종 조립 (완료)
+8. Report Service, 전체 270초 deadline과 generation metadata 집계 구현 (완료)
+9. Backend Schema 기준 Pydantic Wire DTO와 Error Envelope 구현
+10. `POST /internal/v1/portfolio-reports` 구현
+11. Fake Provider 기반 P0/P1/P2 계약 테스트
+12. 실제 Gemini와 Spring Boot E2E 연동
+
+현재 `ai/app/services/report_service.py`는 구현됐고 `ai/app/api/reports.py`는 구현 전 빈
+파일이다. `ai/app/schemas/`와 관련 테스트 Fixture는 과거 계약 초안이며, 9단계에서 Backend JSON
+Schema를 기준으로 교체한다. 기존 파일이 존재하거나 해당 초안 테스트가 통과하는 것을 Wire 계약
+구현 완료로 해석하지 않는다.
 
 각 작업은 별도 논리적 커밋으로 구현하고, 구현되지 않은 기능을 문서에서 완료 상태로 표시하지
 않는다.

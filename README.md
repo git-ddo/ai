@@ -64,10 +64,12 @@ Schema가 표현하는 enum과 실제 분석 구현 범위는 다르다. 현재 
 | --- | --- |
 | Backend `main` | P0/P1 수집, Mock AI, 응답 검증과 Job 저장 흐름 구현 |
 | Backend P2 | `origin/feat/portfolio-evaluation-p2`의 `bcc9a4f`에서 코드 snippet 수집 구현, 아직 `main` 미병합 |
-| AI 기반 | FastAPI, `/health`, Gemini Provider, P0/P1/P2 혼합 깊이 System Prompt 구현 |
-| AI 내부 파이프라인 | P0/P1/P2 정규화·깊이별 Prompt Context·Repository 참조 Validator 구현 |
-| AI P1/P2 | 내부 Evidence 모델과 P0→P1→P2 누적 Criteria·Loader 구현 |
-| 실제 연동 | 최종 Pydantic Wire DTO와 리포트 API 구현 후 진행 예정 |
+| AI 기반 | FastAPI, `/health`, Gemini/Fake Provider, P0/P1/P2 Criteria와 혼합 깊이 System Prompt 구현 |
+| AI 입력 처리 | 내부 Evidence·UserClaim 모델, 정규화, Prompt Context, 참조·깊이 Validator 구현 |
+| AI 분석 코어 | Repository 분석, Portfolio 종합, 면접 질문, 포트폴리오 문장과 정책 재생성 구현 |
+| AI 최종 내부 결과 | 검증 완료 결과를 결정적으로 조립하는 `PortfolioAnalysisAssembler` 구현 |
+| AI 서버 오케스트레이션 | Report Service, 전체 270초 deadline과 generation metadata 집계 구현 |
+| 실제 연동 | Backend 기준 Wire DTO·Error Envelope와 리포트 API 구현 후 진행 예정 |
 
 Backend P2 브랜치는 저장소당 최대 8개, snippet당 최대 40줄·4,000자, 원본 파일 최대
 80,000 byte 제한을 적용한다. 전체 요청 기준 snippet·token 예산과 P2 대상 저장소 제한은
@@ -118,5 +120,22 @@ MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 또는 자체 ML 모�
 
 ## 다음 작업
 
-AI의 다음 작업은 `입력 참조·깊이 Validator 확장`이다. 이후 Repository·Portfolio Service를
-순서대로 구현한다.
+AI의 내부 Report Service 구현은 완료됐다.
+
+```text
+입력 참조·깊이 검증
+→ Repository 정규화와 분석
+→ Portfolio synthesis
+→ InterviewQuestion·PortfolioStatement 생성
+→ PortfolioAnalysis 최종 조립
+→ generation metadata 집계
+→ InternalPortfolioReport
+```
+
+Report Service는 Repository 하나의 필수 분석이 실패하면 전체 분석을 실패시키고, Gemini
+호출·Provider retry·정책 재생성을 모두 포함하는 270초 전체 deadline을 적용한다. 다음으로 기존
+`ai/app/schemas/` 초안을 Backend JSON Schema 기준으로 교체하고 Error Envelope,
+`POST /internal/v1/portfolio-reports`, Fake Provider 기반 HTTP E2E를 순서대로 구현한다.
+
+현재 AI 검증 기준은 전체 `pytest` 841개와 Ruff·mypy 통과이다. 실제 Gemini 호출, 최종 Wire
+API와 Spring Boot E2E는 이 수치에 포함되지 않는다.

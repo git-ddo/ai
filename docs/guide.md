@@ -75,13 +75,13 @@ schemaVersion: "1.0"
 - [x] InterviewQuestion 생성과 정책 실패 1회 재생성 Service
 - [x] PortfolioStatement 생성과 정책 실패 1회 재생성 Service
 - [x] 검증 완료 결과의 결정적 `PortfolioAnalysis` 최종 조립
-- [ ] Report Service와 내부 전체 오케스트레이션
+- [x] Report Service와 내부 전체 오케스트레이션
 - [ ] Backend Schema 기준 Pydantic Wire DTO
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 797개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출,
-Report Service와 Wire API를 포함하지 않는다.
+현재 AI 검증 기준은 전체 `pytest` 841개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
+API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
 
@@ -480,23 +480,36 @@ ai/tests/test_report_service.py
 흐름:
 
 ```text
-입력 검증
-→ Repository 정규화
-→ Criteria/Prompt
-→ Repository 분석
-→ Portfolio 종합
-→ 최종 정책 검증
+InternalPortfolioInput
+→ Evidence 참조·분석 깊이 검증
+→ Repository별 정규화
+→ RepositoryAnalysisService (Context 순서, 1~5개)
+→ PortfolioSynthesisService (1회)
+→ InterviewQuestionService (대상 Repository별)
+→ PortfolioStatementService (1회)
+→ PortfolioAnalysisAssembler
+→ generation metadata 집계
 → InternalPortfolioReport
 ```
 
 구현:
 
-- [ ] `LLMProvider` 의존성 주입
-- [ ] Repository 1~5개 처리
-- [ ] 혼합 깊이 처리
-- [ ] Repository 하나 실패 시 전체 실패
-- [ ] 모든 Gemini 호출·retry를 포함한 270초 전체 deadline
-- [ ] 단계별 처리 시간과 시도 횟수 집계
+- [x] `LLMProvider` 의존성 주입
+- [x] 기존 Input Validator·Normalization·생성 Service·Assembler 조합
+- [x] Repository 1~5개 처리
+- [x] 혼합 깊이 처리
+- [x] Repository 하나 실패 시 전체 실패
+- [x] 모든 Gemini 호출·retry를 포함한 270초 전체 deadline
+- [x] 단계별 처리 시간과 시도 횟수 집계
+
+Report Service는 새로운 분석 문장이나 Criteria를 직접 만들지 않는다. 각 하위 Service가 반환한
+`StructuredGeneration`의 `duration_ms`·`attempt_count`를 `InternalGenerationRecord`로 변환하고,
+Assembler가 만든 `PortfolioAnalysis`와 합쳐 `InternalPortfolioReport`를 반환한다. Provider retry와
+정책 위반 1회 재생성은 기존 하위 계층 책임을 유지하며, Report Service는 전체 deadline과 단계
+순서, 전체 실패 정책만 관리한다.
+
+`report_service.py`와 `test_report_service.py` 구현을 완료했다. 전체 파이프라인은 입력 순서를
+보존해 순차 실행하며, 실패 시 부분 리포트를 반환하지 않는다.
 
 ### Phase 9. Backend Wire DTO와 Error Envelope
 
@@ -522,6 +535,10 @@ ai/tests/test_api.py
 - [ ] 요청 크기와 민감 로그 제한
 
 Backend Schema에 없는 필드를 임의로 추가하지 않는다.
+
+현재 `ai/app/schemas/`와 `test_request_schema.py`·`test_response_schema.py`는 과거 계약 초안이다.
+해당 테스트가 통과하는 것은 Backend 최종 JSON Schema 호환을 의미하지 않는다. Phase 9에서는
+초안에 호환 레이어를 덧붙이지 않고 Backend Schema·Example을 기준으로 DTO와 Fixture를 교체한다.
 
 ### Phase 10. 독립 및 E2E 검증
 
