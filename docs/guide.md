@@ -80,7 +80,7 @@ schemaVersion: "1.0"
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 841개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
+현재 AI 검증 기준은 전체 `pytest` 851개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
 API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -216,11 +216,12 @@ Timeout 계약:
 
 ```text
 Backend Connect: 5초
-AI 전체 Deadline: 270초
+AI 전체 Deadline: 600초
 Backend Read: 300초
 ```
 
-현재 Gemini 개별 호출 timeout은 존재하지만 전체 270초 deadline은 후속 구현 대상이다.
+Gemini 개별 호출 timeout과 전체 600초 deadline은 구현됐다. Backend Read 300초는 AI의 최악
+처리 시간보다 짧으므로 실제 HTTP 연동 전 timeout 계약을 다시 맞춰야 한다.
 
 ## 8. 구현 순서
 
@@ -499,7 +500,7 @@ InternalPortfolioInput
 - [x] Repository 1~5개 처리
 - [x] 혼합 깊이 처리
 - [x] Repository 하나 실패 시 전체 실패
-- [x] 모든 Gemini 호출·retry를 포함한 270초 전체 deadline
+- [x] 모든 Gemini 호출·retry를 포함한 600초 전체 deadline
 - [x] 단계별 처리 시간과 시도 횟수 집계
 
 Report Service는 새로운 분석 문장이나 Criteria를 직접 만들지 않는다. 각 하위 Service가 반환한

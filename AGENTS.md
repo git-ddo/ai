@@ -55,7 +55,7 @@ UserClaim과 AI 추천은 Evidence가 아니다. `NOT_OBSERVED`는 수집 범위
   정규화·Prompt Context와 입력 참조·깊이 Validator를 구현했다.
 - Repository 분석, Portfolio synthesis, InterviewQuestion, PortfolioStatement 생성과 정책 검증,
   검증 완료 결과의 `PortfolioAnalysis` 최종 조립까지 구현했다.
-- Report Service, 전체 270초 deadline과 generation metadata 집계까지 구현했다.
+- Report Service, 전체 600초 deadline과 generation metadata 집계까지 구현했다.
 - 최종 Wire DTO·Error Envelope와 실제 리포트 API는 후속 구현 대상이다.
 - `ai/app/schemas/`의 현재 모델과 테스트 Fixture는 과거 계약 초안이므로 Backend JSON Schema와
   일치하는 최종 Wire 계약으로 취급하지 않는다.
@@ -146,12 +146,13 @@ P2 코드는 Backend가 선별한 제한된 snippet만 분석한다. 코드를 �
 
 ```text
 Backend → AI Connect Timeout: 5초
-AI 전체 처리 Deadline: 270초
+AI 전체 처리 Deadline: 600초
 Backend → AI Read Timeout: 300초
 ```
 
-Gemini 개별 호출 timeout과 AI 전체 270초 deadline은 별도 개념이다. 현재 코드에 적용되지 않은
-값은 구현 완료로 표시하지 않는다.
+Gemini 개별 호출 timeout과 AI 전체 600초 deadline은 별도 개념이다. Backend Read Timeout
+300초는 AI의 최악 처리 시간보다 짧으므로 실제 HTTP 연동 전에 양쪽 값을 다시 합의해야 한다.
+현재 코드에 적용되지 않은 값은 구현 완료로 표시하지 않는다.
 
 ## 9. 작업 방식
 

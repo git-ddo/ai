@@ -68,7 +68,8 @@ Schema가 표현하는 enum과 실제 분석 구현 범위는 다르다. 현재 
 | AI 입력 처리 | 내부 Evidence·UserClaim 모델, 정규화, Prompt Context, 참조·깊이 Validator 구현 |
 | AI 분석 코어 | Repository 분석, Portfolio 종합, 면접 질문, 포트폴리오 문장과 정책 재생성 구현 |
 | AI 최종 내부 결과 | 검증 완료 결과를 결정적으로 조립하는 `PortfolioAnalysisAssembler` 구현 |
-| AI 서버 오케스트레이션 | Report Service, 전체 270초 deadline과 generation metadata 집계 구현 |
+| AI 서버 오케스트레이션 | Report Service, 전체 600초 deadline과 generation metadata 집계 구현 |
+| 실제 Gemini Smoke | `gemini-3.5-flash-lite`로 Repository 1개 P0/P1/P2 정식 파이프라인 완주 |
 | 실제 연동 | Backend 기준 Wire DTO·Error Envelope와 리포트 API 구현 후 진행 예정 |
 
 Backend P2 브랜치는 저장소당 최대 8개, snippet당 최대 40줄·4,000자, 원본 파일 최대
@@ -133,9 +134,10 @@ AI의 내부 Report Service 구현은 완료됐다.
 ```
 
 Report Service는 Repository 하나의 필수 분석이 실패하면 전체 분석을 실패시키고, Gemini
-호출·Provider retry·정책 재생성을 모두 포함하는 270초 전체 deadline을 적용한다. 다음으로 기존
+호출·Provider retry·정책 재생성을 모두 포함하는 600초 전체 deadline을 적용한다. 다음으로 기존
 `ai/app/schemas/` 초안을 Backend JSON Schema 기준으로 교체하고 Error Envelope,
 `POST /internal/v1/portfolio-reports`, Fake Provider 기반 HTTP E2E를 순서대로 구현한다.
 
-현재 AI 검증 기준은 전체 `pytest` 841개와 Ruff·mypy 통과이다. 실제 Gemini 호출, 최종 Wire
-API와 Spring Boot E2E는 이 수치에 포함되지 않는다.
+실제 Gemini 내부 파이프라인 검증 기록은
+[`docs/gemini-smoke-test.md`](./docs/gemini-smoke-test.md)에 정리한다. 최종 Wire API와 Spring
+Boot E2E는 아직 검증 범위에 포함되지 않는다.

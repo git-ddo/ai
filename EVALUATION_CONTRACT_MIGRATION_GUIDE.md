@@ -419,13 +419,13 @@ Spring Boot
 
 ```text
 Backend → AI Connect Timeout: 5초
-AI 서버 전체 처리 Deadline: 270초
+AI 서버 전체 처리 Deadline: 600초
 Backend → AI Read Timeout: 300초
 ```
 
-Gemini 개별 호출 timeout은 전체 270초 deadline과 다르다. retry와 backoff도 270초 안에
-포함되어야 한다. Backend `AiClientConfig`에는 현재 connect/read timeout이 적용되지 않았고,
-AI에도 전체 deadline이 구현되지 않았으므로 양쪽 모두 구현 예정이다.
+Gemini 개별 호출 timeout은 전체 600초 deadline과 다르다. retry와 backoff도 600초 안에
+포함된다. Backend Read Timeout 300초는 AI의 최악 처리 시간보다 짧으므로 실제 HTTP 연동 전에
+양쪽 timeout을 다시 합의해야 한다.
 
 ## 13. 부분 성공 정책
 
@@ -502,7 +502,7 @@ AnalysisDepth: P0, P1, P2
 | Backend P2 branch | P2 코드 snippet 수집과 Mock P2 리포트 구현, 미병합 |
 | AI 입력 계층 | P0/P1/P2 내부 Evidence·Criteria·System Prompt·정규화·Prompt Context와 입력 Validator 구현 |
 | AI 분석 계층 | Repository·Portfolio·Interview·Statement 생성, 정책 재생성과 최종 `PortfolioAnalysis` 조립 구현 |
-| AI 전체 오케스트레이션 | Report Service, 270초 deadline과 generation metadata 집계 구현 |
+| AI 전체 오케스트레이션 | Report Service, 600초 deadline과 generation metadata 집계 구현 |
 | AI Wire API | `/health`만 구현, 실제 portfolio report API 미구현 |
 
 개발 목표:
@@ -556,7 +556,7 @@ Backend P2 흐름에 맞추는 AI 구현 순서는 다음과 같다. 현재 내�
 5. 입력 참조·깊이 Validator 구현 (완료)
 6. Repository Service와 결과 정책 Validator 구현 (완료)
 7. Portfolio·Interview·Statement 생성과 `PortfolioAnalysis` 최종 조립 (완료)
-8. Report Service, 전체 270초 deadline과 generation metadata 집계 구현 (완료)
+8. Report Service, 전체 600초 deadline과 generation metadata 집계 구현 (완료)
 9. Backend Schema 기준 Pydantic Wire DTO와 Error Envelope 구현
 10. `POST /internal/v1/portfolio-reports` 구현
 11. Fake Provider 기반 P0/P1/P2 계약 테스트

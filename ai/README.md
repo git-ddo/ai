@@ -54,12 +54,13 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 ### 다음 구현
 
 - [x] Report Service
-- [x] 전체 270초 분석 deadline
+- [x] 전체 600초 분석 deadline
+- [x] 실제 Gemini로 Repository 1개 P0/P1/P2 내부 전체 파이프라인 Smoke
 - [ ] Backend Schema 기준 Pydantic Wire DTO와 Error Envelope
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 841개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
+현재 전체 테스트 기준은 851개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
 포함하지 않는다.
 
 ## 목표 지원 범위
@@ -222,7 +223,7 @@ Repository, strengths/gaps/nextActions, 단일 `jobAppeal`과 한계만 담은
 `PortfolioSynthesis`를 생성하도록 계약을 분리했다. Portfolio 전역 Validator와 생성
 Service, Interview·Statement 생성 및 검증 완료 결과를 `PortfolioAnalysis`로 결정적으로
 조립하는 Service까지 구현됐다. `report_service.py`는 Provider 메타데이터와 generation record를
-합치고 전체 흐름에 270초 deadline을 적용한다. `api/reports.py`는 아직 빈 파일이다.
+합치고 전체 흐름에 600초 deadline을 적용한다. `api/reports.py`는 아직 빈 파일이다.
 `schemas/`의 모델과 관련 Fixture는 과거 계약 초안이므로 현재 Backend Wire 계약으로 교체해야
 하며, 초안 테스트 통과를 실제 연동 완료로 해석하지 않는다.
 
@@ -239,12 +240,14 @@ LOG_LEVEL=INFO
 
 GEMINI_API_KEY=
 GEMINI_MODEL=
+GEMINI_THINKING_LEVEL=medium
 LLM_TIMEOUT_SECONDS=60
 LLM_MAX_RETRIES=2
+AI_ANALYSIS_DEADLINE_SECONDS=600
 ```
 
-`LLM_TIMEOUT_SECONDS`는 현재 Gemini 개별 호출 timeout이다. 합의된 AI 전체 처리 deadline은
-270초이며 Report Service에서 별도로 구현해야 한다.
+`LLM_TIMEOUT_SECONDS`는 Gemini 개별 호출 timeout이고 `AI_ANALYSIS_DEADLINE_SECONDS`는 모든
+생성·retry·정책 재생성을 포함한 전체 처리 deadline이다.
 
 ## 실행
 
@@ -295,7 +298,7 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 ## 다음 작업
 
 Report Service는 Repository·Portfolio·Interview·Statement 생성 결과와 Provider 메타데이터를
-`InternalPortfolioReport`로 조립하고 전체 270초 deadline을 관리한다. 다음 논리적 작업 단위는
+`InternalPortfolioReport`로 조립하고 전체 600초 deadline을 관리한다. 다음 논리적 작업 단위는
 Backend JSON Schema 기준 Wire DTO와 Error Envelope이다. 상세 순서는
 [`docs/guide.md`](../docs/guide.md)의 Phase 9를 따른다.
 
