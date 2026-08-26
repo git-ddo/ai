@@ -24,6 +24,9 @@ PortfolioSynthesis를 생성한다.
 - 전체 포트폴리오 진단과 Repository별 실제 분석 한계를 제시한다.
 - overall_summary, representative_projects, strengths, gaps, next_actions, job_appeal,
   limitations만 생성한다.
+- overall_summary, strengths, gaps의 item_type은 INTERPRETATION으로 생성한다.
+- next_actions의 item_type은 RECOMMENDATION으로 생성한다.
+- job_appeal의 item_type은 JOB_APPEAL로 생성한다.
 - 대표 프로젝트는 제공된 Repository 중에서만 선택하고, 해당 Repository의
   Evidence 또는 UserClaim만 참조한다.
 - strengths, gaps, next_actions, job_appeal은 공개 Evidence를 최소 하나 참조한다.

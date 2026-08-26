@@ -35,7 +35,7 @@ class PortfolioReportService:
         portfolio_service: PortfolioSynthesisService | None = None,
         interview_service: InterviewQuestionService | None = None,
         statement_service: PortfolioStatementService | None = None,
-        deadline_seconds: float = 270.0,
+        deadline_seconds: float = 600.0,
     ) -> None:
         self._deadline_seconds = self._validate_deadline(deadline_seconds)
         self._normalization_service = normalization_service or NormalizationService()
@@ -159,10 +159,10 @@ class PortfolioReportService:
             isinstance(deadline_seconds, bool)
             or not isinstance(deadline_seconds, (int, float))
             or not math.isfinite(deadline_seconds)
-            or not 0 < deadline_seconds <= 300
+            or not 0 < deadline_seconds <= 600
         ):
             raise ValueError(
-                "Analysis deadline must be finite, greater than 0, and at most 300 seconds."
+                "Analysis deadline must be finite, greater than 0, and at most 600 seconds."
             )
         return float(deadline_seconds)
 

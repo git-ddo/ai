@@ -646,6 +646,19 @@ def test_rejects_not_observed_as_actual_absence() -> None:
     assert PolicyViolationCode.NOT_OBSERVED_MISUSE in violation_codes(exc_info.value)
 
 
+def test_accepts_limitation_that_explicitly_scopes_unverified_content() -> None:
+    context = make_context(1, AnalysisDepth.P2)
+    synthesis = make_synthesis(
+        limitations=(
+            "본 분석은 제공된 P0, P1, P2 범위의 Evidence 및 파일 경로 내에서만 "
+            "수행되었으며, snippet 밖의 코드 구현이나 전체 시스템의 동작 여부는 "
+            "직접 확인할 수 없습니다.",
+        )
+    )
+
+    assert validate_all(synthesis, (context,), AnalysisDepth.P2) is None
+
+
 @pytest.mark.parametrize("field_name", ["gap", "next_action"])
 def test_rejects_missing_item_without_derived_evidence(field_name: str) -> None:
     missing_item = make_item(

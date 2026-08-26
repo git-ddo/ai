@@ -711,6 +711,10 @@ def test_portfolio_task_contains_grounding_rules(criteria: CriteriaSet) -> None:
     ):
         assert field_name in task
 
+    assert "overall_summary, strengths, gaps의 item_type은 INTERPRETATION" in task
+    assert "next_actions의 item_type은 RECOMMENDATION" in task
+    assert "job_appeal의 item_type은 JOB_APPEAL" in task
+
     assert "PortfolioAnalysis Structured Output Schema" not in task
 
 

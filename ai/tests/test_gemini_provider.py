@@ -73,14 +73,15 @@ def make_settings(
     model: str | None = "test-gemini-model",
     timeout: float = 1.0,
     max_retries: int = 2,
+    thinking_level: str = "medium",
 ) -> Settings:
     values: dict[str, object] = {
+        "GEMINI_API_KEY": api_key,
         "GEMINI_MODEL": model,
         "LLM_TIMEOUT_SECONDS": timeout,
         "LLM_MAX_RETRIES": max_retries,
+        "GEMINI_THINKING_LEVEL": thinking_level,
     }
-    if api_key is not None:
-        values["GEMINI_API_KEY"] = api_key
     return Settings.model_validate(values)
 
 
@@ -128,6 +129,17 @@ async def test_falls_back_to_validating_response_text() -> None:
     result = await provider.generate_structured("system", "user", ExampleResponse)
 
     assert result.value.summary == "from text"
+
+
+@pytest.mark.asyncio
+async def test_validates_parsed_json_object_as_requested_model() -> None:
+    response = types.GenerateContentResponse.model_construct(parsed={"summary": "from object"})
+    models = StubModels([response])
+    provider = GeminiProvider(make_settings(), client=StubAsyncClient(models))
+
+    result = await provider.generate_structured("system", "user", ExampleResponse)
+
+    assert result.value == ExampleResponse(summary="from object")
 
 
 @pytest.mark.asyncio
@@ -300,7 +312,7 @@ async def test_non_retryable_api_errors_fail_immediately(status_code: int) -> No
 
 
 @pytest.mark.asyncio
-async def test_passes_separate_prompts_and_pydantic_schema_to_gemini() -> None:
+async def test_passes_separate_prompts_and_json_schema_to_gemini() -> None:
     models = StubModels([types.GenerateContentResponse(parsed=ExampleResponse(summary="ok"))])
     provider = GeminiProvider(make_settings(), client=StubAsyncClient(models))
 
@@ -312,7 +324,27 @@ async def test_passes_separate_prompts_and_pydantic_schema_to_gemini() -> None:
     assert call["contents"] == "untrusted user data"
     assert config.system_instruction == "system policy"
     assert config.response_mime_type == "application/json"
-    assert config.response_schema is ExampleResponse
+    assert config.response_schema is None
+    assert config.response_json_schema == ExampleResponse.model_json_schema()
+    assert config.automatic_function_calling is not None
+    assert config.automatic_function_calling.disable is True
+    assert config.thinking_config is not None
+    assert config.thinking_config.thinking_level is types.ThinkingLevel.MEDIUM
+
+
+@pytest.mark.asyncio
+async def test_passes_configured_thinking_level_to_gemini() -> None:
+    models = StubModels([types.GenerateContentResponse(parsed=ExampleResponse(summary="ok"))])
+    provider = GeminiProvider(
+        make_settings(thinking_level="minimal"),
+        client=StubAsyncClient(models),
+    )
+
+    await provider.generate_structured("system", "user", ExampleResponse)
+
+    thinking_config = models.calls[0]["config"].thinking_config
+    assert thinking_config is not None
+    assert thinking_config.thinking_level is types.ThinkingLevel.MINIMAL
 
 
 @pytest.mark.asyncio
@@ -441,6 +473,7 @@ async def test_fake_provider_rejects_response_model_mismatch() -> None:
         {"LLM_TIMEOUT_SECONDS": 0},
         {"LLM_MAX_RETRIES": -1},
         {"LLM_MAX_RETRIES": 6},
+        {"GEMINI_THINKING_LEVEL": "invalid"},
     ],
 )
 def test_settings_reject_invalid_timeout_and_retry_bounds(values: dict[str, object]) -> None:

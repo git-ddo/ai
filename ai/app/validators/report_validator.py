@@ -119,6 +119,8 @@ _NOT_OBSERVED_ABSENCE_PATTERNS = (
 )
 _OBSERVATION_SCOPE_PATTERNS = (
     r"(?:수집|분석|공개\s*근거)\s*범위",
+    r"(?:제공|전달)된.{0,45}(?:Evidence|근거|파일|코드|snippet).{0,45}(?:범위|내에서만|밖)",
+    r"(?:snippet|코드\s*구간).{0,20}(?:밖|외부)",
     r"(?:관찰|확인)되지\s*않",
     r"not\s+observed",
 )

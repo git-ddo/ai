@@ -823,7 +823,7 @@ async def test_external_cancellation_is_not_swallowed() -> None:
 
 @pytest.mark.parametrize(
     "deadline",
-    [True, False, 0, -1, 300.1, float("inf"), float("nan"), "270"],
+    [True, False, 0, -1, 600.1, float("inf"), float("nan"), "270"],
 )
 def test_rejects_invalid_deadline(deadline: object) -> None:
     provider = SequencedProvider((make_analysis(normalize(make_portfolio_input())[0]),))
@@ -835,7 +835,7 @@ def test_rejects_invalid_deadline(deadline: object) -> None:
 def test_accepts_deadline_upper_boundary() -> None:
     provider = SequencedProvider((make_analysis(normalize(make_portfolio_input())[0]),))
 
-    service = PortfolioReportService(provider, deadline_seconds=300)
+    service = PortfolioReportService(provider, deadline_seconds=600)
 
     assert isinstance(service, PortfolioReportService)
 

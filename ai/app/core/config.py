@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,6 +15,10 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     gemini_api_key: SecretStr | None = Field(default=None, validation_alias="GEMINI_API_KEY")
     gemini_model: str | None = Field(default=None, validation_alias="GEMINI_MODEL")
+    gemini_thinking_level: Literal["minimal", "low", "medium", "high"] = Field(
+        default="medium",
+        validation_alias="GEMINI_THINKING_LEVEL",
+    )
     llm_timeout_seconds: float = Field(
         default=60.0,
         gt=0,
@@ -27,9 +32,9 @@ class Settings(BaseSettings):
         validation_alias="LLM_MAX_RETRIES",
     )
     ai_analysis_deadline_seconds: float = Field(
-        default=270.0,
+        default=600.0,
         gt=0,
-        le=300,
+        le=600,
         validation_alias="AI_ANALYSIS_DEADLINE_SECONDS",
     )
 

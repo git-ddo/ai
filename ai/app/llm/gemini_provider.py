@@ -64,6 +64,7 @@ class GeminiProvider:
             raise LLMConfigurationError("Gemini model is not configured.")
 
         self._model = model
+        self._thinking_level = types.ThinkingLevel(settings.gemini_thinking_level.upper())
         self._timeout_seconds = settings.llm_timeout_seconds
         self._max_attempts = settings.llm_max_retries + 1
         self._sleep = sleep
@@ -149,7 +150,9 @@ class GeminiProvider:
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=response_model,
+            response_json_schema=response_model.model_json_schema(),
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            thinking_config=types.ThinkingConfig(thinking_level=self._thinking_level),
         )
 
         try:
@@ -191,10 +194,13 @@ class GeminiProvider:
         if isinstance(parsed, response_model):
             return parsed
         if parsed is not None:
-            raise LLMStructuredOutputError(
-                "Gemini returned a structured value with an unexpected type.",
-                attempt_count=attempt_count,
-            )
+            try:
+                return response_model.model_validate(parsed)
+            except ValidationError as exc:
+                raise LLMStructuredOutputError(
+                    "Gemini returned an invalid structured response.",
+                    attempt_count=attempt_count,
+                ) from exc
 
         text = response.text
         if text is None or not text.strip():

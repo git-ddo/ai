@@ -91,14 +91,14 @@ def test_api_model_rejects_unknown_fields() -> None:
     assert exc_info.value.errors()[0]["type"] == "extra_forbidden"
 
 
-def test_settings_default_analysis_deadline_is_270_seconds(
+def test_settings_default_analysis_deadline_is_600_seconds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("AI_ANALYSIS_DEADLINE_SECONDS", raising=False)
 
     settings = Settings(_env_file=None)
 
-    assert settings.ai_analysis_deadline_seconds == 270.0
+    assert settings.ai_analysis_deadline_seconds == 600.0
 
 
 def test_settings_allows_analysis_deadline_environment_override(
@@ -111,7 +111,7 @@ def test_settings_allows_analysis_deadline_environment_override(
     assert settings.ai_analysis_deadline_seconds == 120.5
 
 
-@pytest.mark.parametrize("deadline", ["0", "-1", "300.1"])
+@pytest.mark.parametrize("deadline", ["0", "-1", "600.1"])
 def test_settings_rejects_invalid_analysis_deadline(
     monkeypatch: pytest.MonkeyPatch,
     deadline: str,

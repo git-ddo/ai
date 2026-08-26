@@ -37,6 +37,7 @@ dist/
 logs/
 tmp/
 temp/
+ai/scripts/*.output.json
 
 # IDE and editor files
 .idea/
