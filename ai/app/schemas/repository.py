@@ -1,104 +1,62 @@
-from typing import Annotated, Literal
+from datetime import date
+from typing import Annotated
 
-from pydantic import Field
+from pydantic import StrictInt, StringConstraints
 
 from app.schemas.common import (
+    AnalysisDepth,
     ApiModel,
-    Confidence,
-    EvidenceType,
-    NonEmptyString,
-    ProjectType,
+    EvidenceValueType,
+    RequestEvidenceType,
+    SnapshotHashAlgorithm,
 )
 
-type Percentage = Annotated[float, Field(ge=0, le=100)]
-type Score = Annotated[int, Field(ge=0, le=100)]
-type NonNegativeInteger = Annotated[int, Field(ge=0)]
-type PositiveInteger = Annotated[int, Field(gt=0)]
+type ClaimId = Annotated[str, StringConstraints(pattern=r"^claim_[0-9]{3,}$")]
+type EvidenceId = Annotated[str, StringConstraints(pattern=r"^ev_[0-9]{3,}$")]
 
 
-class LanguageShare(ApiModel):
-    name: NonEmptyString
-    percentage: Percentage
+class CollectionWarning(ApiModel):
+    code: str
+    path: str | None
+    message: str
 
 
-class GitHubEvidenceReference(ApiModel):
-    type: Literal[EvidenceType.GITHUB]
-    path: NonEmptyString
-    description: NonEmptyString
+class UserClaim(ApiModel):
+    claim_id: ClaimId
+    statement: str
+    participation_level: str | None
+    participation_started_on: date | None
+    participation_ended_on: date | None
+    related_evidence_refs: list[EvidenceId]
 
 
-class TechStackEvidence(ApiModel):
-    name: NonEmptyString
-    confidence: Confidence
-    evidence: Annotated[list[GitHubEvidenceReference], Field(min_length=1)]
-
-
-class ReadmeEvidence(ApiModel):
-    exists: bool
-    has_introduction: bool
-    has_features: bool
-    has_run_guide: bool
-    has_environment_variables: bool
-    has_tech_stack: bool
-    has_api_examples: bool
-    has_testing_guide: bool
-    has_deployment_guide: bool
-    has_troubleshooting: bool
-
-
-class TestingEvidence(ApiModel):
-    exists: bool
-    file_count: NonNegativeInteger
-
-
-class DockerEvidence(ApiModel):
-    dockerfile: bool
-    compose: bool
-
-
-class CiEvidence(ApiModel):
-    github_actions: bool
-    runs_build: bool
-    runs_tests: bool
-
-
-class ActivityEvidence(ApiModel):
-    recent_commit_count: NonNegativeInteger
-    user_commit_count: NonNegativeInteger
-    user_pull_request_count: NonNegativeInteger
-    activity_area_candidates: list[NonEmptyString]
-
-
-class GitHubEvidence(ApiModel):
-    languages: list[LanguageShare]
-    tech_stacks: list[TechStackEvidence]
-    readme: ReadmeEvidence
-    testing: TestingEvidence
-    docker: DockerEvidence
-    ci: CiEvidence
-    activity: ActivityEvidence
-
-
-class BackendMetrics(ApiModel):
-    portfolio_readiness_score: Score
-    readme_readiness_score: Score
-    evidence_clarity_score: Score
-
-
-class UserProvidedRole(ApiModel):
-    project_type: ProjectType
-    role: NonEmptyString
-    implemented_features: list[NonEmptyString]
-    related_files: list[NonEmptyString]
-    related_pull_requests: list[NonEmptyString]
-    related_commits: list[NonEmptyString]
+class Evidence(ApiModel):
+    evidence_id: EvidenceId
+    evidence_type: RequestEvidenceType
+    analysis_depth: AnalysisDepth
+    repository_id: str
+    repository_full_name: str
+    snapshot_hash_algorithm: SnapshotHashAlgorithm
+    snapshot_sha: str
+    fact_key: str
+    value_type: EvidenceValueType
+    value: str
+    path: str | None
+    start_line: StrictInt | None
+    end_line: StrictInt | None
+    commit_sha: str | None
+    pull_request_number: StrictInt | None
+    source_evidence_refs: list[EvidenceId]
+    derived_from_level: AnalysisDepth | None
 
 
 class RepositoryInput(ApiModel):
-    repository_id: PositiveInteger
-    name: NonEmptyString
-    full_name: NonEmptyString
-    description: NonEmptyString | None
-    github_evidence: GitHubEvidence
-    backend_metrics: BackendMetrics
-    user_provided_role: UserProvidedRole | None = None
+    repository_id: str
+    repository_full_name: str
+    default_branch: str | None
+    snapshot_hash_algorithm: SnapshotHashAlgorithm
+    snapshot_sha: str
+    completed_evidence_levels: list[AnalysisDepth]
+    collection_warnings: list[CollectionWarning]
+    user_claims: list[UserClaim]
+    evidence: list[Evidence]

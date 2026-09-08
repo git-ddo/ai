@@ -34,6 +34,47 @@ class AnalysisPurpose(StrEnum):
     INTERVIEW_PREPARATION = "INTERVIEW_PREPARATION"
 
 
+class RequestAnalysisPurpose(StrEnum):
+    """Analysis purposes accepted by the Backend request v1.0 contract."""
+
+    PORTFOLIO_ANALYSIS = "PORTFOLIO_ANALYSIS"
+
+
+class TargetCareerLevel(StrEnum):
+    ENTRY = "ENTRY"
+    JUNIOR = "JUNIOR"
+    MID = "MID"
+    SENIOR = "SENIOR"
+
+
+class AnalysisDepth(StrEnum):
+    P0 = "P0"
+    P1 = "P1"
+    P2 = "P2"
+
+
+class SnapshotHashAlgorithm(StrEnum):
+    SHA1 = "SHA1"
+    SHA256 = "SHA256"
+
+
+class RequestEvidenceType(StrEnum):
+    """Evidence types accepted by the Backend request v1.0 contract."""
+
+    GITHUB_STATIC = "GITHUB_STATIC"
+    GITHUB_ACTIVITY = "GITHUB_ACTIVITY"
+    CODE_EVIDENCE = "CODE_EVIDENCE"
+    BACKEND_DERIVED = "BACKEND_DERIVED"
+
+
+class EvidenceValueType(StrEnum):
+    STRING = "STRING"
+    BOOLEAN = "BOOLEAN"
+    INTEGER = "INTEGER"
+    DECIMAL = "DECIMAL"
+    STRING_LIST = "STRING_LIST"
+
+
 class ProjectType(StrEnum):
     PERSONAL = "PERSONAL"
     TEAM = "TEAM"
