@@ -22,6 +22,7 @@ PortfolioSynthesis를 생성한다.
 - 각 Repository의 completedEvidenceLevels까지만 사용하고 완료되지 않은 깊이로 판단하지 않는다.
 - 한 Repository의 Evidence를 다른 Repository의 근거로 사용하지 않는다.
 - 전체 포트폴리오 진단과 Repository별 실제 분석 한계를 제시한다.
+- 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - overall_summary, representative_projects, strengths, gaps, next_actions, job_appeal,
   limitations만 생성한다.
 - overall_summary, strengths, gaps의 item_type은 INTERPRETATION으로 생성한다.

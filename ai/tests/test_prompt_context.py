@@ -236,6 +236,23 @@ def make_synthesis(
     )
 
 
+def test_all_task_prompts_require_korean_user_facing_text(criteria: CriteriaSet) -> None:
+    context = make_context()
+    analysis = make_analysis()
+    synthesis = make_synthesis((context,))
+    expected_rule = "모든 사용자 표시용 자연어 필드는 한국어로 생성한다"
+
+    prompts = (
+        build_repository_prompt(context, criteria),
+        build_portfolio_prompt((context,), (analysis,), criteria),
+        build_interview_prompt(context, analysis, criteria),
+        build_statement_prompt((context,), (analysis,), synthesis, criteria),
+    )
+
+    for prompt in prompts:
+        assert expected_rule in extract_section(prompt, "TASK")
+
+
 def extract_section(prompt: str, section: str) -> str:
     begin = f"[{section}_BEGIN]\n"
     end = f"\n[{section}_END]"

@@ -26,6 +26,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] Backend P1/P2 Criteria와 P0→P1→P2 누적 Loader
 - [x] 깊이별 Evidence 타입·필수 key·guardrail 검증
 - [x] 근거 기반 P0/P1/P2 혼합 깊이 System Prompt
+- [x] 사용자 표시용 자연어 한국어 출력 정책과 Task별 보강
 - [x] Gemini Structured Output Provider와 Fake Provider
 - [x] HTTP DTO와 분리된 P0/P1/P2 내부 Evidence 모델과 분석·집계 모델
 - [x] 문자열 Repository ID와 Repository별 완료 Evidence 깊이
@@ -60,7 +61,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 851개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
+현재 전체 테스트 기준은 854개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
 포함하지 않는다.
 
 ## 목표 지원 범위

@@ -29,6 +29,7 @@ BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의
 - file_paths는 입력 Evidence의 path 또는 source_paths에서만 선택한다.
 - 입력에 없는 Criteria key, 기술명 또는 파일 경로를 생성하지 않는다.
 - 공개 근거에서 포트폴리오로 설명 가능한 범위와 실제 분석 깊이의 한계를 제시한다.
+- 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - UserClaim 기반 문장은 사용자 진술임을 명확히 표시하고 GitHub 확인 사실처럼 표현하지 않는다.
 - 미관찰 사실에 관한 Recommendation은 명시적인 BACKEND_DERIVED Evidence가 있을 때만 만든다.
 - 점수, 개인 기여율, 사용자 역량, 경력 수준 충족 여부, 취업 또는 합격 가능성을 생성하지 않는다.

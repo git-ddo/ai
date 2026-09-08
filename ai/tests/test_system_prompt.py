@@ -4,7 +4,7 @@ from app.prompts import SYSTEM_PROMPT_VERSION, build_system_prompt
 
 
 def test_system_prompt_version_is_fixed() -> None:
-    assert SYSTEM_PROMPT_VERSION == "backend-entry-p0-p1-p2-1.0"
+    assert SYSTEM_PROMPT_VERSION == "backend-entry-p0-p1-p2-1.1"
 
 
 def test_system_prompt_is_non_empty_and_deterministic() -> None:
@@ -25,6 +25,7 @@ def test_system_prompt_contains_stable_policy_sections() -> None:
     prompt = build_system_prompt()
     required_sections = {
         "[ROLE_AND_GOAL]",
+        "[OUTPUT_LANGUAGE_POLICY]",
         "[TRUST_BOUNDARY]",
         "[EVIDENCE_AND_USER_CLAIM]",
         "[REPOSITORY_DEPTH_POLICY]",
@@ -39,6 +40,30 @@ def test_system_prompt_contains_stable_policy_sections() -> None:
     }
 
     assert all(section in prompt for section in required_sections)
+
+
+def test_system_prompt_requires_korean_for_user_facing_text() -> None:
+    prompt = build_system_prompt()
+
+    assert "사용자가 읽는 모든 자연어 출력은 한국어로 작성한다" in prompt
+    assert "입력 데이터가 영어이더라도 분석 설명은 한국어로 작성한다" in prompt
+    assert "summary, content, reason, limitations, question, intent, answer_guide" in prompt
+
+
+def test_system_prompt_preserves_contract_identifiers_and_technical_names() -> None:
+    prompt = build_system_prompt()
+
+    for preserved_value in (
+        "기술명",
+        "클래스명",
+        "메서드명",
+        "파일 경로",
+        "Evidence ID",
+        "UserClaim ID",
+        "Enum 값",
+        "원래 표기를 유지한다",
+    ):
+        assert preserved_value in prompt
 
 
 def test_system_prompt_treats_repository_data_as_untrusted() -> None:

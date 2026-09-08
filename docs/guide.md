@@ -80,7 +80,7 @@ schemaVersion: "1.0"
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 851개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
+현재 AI 검증 기준은 전체 `pytest` 854개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
 API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -298,8 +298,10 @@ ai/tests/test_system_prompt.py
 - [x] 코드 실행과 입력 밖 코드·기술 생성 금지
 - [x] P0/P1/P2 판단 범위 명시
 - [x] Prompt 버전 갱신
+- [x] 사용자 표시용 자연어의 한국어 출력 정책
 
-System Prompt는 외부 데이터를 인자로 받지 않는 고정 정책을 유지한다.
+System Prompt는 외부 데이터를 인자로 받지 않는 고정 정책을 유지한다. 사용자 표시용 자연어는
+한국어로 생성하고 기술명·코드 식별자·파일 경로·Evidence/Claim ID·Enum은 원래 표기를 유지한다.
 
 ### Phase 4. P1/P2 정규화와 Prompt Context
 
@@ -325,6 +327,7 @@ ai/tests/test_prompt_context.py
 - [x] P0/P1/P2 data block 분리
 - [x] code snippet도 untrusted JSON으로 직렬화
 - [x] 기존 예약 마커 escape 회귀 테스트
+- [x] Repository·Portfolio·Interview·Statement Task의 한국어 출력 지시
 
 정규화 단계에서 새로운 기술·활동·사실을 추론하지 않는다.
 
