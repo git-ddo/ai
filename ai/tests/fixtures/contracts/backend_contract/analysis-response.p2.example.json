@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.1",
+  "analysisId": "11111111-1111-4111-8111-111111111111",
+  "evaluatorVersion": "mock-1.0",
+  "requestedAnalysisDepth": "P2",
+  "usedEvidenceLevels": ["P0", "P1", "P2"],
+  "summary": "BACKEND ENTRY 포트폴리오를 P0+P1+P2 근거만으로 해석했습니다. GitHub를 직접 보지 않았고, 전달된 Evidence와 UserClaim만 사용했습니다.",
+  "repositories": [{
+    "repositoryId": "123",
+    "repositoryFullName": "git-ddo/backend",
+    "snapshotHashAlgorithm": "SHA1",
+    "snapshotSha": "commit-sha",
+    "findings": [{
+      "findingId": "find_001",
+      "category": "CODE_QUALITY",
+      "severity": "POSITIVE",
+      "confidence": "HIGH",
+      "title": "코드 근거가 있습니다.",
+      "detail": "선별된 AuthFilter 코드 조각을 확인했습니다.",
+      "evidenceRefs": ["ev_005"],
+      "claimRefs": [],
+      "filePaths": ["src/AuthFilter.java"]
+    }]
+  }],
+  "coaching": {
+    "strengths": [{
+      "text": "핵심 경로의 코드 조각으로 구현을 확인할 수 있습니다.",
+      "confidence": "HIGH",
+      "evidenceRefs": ["ev_005"]
+    }],
+    "gaps": [{
+      "text": "코드 조각만으로는 예외 처리 범위를 단정하기 어렵습니다.",
+      "confidence": "LOW",
+      "evidenceRefs": ["ev_005"]
+    }],
+    "nextActions": [{
+      "text": "AuthFilter 코드 조각과 UserClaim을 한 문장으로 연결하세요.",
+      "confidence": "MEDIUM",
+      "evidenceRefs": ["ev_005"]
+    }],
+    "jobAppeal": {
+      "text": "선별 코드 Evidence로 백엔드 구현 경험을 어필할 수 있습니다.",
+      "confidence": "HIGH",
+      "evidenceRefs": ["ev_005"]
+    },
+    "portfolioStatements": [{
+      "text": "API를 구현했습니다.",
+      "confidence": "MEDIUM",
+      "evidenceRefs": ["ev_005"],
+      "claimRefs": ["claim_001"]
+    }],
+    "interviewQuestions": [{
+      "question": "선택한 코드 조각에서 본인이 설계하거나 구현한 부분을 근거와 함께 설명하시겠어요?",
+      "intent": "P2 코드 Evidence를 보고 구현을 설명하는지 확인합니다.",
+      "answerGuide": [
+        "먼저 파일 경로와 라인 범위를 말합니다.",
+        "그 조각이 어떤 역할을 하는지 설명합니다.",
+        "본인이 직접 작성한 부분과 그렇게 구현한 이유를 덧붙입니다."
+      ],
+      "followUpQuestions": ["같은 로직을 다시 구현한다면 어느 부분을 바꾸시겠어요?"],
+      "confidence": "HIGH",
+      "evidenceRefs": ["ev_005"],
+      "claimRefs": ["claim_001"]
+    }]
+  },
+  "limitations": []
+}

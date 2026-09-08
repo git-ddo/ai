@@ -75,6 +75,28 @@ class EvidenceValueType(StrEnum):
     STRING_LIST = "STRING_LIST"
 
 
+class FindingCategory(StrEnum):
+    STRUCTURE = "STRUCTURE"
+    DOCUMENTATION = "DOCUMENTATION"
+    STACK = "STACK"
+    ACTIVITY = "ACTIVITY"
+    CONTRIBUTION = "CONTRIBUTION"
+    CODE_QUALITY = "CODE_QUALITY"
+
+
+class FindingSeverity(StrEnum):
+    INFO = "INFO"
+    POSITIVE = "POSITIVE"
+    GAP = "GAP"
+    RISK = "RISK"
+
+
+class LimitationCode(StrEnum):
+    P0_ONLY = "P0_ONLY"
+    MISSING_ACTIVITY_EVIDENCE = "MISSING_ACTIVITY_EVIDENCE"
+    MISSING_CODE_EVIDENCE = "MISSING_CODE_EVIDENCE"
+
+
 class ProjectType(StrEnum):
     PERSONAL = "PERSONAL"
     TEAM = "TEAM"

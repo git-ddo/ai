@@ -1,6 +1,9 @@
 from app.schemas.common import (
     AnalysisDepth,
     EvidenceValueType,
+    FindingCategory,
+    FindingSeverity,
+    LimitationCode,
     RequestAnalysisPurpose,
     RequestEvidenceType,
     SnapshotHashAlgorithm,
@@ -9,14 +12,37 @@ from app.schemas.common import (
 )
 from app.schemas.repository import CollectionWarning, Evidence, RepositoryInput, UserClaim
 from app.schemas.request import PortfolioReportRequest
+from app.schemas.response import (
+    Coaching,
+    CoachingItem,
+    Finding,
+    InterviewQuestion,
+    JobAppeal,
+    Limitation,
+    PortfolioReportResponse,
+    PortfolioStatement,
+    RepositoryReport,
+)
 
 __all__ = [
     "AnalysisDepth",
     "CollectionWarning",
+    "Coaching",
+    "CoachingItem",
     "Evidence",
     "EvidenceValueType",
+    "Finding",
+    "FindingCategory",
+    "FindingSeverity",
+    "InterviewQuestion",
+    "JobAppeal",
+    "Limitation",
+    "LimitationCode",
     "PortfolioReportRequest",
+    "PortfolioReportResponse",
+    "PortfolioStatement",
     "RepositoryInput",
+    "RepositoryReport",
     "RequestAnalysisPurpose",
     "RequestEvidenceType",
     "SnapshotHashAlgorithm",
