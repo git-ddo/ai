@@ -78,11 +78,12 @@ Response schemaVersion: "1.1"
 - [x] Report Service와 내부 전체 오케스트레이션
 - [x] Backend Schema 기준 Request·Response·Error Pydantic Wire DTO
 - [x] Request Wire Mapper와 Response Wire Mapper
+- [x] 내부 예외 → Error Envelope·HTTP status·retryable Mapper
 - [ ] `POST /internal/v1/portfolio-reports`
-- [ ] 내부 예외 → Error Envelope 변환과 FastAPI Exception Handler
+- [ ] FastAPI Exception Handler
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 1107개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
+현재 AI 검증 기준은 전체 `pytest` 1132개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
 API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -550,7 +551,8 @@ ai/tests/test_api.py
 - [x] 내부 리포트 → Wire Response 변환
 - [x] Request 식별자·Repository 순서·Snapshot 복사
 - [x] 실제 참조와 Source Evidence closure 기반 `usedEvidenceLevels` 계산
-- [ ] Error Code별 HTTP status와 `retryable`
+- [x] Error Code·HTTP status·`retryable` Mapper
+- [ ] FastAPI Exception Handler
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] 요청 크기와 민감 로그 제한
 
@@ -559,8 +561,9 @@ Backend Schema에 없는 필드를 임의로 추가하지 않는다.
 Request Mapper는 Wire Evidence 소유권·Snapshot 일치를 검증한 후 내부 입력을 생성한다. Response
 Mapper는 새로운 문장을 만들지 않고 검증 완료 내부 결과를 Backend v1.1 구조로 변환한다.
 `analysisId`, Repository 식별자와 Snapshot은 원본 Request에서 복사하며, 내부 전용 Criteria,
-기술명, 생성 메타데이터와 대표 프로젝트 정보는 Wire에 추가하지 않는다. 실제 HTTP Route와
-예외 변환은 아직 구현하지 않았다.
+기술명, 생성 메타데이터와 대표 프로젝트 정보는 Wire에 추가하지 않는다. Error Mapper는 내부
+예외를 고정된 한국어 메시지와 안전한 세부정보만 포함하는 Error Envelope로 변환한다. 실제 HTTP
+Route와 FastAPI Exception Handler 등록은 아직 구현하지 않았다.
 
 ### Phase 10. 독립 및 E2E 검증
 

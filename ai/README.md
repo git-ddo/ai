@@ -53,15 +53,16 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] Report Service와 전체 600초 분석 deadline
 - [x] Backend Request·Error v1.0과 Response v1.1 Pydantic Wire DTO
 - [x] Request Wire Mapper와 Response Wire Mapper
+- [x] 내부 예외 → Backend Error Envelope·HTTP status·retryable Mapper
 
 ### 다음 구현
 
 - [x] 실제 Gemini로 Repository 1개 P0/P1/P2 내부 전체 파이프라인 Smoke
-- [ ] 내부 예외 → Error Envelope 변환과 FastAPI Exception Handler
+- [ ] FastAPI Exception Handler
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 1107개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
+현재 전체 테스트 기준은 1132개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
 포함하지 않는다.
 
 ## 목표 지원 범위
@@ -303,10 +304,11 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 다음 작업
 
-내부 분석 파이프라인과 양방향 Wire Mapper가 준비됐다. 다음 논리적 작업 단위는 내부 예외를
-Backend Error Envelope와 HTTP status로 변환하는 계층이며, 이후
+내부 분석 파이프라인과 Request·Response·Error Wire Mapper가 준비됐다. Error Mapper는 고정된
+Error Code·HTTP 상태·`retryable`을 적용하고, 입력·정책 위반 식별자와 LLM 시도 메타데이터 외의
+민감 원문을 `details`에 포함하지 않는다. 다음 논리적 작업 단위는 FastAPI Exception Handler와
 `POST /internal/v1/portfolio-reports`에서 Request Mapper → Report Service → Response Mapper를
-연결한다. 상세 순서는 [`docs/guide.md`](../docs/guide.md)의 Phase 9를 따른다.
+연결하는 것이다. 상세 순서는 [`docs/guide.md`](../docs/guide.md)의 Phase 9를 따른다.
 
 ```text
 입력 참조·깊이 검증
