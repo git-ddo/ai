@@ -95,6 +95,10 @@ class UnsupportedAnalysisCombinationError(RequestMappingError):
     """Raised when a request asks for an analysis combination not implemented."""
 
 
+class ResponseMappingError(ValueError):
+    """Raised when an internal report cannot form a safe Backend wire response."""
+
+
 class InputViolationCode(StrEnum):
     """Stable codes for deterministic input graph and depth validation failures."""
 

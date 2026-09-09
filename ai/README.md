@@ -11,8 +11,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - 에이전트 규칙: [`AGENTS.md`](../AGENTS.md)
 - 협업 규칙: [`docs/github-workflow.md`](../docs/github-workflow.md)
 
-현재 P2 계약은 Backend `origin/feat/portfolio-evaluation-p2`의 `bcc9a4f`를 기준으로 임시
-동기화한 상태이다. Backend `main` 병합 후 다시 확인한다.
+현재 Wire 계약과 P2 요청 Fixture는 Backend `origin/main`의 `9d9fc7c`를 기준으로 동기화했다.
 
 ## 현재 구현 상태
 
@@ -51,17 +50,18 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] InterviewQuestion 생성과 정책 실패 1회 재생성 Service
 - [x] PortfolioStatement 생성과 정책 실패 1회 재생성 Service
 - [x] 검증 완료 결과의 결정적 `PortfolioAnalysis` 최종 조립
+- [x] Report Service와 전체 600초 분석 deadline
+- [x] Backend Request·Error v1.0과 Response v1.1 Pydantic Wire DTO
+- [x] Request Wire Mapper와 Response Wire Mapper
 
 ### 다음 구현
 
-- [x] Report Service
-- [x] 전체 600초 분석 deadline
 - [x] 실제 Gemini로 Repository 1개 P0/P1/P2 내부 전체 파이프라인 Smoke
-- [ ] Backend Schema 기준 Pydantic Wire DTO와 Error Envelope
+- [ ] 내부 예외 → Error Envelope 변환과 FastAPI Exception Handler
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] Fake Provider 및 실제 Gemini E2E
 
-현재 전체 테스트 기준은 854개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
+현재 전체 테스트 기준은 1107개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
 포함하지 않는다.
 
 ## 목표 지원 범위
@@ -72,7 +72,8 @@ TargetJob: BACKEND
 TargetCareerLevel: ENTRY
 AnalysisPurpose: PORTFOLIO_ANALYSIS
 AnalysisDepth: P0 | P1 | P2
-schemaVersion: "1.0"
+Request/Error schemaVersion: "1.0"
+Response schemaVersion: "1.1"
 ```
 
 Backend Schema에는 다른 직무·경력 수준 enum도 있지만 해당 Criteria와 Prompt는 아직 구현하지
@@ -157,15 +158,16 @@ Evidence가 있어야 한다.
 사용해 전체 `PortfolioSynthesis`를 한 번 재생성하고 두 Provider 호출의 메타데이터를 합산한다.
 Provider 오류는 정책 재생성 없이 그대로 전달한다.
 
-Evidence별 Wire `repositoryId`·`snapshotSha`는 아직 내부 Evidence에 보존하지 않는다. 해당 값과
-부모 Repository의 일치 여부는 향후 Wire DTO → 내부 모델 Mapper에서 검증한다.
+Evidence별 Wire `repositoryId`·`snapshotSha`는 내부 Evidence에 중복 보존하지 않는다. Request
+Wire Mapper가 내부 변환 전에 해당 값과 부모 Repository의 일치를 검증한다.
 
 ## 현재 Backend Wire 계약
 
 핵심 값:
 
 ```text
-schemaVersion: "1.0"
+Request/Error schemaVersion: "1.0"
+Response schemaVersion: "1.1"
 repositoryId: string
 findingId: ^find_[0-9]{3,}$
 EvidenceType: GITHUB_STATIC | GITHUB_ACTIVITY | CODE_EVIDENCE | BACKEND_DERIVED
@@ -176,11 +178,12 @@ AnalysisDepth: P0 | P1 | P2
 
 - `jobAppeal`: 단일 객체, Evidence 최소 1개
 - `strengths`, `gaps`, `nextActions`: 각 항목 Evidence 최소 1개
-- `portfolioStatements`: Evidence 또는 Claim 최소 1개
-- `interviewQuestions`: Evidence 또는 Claim 최소 1개
+- `portfolioStatements`: `confidence`와 Evidence 또는 Claim 최소 1개
+- `interviewQuestions`: `confidence`, `answerGuide`, `followUpQuestions`와 Evidence 또는 Claim 최소 1개
+- `findings`: `confidence`, `filePaths`, 전역 유일 `findingId`
 
-현재 Wire에는 문장 `type`, 문장·질문의 `repositoryId`, `followUpQuestions`가 없다. Backend
-Schema가 변경되기 전 Pydantic Wire DTO에 추가하지 않는다.
+현재 Wire에는 문장 `type`과 문장·질문의 `repositoryId`가 없다. 내부 모델에는 유지하되 Response
+Mapper가 Wire 출력에서 제외한다.
 
 ## 기술 스택
 
@@ -209,8 +212,9 @@ ai/
 │   ├── criteria/      # 깊이별 분석 기준과 Loader
 │   ├── domain/        # HTTP 계약과 분리된 내부 모델
 │   ├── llm/           # Provider Protocol, Gemini/Fake 구현
+│   ├── mappers/       # Backend Wire DTO와 내부 모델 경계 변환
 │   ├── prompts/       # System과 Repository/Portfolio/Interview Context
-│   ├── schemas/       # Backend Wire DTO 목표 위치
+│   ├── schemas/       # Backend Request·Response·Error Wire DTO
 │   ├── services/      # 정규화와 분석 오케스트레이션
 │   └── validators/    # 참조, 깊이와 내용 정책
 ├── tests/
@@ -224,9 +228,10 @@ Repository, strengths/gaps/nextActions, 단일 `jobAppeal`과 한계만 담은
 `PortfolioSynthesis`를 생성하도록 계약을 분리했다. Portfolio 전역 Validator와 생성
 Service, Interview·Statement 생성 및 검증 완료 결과를 `PortfolioAnalysis`로 결정적으로
 조립하는 Service까지 구현됐다. `report_service.py`는 Provider 메타데이터와 generation record를
-합치고 전체 흐름에 600초 deadline을 적용한다. `api/reports.py`는 아직 빈 파일이다.
-`schemas/`의 모델과 관련 Fixture는 과거 계약 초안이므로 현재 Backend Wire 계약으로 교체해야
-하며, 초안 테스트 통과를 실제 연동 완료로 해석하지 않는다.
+합치고 전체 흐름에 600초 deadline을 적용한다. Request Mapper는 Backend 입력의 Repository와
+Snapshot 소유권을 검증해 내부 입력으로 바꾸고, Response Mapper는 검증된 내부 리포트를 Backend
+v1.1 응답으로 변환한다. 식별자와 Snapshot은 원본 Request에서 복사하며 Mapper는 LLM 호출이나
+새 문장 생성을 하지 않는다. `api/reports.py`는 아직 빈 파일이다.
 
 ## 환경 설정
 
@@ -298,10 +303,10 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 다음 작업
 
-Report Service는 Repository·Portfolio·Interview·Statement 생성 결과와 Provider 메타데이터를
-`InternalPortfolioReport`로 조립하고 전체 600초 deadline을 관리한다. 다음 논리적 작업 단위는
-Backend JSON Schema 기준 Wire DTO와 Error Envelope이다. 상세 순서는
-[`docs/guide.md`](../docs/guide.md)의 Phase 9를 따른다.
+내부 분석 파이프라인과 양방향 Wire Mapper가 준비됐다. 다음 논리적 작업 단위는 내부 예외를
+Backend Error Envelope와 HTTP status로 변환하는 계층이며, 이후
+`POST /internal/v1/portfolio-reports`에서 Request Mapper → Report Service → Response Mapper를
+연결한다. 상세 순서는 [`docs/guide.md`](../docs/guide.md)의 Phase 9를 따른다.
 
 ```text
 입력 참조·깊이 검증
@@ -312,4 +317,6 @@ Backend JSON Schema 기준 Wire DTO와 Error Envelope이다. 상세 순서는
 → PortfolioAnalysis 조립
 → generation metadata 집계
 → InternalPortfolioReport
+→ Response Wire Mapper
+→ PortfolioReportResponse v1.1
 ```

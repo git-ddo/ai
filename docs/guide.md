@@ -14,9 +14,8 @@ backend/backend/docs/contracts/analysis-response.schema.json
 backend/backend/docs/contracts/analysis-error.schema.json
 ```
 
-Markdown과 Schema가 충돌하면 Backend Schema와 구현을 우선 확인한다. P2는 현재
-`origin/feat/portfolio-evaluation-p2`의 `bcc9a4f`를 기준으로 임시 동기화했으며 Backend
-`main` 병합 후 다시 점검한다.
+Markdown과 Schema가 충돌하면 Backend Schema와 구현을 우선 확인한다. 현재 Wire 계약과 P2
+요청 Fixture는 Backend `origin/main`의 `9d9fc7c`를 기준으로 동기화했다.
 
 ## 2. 목표
 
@@ -31,7 +30,8 @@ TargetJob: BACKEND
 TargetCareerLevel: ENTRY
 AnalysisPurpose: PORTFOLIO_ANALYSIS
 RequestedAnalysisDepth: P0 | P1 | P2
-schemaVersion: "1.0"
+Request/Error schemaVersion: "1.0"
+Response schemaVersion: "1.1"
 ```
 
 `FRONTEND`, `AI`, `CLOUD_INFRA`, `JUNIOR`, `MID`, `SENIOR`는 Schema에서 표현 가능하지만 현재
@@ -76,11 +76,13 @@ schemaVersion: "1.0"
 - [x] PortfolioStatement 생성과 정책 실패 1회 재생성 Service
 - [x] 검증 완료 결과의 결정적 `PortfolioAnalysis` 최종 조립
 - [x] Report Service와 내부 전체 오케스트레이션
-- [ ] Backend Schema 기준 Pydantic Wire DTO
+- [x] Backend Schema 기준 Request·Response·Error Pydantic Wire DTO
+- [x] Request Wire Mapper와 Response Wire Mapper
 - [ ] `POST /internal/v1/portfolio-reports`
+- [ ] 내부 예외 → Error Envelope 변환과 FastAPI Exception Handler
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 854개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
+현재 AI 검증 기준은 전체 `pytest` 1107개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
 API를 포함하지 않는다.
 
 ## 4. 아키텍처 경계
@@ -136,6 +138,8 @@ Repo B와 Repo C에 P2 판단을 생성하면 전체 리포트 실패이다.
 
 ### Request
 
+`schemaVersion="1.0"`을 사용한다.
+
 ```text
 schemaVersion
 analysisId
@@ -167,6 +171,8 @@ P2 Evidence는 `value`에 snippet을 담고 `path`, `startLine`, `endLine`, `com
 
 ### Response
 
+`schemaVersion="1.1"`을 사용한다.
+
 ```text
 schemaVersion
 analysisId
@@ -179,11 +185,14 @@ coaching
 limitations
 ```
 
-현재 `jobAppeal`은 단일 객체이다. `portfolioStatements`와 `interviewQuestions`에는
-`repositoryId`가 없으며, 문장 `type`과 `followUpQuestions`도 없다. Backend Schema가 변경되기
-전 AI Wire DTO에 임의로 추가하지 않는다.
+현재 `jobAppeal`은 단일 객체이다. Finding에는 `confidence`와 `filePaths`가 있으며,
+`portfolioStatements`와 `interviewQuestions`에도 `confidence`가 있다. 면접 질문은
+`followUpQuestions`를 포함한다. 문장 `type`과 문장·질문의 `repositoryId`는 Wire에 없으므로
+출력하지 않는다.
 
 ### Error
+
+`schemaVersion="1.0"`을 사용한다.
 
 ```text
 schemaVersion
@@ -359,10 +368,9 @@ ai/tests/test_depth_validator.py
 다르다. 내부 `requested_analysis_depth`는 요청 전체의 최대 깊이이고 Repository의
 `analysis_depth`는 해당 Repository가 실제 완료한 최대 깊이이다.
 
-현재 내부 Evidence는 Wire의 Evidence별 `repositoryId`·`snapshotSha`를 보존하지 않는다. 따라서
-Evidence별 Repository·Snapshot 값이 부모와 같은지는 향후 Wire DTO → 내부 모델 Mapper에서
-검증한다. 이번 단계에서는 Repository Snapshot 필수 여부와 내부 구성원의 Repository 소유
-관계까지만 검증한다.
+Evidence별 Wire `repositoryId`·`snapshotSha`는 내부 Evidence에 중복 보존하지 않는다. Request
+Wire Mapper가 내부 모델로 변환하기 전에 Evidence의 Repository·Snapshot 값이 부모 Repository와
+일치하는지 검증한다.
 
 ### Phase 6. Repository 분석과 내용 정책 Validator
 
@@ -469,8 +477,8 @@ PortfolioAnalysis Assembler는 Context 입력 순서에 맞춰 Repository 분석
 전체 최대 깊이 Criteria를 선택해 네 결과 종류의 참조·내용 정책을 다시 검증한다. 이 단계는 LLM을
 호출하거나 결과를 수정하지 않으며, Provider 메타데이터와 generation record 조립은 Phase 8에 남긴다.
 
-현재 Wire에 없는 문장 `type`, 문장·질문의 `repositoryId`, `followUpQuestions`는 내부 모델에
-있더라도 Wire 변환 전에 Backend 계약 상태를 다시 확인한다.
+내부 문장 `type`과 문장·질문의 `repositoryId`는 Response Mapper가 Wire에서 제외한다.
+`followUpQuestions`는 Backend v1.1 응답 계약에 포함하므로 그대로 변환한다.
 
 ### Phase 8. Report Service와 전체 Deadline
 
@@ -521,28 +529,38 @@ Assembler가 만든 `PortfolioAnalysis`와 합쳐 `InternalPortfolioReport`를 �
 
 ```text
 ai/app/schemas/
+ai/app/mappers/
 ai/app/api/reports.py
 ai/tests/test_request_schema.py
 ai/tests/test_response_schema.py
+ai/tests/test_error_schema.py
+ai/tests/test_request_mapper.py
+ai/tests/test_response_mapper.py
 ai/tests/test_api.py
 ```
 
 구현:
 
-- [ ] `schemaVersion="1.0"`
-- [ ] 문자열 `repositoryId`
-- [ ] `findingId`와 Backend category/severity
-- [ ] Backend request·response·error Schema와 일치
-- [ ] 내부 모델↔Wire DTO 변환
+- [x] Request·Error `schemaVersion="1.0"`
+- [x] Response `schemaVersion="1.1"`
+- [x] 문자열 `repositoryId`
+- [x] `findingId`와 Backend category/severity/confidence
+- [x] Backend request·response·error Schema와 Pydantic DTO 일치
+- [x] Wire Request → 내부 입력 변환
+- [x] 내부 리포트 → Wire Response 변환
+- [x] Request 식별자·Repository 순서·Snapshot 복사
+- [x] 실제 참조와 Source Evidence closure 기반 `usedEvidenceLevels` 계산
 - [ ] Error Code별 HTTP status와 `retryable`
 - [ ] `POST /internal/v1/portfolio-reports`
 - [ ] 요청 크기와 민감 로그 제한
 
 Backend Schema에 없는 필드를 임의로 추가하지 않는다.
 
-현재 `ai/app/schemas/`와 `test_request_schema.py`·`test_response_schema.py`는 과거 계약 초안이다.
-해당 테스트가 통과하는 것은 Backend 최종 JSON Schema 호환을 의미하지 않는다. Phase 9에서는
-초안에 호환 레이어를 덧붙이지 않고 Backend Schema·Example을 기준으로 DTO와 Fixture를 교체한다.
+Request Mapper는 Wire Evidence 소유권·Snapshot 일치를 검증한 후 내부 입력을 생성한다. Response
+Mapper는 새로운 문장을 만들지 않고 검증 완료 내부 결과를 Backend v1.1 구조로 변환한다.
+`analysisId`, Repository 식별자와 Snapshot은 원본 Request에서 복사하며, 내부 전용 Criteria,
+기술명, 생성 메타데이터와 대표 프로젝트 정보는 Wire에 추가하지 않는다. 실제 HTTP Route와
+예외 변환은 아직 구현하지 않았다.
 
 ### Phase 10. 독립 및 E2E 검증
 
