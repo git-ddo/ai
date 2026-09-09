@@ -1,5 +1,6 @@
 from app.schemas.common import (
     AnalysisDepth,
+    AnalysisErrorCode,
     EvidenceValueType,
     FindingCategory,
     FindingSeverity,
@@ -10,6 +11,7 @@ from app.schemas.common import (
     TargetCareerLevel,
     TargetJob,
 )
+from app.schemas.error import AnalysisErrorResponse
 from app.schemas.repository import CollectionWarning, Evidence, RepositoryInput, UserClaim
 from app.schemas.request import PortfolioReportRequest
 from app.schemas.response import (
@@ -26,6 +28,8 @@ from app.schemas.response import (
 
 __all__ = [
     "AnalysisDepth",
+    "AnalysisErrorCode",
+    "AnalysisErrorResponse",
     "CollectionWarning",
     "Coaching",
     "CoachingItem",
