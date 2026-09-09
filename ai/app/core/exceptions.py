@@ -87,6 +87,14 @@ class PortfolioReportDeadlineError(TimeoutError):
     """Raised when the complete portfolio analysis exceeds its deadline."""
 
 
+class RequestMappingError(ValueError):
+    """Raised when a valid wire request cannot form a safe internal input."""
+
+
+class UnsupportedAnalysisCombinationError(RequestMappingError):
+    """Raised when a request asks for an analysis combination not implemented."""
+
+
 class InputViolationCode(StrEnum):
     """Stable codes for deterministic input graph and depth validation failures."""
 
