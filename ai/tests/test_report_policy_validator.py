@@ -155,6 +155,7 @@ def make_interview_question(
         intent=intent,
         answer_guide=answer_guide,
         follow_up_questions=follow_up_questions,
+        confidence=EvidenceConfidence.HIGH,
         evidence_refs=evidence_refs,
         claim_refs=claim_refs,
         criterion_keys=criterion_keys,
@@ -183,6 +184,7 @@ def make_portfolio_statement(
     return PortfolioStatement(
         statement_type=PortfolioStatementType.PORTFOLIO,
         content=content,
+        confidence=EvidenceConfidence.HIGH,
         evidence_refs=evidence_refs,
         claim_refs=claim_refs,
         criterion_keys=criterion_keys,

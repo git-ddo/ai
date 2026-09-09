@@ -429,6 +429,7 @@ class InterviewQuestion(InternalDomainModel):
     intent: NonEmptyString
     answer_guide: tuple[NonEmptyString, ...] = Field(min_length=1)
     follow_up_questions: tuple[NonEmptyString, ...] = ()
+    confidence: EvidenceConfidence
     evidence_refs: tuple[EvidenceId, ...] = ()
     claim_refs: tuple[ClaimId, ...] = ()
     criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
@@ -480,6 +481,7 @@ class PortfolioStatement(InternalDomainModel):
 
     statement_type: PortfolioStatementType
     content: NonEmptyString
+    confidence: EvidenceConfidence
     evidence_refs: tuple[EvidenceId, ...] = ()
     claim_refs: tuple[ClaimId, ...] = ()
     criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)

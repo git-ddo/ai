@@ -233,6 +233,7 @@ def make_batch(
                 question=question,
                 intent="프로젝트 근거에 대한 설명을 확인합니다.",
                 answer_guide=("관찰된 범위 안에서 선택 배경을 설명합니다.",),
+                confidence=EvidenceConfidence.HIGH,
                 evidence_refs=(evidence_ref or evidence.evidence_id,),
                 criterion_keys=(criterion_by_depth[context.analysis_depth],),
                 technology_names=(

@@ -405,6 +405,7 @@ def make_interview_batch(
                 question=f"{label} 근거를 어떻게 설명하시겠습니까?",
                 intent="공개 근거를 프로젝트 설명과 연결하는 방식을 확인합니다.",
                 answer_guide=("수집 범위와 확인된 사실을 구분해 설명합니다.",),
+                confidence=EvidenceConfidence.HIGH,
                 evidence_refs=(evidence.evidence_id,),
                 criterion_keys=(_CRITERION_BY_DEPTH[context.analysis_depth],),
                 technology_names=technologies,
@@ -431,6 +432,7 @@ def make_statement_batch(
             PortfolioStatement(
                 statement_type=statement_type,
                 content=f"{statement_type.value} 공개 근거를 프로젝트 설명에 활용했습니다.",
+                confidence=EvidenceConfidence.HIGH,
                 evidence_refs=(evidence.evidence_id,),
                 criterion_keys=(_CRITERION_BY_DEPTH[context.analysis_depth],),
                 technology_names=technologies,

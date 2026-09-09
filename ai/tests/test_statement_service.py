@@ -255,6 +255,7 @@ def make_batch(
             PortfolioStatement(
                 statement_type=PortfolioStatementType.PORTFOLIO,
                 content=content,
+                confidence=EvidenceConfidence.HIGH,
                 evidence_refs=(evidence_ref or evidence.evidence_id,),
                 criterion_keys=(criterion_by_depth[context.analysis_depth],),
                 technology_names=resolved_technologies,
@@ -523,6 +524,7 @@ async def test_correction_prompt_deduplicates_codes_in_first_seen_order() -> Non
     second = PortfolioStatement(
         statement_type=PortfolioStatementType.RESUME,
         content="공개 근거를 이력서 문장에 활용했습니다.",
+        confidence=EvidenceConfidence.HIGH,
         evidence_refs=(context.evidence[0].evidence_id,),
         criterion_keys=("TECH_STACK_EVIDENCE",),
         technology_names=("MongoDB",),

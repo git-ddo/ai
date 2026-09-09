@@ -21,6 +21,9 @@ InterviewQuestion을 생성한다.
 이 Repository에서 완료된 Evidence 깊이는 {completed_levels}이며 이 범위를 넘어 질문하지 않는다.
 
 - 각 질문에 면접관 의도, 답변 방향, 필요한 경우 꼬리질문을 포함한다.
+- 각 질문에 confidence를 명시한다. confidence는 근거의 직접성과 분석 범위를 뜻하며
+  사용자의 역량, 취업 가능성 또는 합격 가능성을 뜻하지 않는다.
+- confidence는 HIGH, MEDIUM, LOW, NOT_VERIFIABLE 중 하나를 사용한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - Evidence 기반 질문은 evidence_refs를 포함한다.
 - UserClaim 기반 질문은 claim_refs를 포함하고 검증된 GitHub 사실처럼 표현하지 않는다.

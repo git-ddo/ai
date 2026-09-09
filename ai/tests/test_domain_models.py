@@ -268,6 +268,7 @@ def make_interview_question(
         intent="공개 기술 근거를 자신의 설명과 연결하는지 확인합니다.",
         answer_guide=("기술 선택 배경을 사용자 경험과 구분해 설명합니다.",),
         follow_up_questions=follow_up_questions,
+        confidence=EvidenceConfidence.HIGH,
         evidence_refs=evidence_refs,
         claim_refs=claim_refs,
         criterion_keys=criterion_keys,
@@ -289,6 +290,7 @@ def make_portfolio_statement(
     return PortfolioStatement(
         statement_type=statement_type,
         content=content,
+        confidence=EvidenceConfidence.HIGH,
         evidence_refs=evidence_refs,
         claim_refs=claim_refs,
         criterion_keys=criterion_keys,
@@ -1136,8 +1138,17 @@ def test_interview_question_rejects_missing_references() -> None:
             question="프로젝트를 설명해 주세요.",
             intent="프로젝트 이해도를 확인합니다.",
             answer_guide=("공개 근거를 기준으로 설명합니다.",),
+            confidence=EvidenceConfidence.HIGH,
             criterion_keys=("README_READINESS",),
         )
+
+
+def test_interview_question_requires_explicit_confidence() -> None:
+    payload = make_interview_question().model_dump()
+    payload.pop("confidence")
+
+    with pytest.raises(ValidationError, match="confidence"):
+        InterviewQuestion.model_validate(payload)
 
 
 def test_portfolio_statement_rejects_missing_references() -> None:
@@ -1145,8 +1156,53 @@ def test_portfolio_statement_rejects_missing_references() -> None:
         PortfolioStatement(
             statement_type=PortfolioStatementType.RESUME,
             content="근거 없는 포트폴리오 문장입니다.",
+            confidence=EvidenceConfidence.HIGH,
             criterion_keys=("README_READINESS",),
         )
+
+
+def test_portfolio_statement_requires_explicit_confidence() -> None:
+    payload = make_portfolio_statement().model_dump()
+    payload.pop("confidence")
+
+    with pytest.raises(ValidationError, match="confidence"):
+        PortfolioStatement.model_validate(payload)
+
+
+@pytest.mark.parametrize("confidence", list(EvidenceConfidence))
+def test_interview_question_accepts_internal_confidence_values(
+    confidence: EvidenceConfidence,
+) -> None:
+    payload = make_interview_question().model_dump()
+    payload["confidence"] = confidence
+
+    question = InterviewQuestion.model_validate(payload)
+
+    assert question.confidence is confidence
+
+
+@pytest.mark.parametrize("confidence", list(EvidenceConfidence))
+def test_portfolio_statement_accepts_internal_confidence_values(
+    confidence: EvidenceConfidence,
+) -> None:
+    payload = make_portfolio_statement().model_dump()
+    payload["confidence"] = confidence
+
+    statement = PortfolioStatement.model_validate(payload)
+
+    assert statement.confidence is confidence
+
+
+@pytest.mark.parametrize("model", [InterviewQuestion, PortfolioStatement])
+def test_question_and_statement_reject_unknown_confidence(
+    model: type[InterviewQuestion] | type[PortfolioStatement],
+) -> None:
+    source = make_interview_question() if model is InterviewQuestion else make_portfolio_statement()
+    payload = source.model_dump()
+    payload["confidence"] = "CERTAIN"
+
+    with pytest.raises(ValidationError, match="confidence"):
+        model.model_validate(payload)
 
 
 @pytest.mark.parametrize("grounding", ["evidence", "claim"])

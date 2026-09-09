@@ -31,6 +31,9 @@ BACKEND × ENTRY × 최대 {analysis_depth} 범위에서 실제 포트폴리오�
 PortfolioStatement를 최대 {statement_count}개 생성한다.
 
 - 허용 statement_type은 RESUME, PORTFOLIO, INTERVIEW이다.
+- 각 문장에 confidence를 명시한다. confidence는 근거의 직접성과 분석 범위를 뜻하며
+  사용자의 역량, 취업 가능성 또는 합격 가능성을 뜻하지 않는다.
+- confidence는 HIGH, MEDIUM, LOW, NOT_VERIFIABLE 중 하나를 사용한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - 각 문장은 evidence_refs 또는 claim_refs 중 최소 하나를 포함한다.
 - 각 문장은 입력에 존재하는 criterion_keys만 사용한다.

@@ -982,6 +982,10 @@ def test_interview_task_contains_p0_grounding_rules(criteria: CriteriaSet) -> No
 
     for required in (
         "BACKEND × ENTRY × P0",
+        "confidence",
+        "근거의 직접성과 분석 범위",
+        "사용자의 역량, 취업 가능성 또는 합격 가능성을 뜻하지 않는다",
+        "NOT_VERIFIABLE",
         "evidence_refs",
         "claim_refs",
         "검증된 GitHub 사실처럼 표현하지 않는다",
@@ -1224,6 +1228,10 @@ def test_statement_prompt_contains_grounding_and_exclusion_rules(
         "RESUME",
         "PORTFOLIO",
         "INTERVIEW",
+        "confidence",
+        "근거의 직접성과 분석 범위",
+        "사용자의 역량, 취업 가능성 또는 합격 가능성을 뜻하지 않는다",
+        "NOT_VERIFIABLE",
         "evidence_refs",
         "claim_refs",
         "가장 얕은 Repository",
