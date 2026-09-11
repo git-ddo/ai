@@ -23,8 +23,15 @@ from app.core.exceptions import (
     ResponseMappingError,
     UnsupportedAnalysisCombinationError,
 )
+from app.core.runtime import ReportRuntime
+from app.domain import InternalPortfolioInput, InternalPortfolioReport
 from app.main import create_app
-from app.mappers import ErrorWireMapper, MappedAnalysisError
+from app.mappers import (
+    ErrorWireMapper,
+    MappedAnalysisError,
+    RequestWireMapper,
+    ResponseWireMapper,
+)
 from app.validators.report_validator import PolicyViolation, PolicyViolationCode
 
 ANALYSIS_ID = UUID("11111111-1111-4111-8111-111111111111")
@@ -47,6 +54,26 @@ class _RecordingMapper(ErrorWireMapper):
     ) -> MappedAnalysisError:
         self.calls.append((error, analysis_id))
         return super().to_wire(error, analysis_id=analysis_id)
+
+
+class _UnusedReportService:
+    async def generate(
+        self,
+        portfolio: InternalPortfolioInput,
+        *,
+        question_count: int = 5,
+        statement_count: int = 6,
+    ) -> InternalPortfolioReport:
+        raise AssertionError("Health route must not invoke the report service")
+
+
+def _build_test_runtime() -> ReportRuntime:
+    return ReportRuntime(
+        report_service=_UnusedReportService(),
+        request_mapper=RequestWireMapper(),
+        response_mapper=ResponseWireMapper(),
+        evaluator_version="test-model:test-prompt",
+    )
 
 
 def _build_error_app(
@@ -324,7 +351,7 @@ def test_method_not_allowed_keeps_fastapi_default_handler() -> None:
 
 
 def test_existing_health_route_is_unchanged() -> None:
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(runtime=_build_test_runtime())) as client:
         response = client.get("/health")
 
     assert response.status_code == 200

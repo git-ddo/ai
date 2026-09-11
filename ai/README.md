@@ -59,11 +59,13 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 ### 다음 구현
 
 - [x] 실제 Gemini로 Repository 1개 P0/P1/P2 내부 전체 파이프라인 Smoke
-- [ ] `POST /internal/v1/portfolio-reports`
-- [ ] Fake Provider 및 실제 Gemini E2E
+- [x] `POST /internal/v1/portfolio-reports`
+- [x] Request Mapper → Report Service → Response Mapper HTTP 연결
+- [x] GeminiProvider lifespan 생성·종료와 테스트 Runtime 주입
+- [ ] Backend HTTP Client와 실제 E2E
 
-현재 전체 테스트 기준은 1158개이다. 이 수치는 실제 Gemini 호출과 Portfolio Report Wire API를
-포함하지 않는다.
+현재 전체 테스트 기준은 1181개이다. Portfolio Report Wire API는 주입 Runtime으로 검증하며 실제
+Gemini HTTP 호출과 Backend HTTP E2E는 포함하지 않는다.
 
 ## 목표 지원 범위
 
@@ -278,7 +280,20 @@ curl http://localhost:8000/health
 }
 ```
 
-`POST /internal/v1/portfolio-reports`는 아직 구현되지 않았다.
+Report API:
+
+```http
+POST /internal/v1/portfolio-reports
+```
+
+성공 시 Backend Request v1.0을 내부 입력으로 변환해 전체 분석 파이프라인을 실행하고 Backend
+Response v1.1을 HTTP 200으로 반환한다. Pydantic 검증 직후 `payload.analysis_id`를
+`request.state.analysis_id`에 저장하므로 이후 Mapper·Service 오류도 기존 Error Envelope에 해당
+식별자를 보존한다. 요청 검증 자체가 실패하면 `analysisId`는 `null`이다.
+
+운영 GeminiProvider와 Report Service는 FastAPI lifespan 시작 시 한 번 생성되어 요청 사이에서
+재사용되고, 앱 종료 시 `aclose()`된다. 테스트에서는 `create_app(runtime=...)`으로 가짜 Report
+Service와 Mapper를 주입하므로 API Key나 실제 Gemini 호출 없이 HTTP 경계를 검증할 수 있다.
 
 ## 검증
 
@@ -304,13 +319,11 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 다음 작업
 
-내부 분석 파이프라인과 Request·Response·Error Wire Mapper가 준비됐다. Error Mapper는 고정된
-Error Code·HTTP 상태·`retryable`을 적용하고, 입력·정책 위반 식별자와 LLM 시도 메타데이터 외의
-민감 원문을 `details`에 포함하지 않는다. FastAPI Exception Handler는 Request 검증 오류에는
-`analysisId=null`을 사용하고, 내부 예외에는 `request.state.analysis_id`가 실제 UUID인 경우만
-보존해 Backend camelCase JSON으로 반환한다. 다음 논리적 작업 단위는 아직 구현하지 않은
-`POST /internal/v1/portfolio-reports`에서 Request Mapper → Report Service → Response Mapper를
-연결하는 것이다. 상세 순서는 [`docs/guide.md`](../docs/guide.md)의 Phase 9를 따른다.
+내부 분석 파이프라인과 Request·Response·Error Wire Mapper, FastAPI Report Endpoint 연결이
+준비됐다. 다음 단계는 Backend를 `GITDDO_AI_MODE=http`로 실행해 실제 HTTP E2E를 검증하는 것이다.
+그 전에 AI 전체 600초와 Backend read 300초의 timeout 차이를 합의하고, 요청 본문 크기 제한과
+배포 환경의 Gemini 설정을 확정해야 한다. 상세 순서는 [`docs/guide.md`](../docs/guide.md)의 Phase 10을
+따른다.
 
 ```text
 입력 참조·깊이 검증

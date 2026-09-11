@@ -80,11 +80,13 @@ Response schemaVersion: "1.1"
 - [x] Request Wire Mapper와 Response Wire Mapper
 - [x] 내부 예외 → Error Envelope·HTTP status·retryable Mapper
 - [x] FastAPI Exception Handler
-- [ ] `POST /internal/v1/portfolio-reports`
+- [x] `POST /internal/v1/portfolio-reports`
+- [x] Request Mapper → Report Service → Response Mapper 연결
+- [x] GeminiProvider lifespan 생성·종료
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 1158개와 Ruff·mypy 통과이다. 이는 실제 Gemini 호출과 Wire
-API를 포함하지 않는다.
+현재 AI 검증 기준은 전체 `pytest` 1181개와 Ruff·mypy 통과이다. Wire API는 주입 Runtime으로
+검증하며 실제 Gemini HTTP 호출과 Backend HTTP E2E는 포함하지 않는다.
 
 ## 4. 아키텍처 경계
 
@@ -532,11 +534,15 @@ Assembler가 만든 `PortfolioAnalysis`와 합쳐 `InternalPortfolioReport`를 �
 ai/app/schemas/
 ai/app/mappers/
 ai/app/api/reports.py
+ai/app/core/runtime.py
+ai/app/main.py
 ai/tests/test_request_schema.py
 ai/tests/test_response_schema.py
 ai/tests/test_error_schema.py
 ai/tests/test_request_mapper.py
 ai/tests/test_response_mapper.py
+ai/tests/test_reports_api.py
+ai/tests/test_runtime.py
 ai/tests/test_api.py
 ```
 
@@ -553,7 +559,9 @@ ai/tests/test_api.py
 - [x] 실제 참조와 Source Evidence closure 기반 `usedEvidenceLevels` 계산
 - [x] Error Code·HTTP status·`retryable` Mapper
 - [x] FastAPI Exception Handler
-- [ ] `POST /internal/v1/portfolio-reports`
+- [x] `POST /internal/v1/portfolio-reports`
+- [x] Request Mapper → Report Service → Response Mapper 연결
+- [x] GeminiProvider lifespan 생성·종료
 - [ ] 요청 크기와 민감 로그 제한
 
 Backend Schema에 없는 필드를 임의로 추가하지 않는다.
@@ -564,16 +572,19 @@ Mapper는 새로운 문장을 만들지 않고 검증 완료 내부 결과를 Ba
 기술명, 생성 메타데이터와 대표 프로젝트 정보는 Wire에 추가하지 않는다. Error Mapper는 내부
 예외를 고정된 한국어 메시지와 안전한 세부정보만 포함하는 Error Envelope로 변환한다. FastAPI
 Exception Handler는 요청 검증 오류에 `analysisId=null`을 사용하고, 그 외 오류에서는
-`request.state.analysis_id`가 실제 UUID일 때만 보존한다. 실제 Report HTTP Route는 아직
-구현하지 않았다.
+`request.state.analysis_id`가 실제 UUID일 때만 보존한다. Report Route는 Pydantic 검증이 끝난
+직후 `payload.analysis_id`를 state에 저장하고, Runtime 조회 → Request Mapper → Report Service
+→ Response Mapper 순서로 실행한다. 운영 Runtime은 FastAPI lifespan 시작 시 GeminiProvider와
+함께 한 번 생성되며, 종료 시 Provider를 닫는다. 테스트는 `create_app(runtime=...)`으로 실제
+GeminiProvider 없이 동일 HTTP 경계를 검증한다.
 
 ### Phase 10. 독립 및 E2E 검증
 
 최소 시나리오:
 
-- [ ] P0 Repository
-- [ ] P0+P1 Repository
-- [ ] P0+P1+P2 Repository
+- [x] P0 Repository (주입 Runtime HTTP 계약 테스트)
+- [x] P0+P1 Repository (주입 Runtime HTTP 계약 테스트)
+- [x] P0+P1+P2 Repository (주입 Runtime HTTP 계약 테스트)
 - [ ] Repository별 깊이가 다른 요청
 - [ ] Repository 1개와 5개
 - [ ] UserClaim만 있고 공개 근거가 부족한 경우
@@ -582,7 +593,7 @@ Exception Handler는 요청 검증 오류에 `analysisId=null`을 사용하고, 
 - [ ] 교차 Repository 참조
 - [ ] 입력에 없는 기술·파일 생성
 - [ ] P2 snippet을 Repository 전체로 일반화한 출력
-- [ ] Gemini timeout·429·5xx·잘못된 Structured Output
+- [x] Gemini timeout·429·5xx·잘못된 Structured Output의 HTTP Error Envelope
 - [ ] Backend Example JSON과 Pydantic 호환
 - [ ] Spring Boot Mock·HTTP E2E
 
