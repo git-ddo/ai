@@ -9,6 +9,7 @@ from app.prompts.context import (
     TASK_SECTION,
     PromptContextError,
     build_repository_data,
+    build_user_claim_rules,
     render_section,
     serialize_criteria,
     serialize_untrusted_data,
@@ -26,7 +27,7 @@ InterviewQuestion을 생성한다.
 - confidence는 HIGH, MEDIUM, LOW, NOT_VERIFIABLE 중 하나를 사용한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - Evidence 기반 질문은 evidence_refs를 포함한다.
-- UserClaim 기반 질문은 claim_refs를 포함하고 검증된 GitHub 사실처럼 표현하지 않는다.
+{user_claim_rules}
 - 입력에 없는 기술, 파일, 기능과 구현 경험을 질문의 전제로 사용하지 않는다.
 - P1의 Commit 수나 변경량을 개인 기여도 또는 실력 질문으로 변환하지 않는다.
 - P2 snippet 밖의 코드, 호출 관계 또는 Repository 전체 품질을 질문의 전제로 사용하지 않는다.
@@ -77,7 +78,7 @@ def build_interview_prompt(
 
     _validate_interview_inputs(context, repository_analysis, criteria, question_count)
 
-    task = _build_interview_task(context, question_count)
+    task = _build_interview_task(context, criteria, question_count)
     return _render_interview_prompt(context, repository_analysis, criteria, task)
 
 
@@ -97,7 +98,7 @@ def build_interview_correction_prompt(
         raise PromptContextError("Interview correction requires a policy violation code.")
 
     task = _CORRECTION_TASK_TEMPLATE.format(
-        base_task=_build_interview_task(context, question_count),
+        base_task=_build_interview_task(context, criteria, question_count),
         violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
     )
     return _render_interview_prompt(context, repository_analysis, criteria, task)
@@ -147,6 +148,7 @@ def _render_interview_prompt(
 
 def _build_interview_task(
     context: NormalizedRepositoryContext,
+    criteria: CriteriaSet,
     question_count: int,
 ) -> str:
     depth_rules = [_P0_INTERVIEW_RULES]
@@ -159,5 +161,6 @@ def _build_interview_task(
         analysis_depth=context.analysis_depth.value,
         question_count=question_count,
         completed_levels=",".join(level.value for level in context.completed_evidence_levels),
+        user_claim_rules=build_user_claim_rules(criteria),
         depth_rules="\n".join(depth_rules),
     )

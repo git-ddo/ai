@@ -509,7 +509,7 @@ def test_repository_task_contains_p0_grounding_and_forbidden_rules(
         "file_paths",
         "입력 Repository의 technology_names에서만 선택",
         "입력 Evidence의 path 또는 source_paths에서만 선택",
-        "사용자 진술임을 명확히 표시",
+        "UserClaim을 생성 결과의 근거로 사용하지 않고",
         "RepositoryAnalysis Structured Output Schema",
     ):
         assert required in task
@@ -988,7 +988,8 @@ def test_interview_task_contains_p0_grounding_rules(criteria: CriteriaSet) -> No
         "NOT_VERIFIABLE",
         "evidence_refs",
         "claim_refs",
-        "검증된 GitHub 사실처럼 표현하지 않는다",
+        "현재 Criteria는 UserClaim 참조를 허용하지 않는다",
+        "UserClaim을 생성 결과의 근거로 사용하지 않고 모든 claim_refs를 빈 배열로 반환한다",
         "입력에 없는 기술",
         "코드 품질",
         "Commit 수",
@@ -1014,10 +1015,53 @@ def test_interview_prompt_contains_depth_specific_rules(
     assert "Commit, PR과 변경 경로" in task
     assert "개인 기여도 또는 실력 질문으로 변환하지 않는다" in task
     assert "relatedEvidenceRefs가 비어 있어도" in task
+    assert "allow_user_claims=true인 Criteria에만" in task
+    assert "CLAIM_ACTIVITY_LINK" in task
+    assert "검증된 GitHub 사실처럼 표현하지 않는다" in task
     if analysis_depth is AnalysisDepth.P2:
         assert "CODE_EVIDENCE snippet" in task
         assert "snippet 밖의 코드, 호출 관계" in task
         assert "전달된 코드를 실행하지 않는다" in task
+
+
+def test_all_p0_task_prompts_forbid_claim_refs_without_enabled_criteria(
+    criteria: CriteriaSet,
+) -> None:
+    context = make_context()
+    analysis = make_analysis()
+    synthesis = make_synthesis((context,))
+
+    prompts = (
+        build_repository_prompt(context, criteria),
+        build_portfolio_prompt((context,), (analysis,), criteria),
+        build_interview_prompt(context, analysis, criteria),
+        build_statement_prompt((context,), (analysis,), synthesis, criteria),
+    )
+
+    for prompt in prompts:
+        task = extract_section(prompt, TASK_SECTION)
+        assert "현재 Criteria는 UserClaim 참조를 허용하지 않는다" in task
+        assert "모든 claim_refs를 빈 배열로 반환한다" in task
+
+
+def test_all_p1_task_prompts_limit_claims_to_enabled_criteria() -> None:
+    context = make_context(analysis_depth=AnalysisDepth.P1)
+    analysis = make_analysis()
+    synthesis = make_synthesis((context,))
+    criteria = CriteriaLoader().load("BACKEND", "P1")
+
+    prompts = (
+        build_repository_prompt(context, criteria),
+        build_portfolio_prompt((context,), (analysis,), criteria),
+        build_interview_prompt(context, analysis, criteria),
+        build_statement_prompt((context,), (analysis,), synthesis, criteria),
+    )
+
+    for prompt in prompts:
+        task = extract_section(prompt, TASK_SECTION)
+        assert "allow_user_claims=true인 Criteria에만" in task
+        assert "CLAIM_ACTIVITY_LINK" in task
+        assert "허용 Criteria key와 claim_refs를 함께 포함" in task
 
 
 def test_interview_prompt_rejects_criteria_depth_mismatch() -> None:

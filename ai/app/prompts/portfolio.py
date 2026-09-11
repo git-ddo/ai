@@ -9,6 +9,7 @@ from app.prompts.context import (
     TASK_SECTION,
     PromptContextError,
     build_repository_data,
+    build_user_claim_rules,
     render_section,
     serialize_criteria,
     serialize_untrusted_data,
@@ -32,6 +33,7 @@ PortfolioSynthesis를 생성한다.
   Evidence 또는 UserClaim만 참조한다.
 - strengths, gaps, next_actions, job_appeal은 공개 Evidence를 최소 하나 참조한다.
 - strengths와 단일 객체 job_appeal은 UserClaim만으로 확정하지 않는다.
+{user_claim_rules}
 - 누락을 기반으로 gaps 또는 next_actions을 생성하려면 명시적인
   BACKEND_DERIVED Evidence를 참조한다.
 - NOT_OBSERVED는 실제 부재, 거짓 또는 미기여를 의미하지 않는다.
@@ -72,7 +74,10 @@ def build_portfolio_prompt(
         repository_analyses,
         criteria,
     )
-    task = _PORTFOLIO_TASK_TEMPLATE.format(analysis_depth=maximum_depth.value)
+    task = _PORTFOLIO_TASK_TEMPLATE.format(
+        analysis_depth=maximum_depth.value,
+        user_claim_rules=build_user_claim_rules(criteria),
+    )
     return _render_portfolio_prompt(
         ordered_contexts,
         ordered_analyses,
@@ -98,7 +103,10 @@ def build_portfolio_correction_prompt(
         repository_analyses,
         criteria,
     )
-    base_task = _PORTFOLIO_TASK_TEMPLATE.format(analysis_depth=maximum_depth.value)
+    base_task = _PORTFOLIO_TASK_TEMPLATE.format(
+        analysis_depth=maximum_depth.value,
+        user_claim_rules=build_user_claim_rules(criteria),
+    )
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=base_task,
         violation_codes="\n".join(f"- {code.value}" for code in unique_codes),

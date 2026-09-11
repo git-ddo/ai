@@ -28,6 +28,26 @@ class PromptContextError(ValueError):
     """Raised when data cannot form a complete and deterministic prompt context."""
 
 
+def build_user_claim_rules(criteria: CriteriaSet) -> str:
+    """Describe exactly when generated items may reference untrusted user claims."""
+
+    claim_criteria = tuple(
+        criterion.key for criterion in criteria.criteria if criterion.allow_user_claims
+    )
+    if not claim_criteria:
+        return (
+            "- 현재 Criteria는 UserClaim 참조를 허용하지 않는다. UserClaim을 생성 결과의 "
+            "근거로 사용하지 않고 모든 claim_refs를 빈 배열로 반환한다."
+        )
+
+    allowed_keys = ", ".join(claim_criteria)
+    return (
+        "- UserClaim은 allow_user_claims=true인 Criteria에만 사용할 수 있다. "
+        f"현재 허용 Criteria는 {allowed_keys}이다. UserClaim을 참조하는 항목은 허용 Criteria "
+        "key와 claim_refs를 함께 포함하고 검증된 GitHub 사실처럼 표현하지 않는다."
+    )
+
+
 def serialize_criteria(criteria: CriteriaSet) -> str:
     """Serialize trusted, locally validated criteria as canonical JSON."""
 

@@ -8,6 +8,7 @@ from app.prompts.context import (
     TASK_SECTION,
     PromptContextError,
     build_repository_data,
+    build_user_claim_rules,
     render_section,
     serialize_criteria,
     serialize_untrusted_data,
@@ -30,7 +31,7 @@ BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의
 - 입력에 없는 Criteria key, 기술명 또는 파일 경로를 생성하지 않는다.
 - 공개 근거에서 포트폴리오로 설명 가능한 범위와 실제 분석 깊이의 한계를 제시한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
-- UserClaim 기반 문장은 사용자 진술임을 명확히 표시하고 GitHub 확인 사실처럼 표현하지 않는다.
+{user_claim_rules}
 - 미관찰 사실에 관한 Recommendation은 명시적인 BACKEND_DERIVED Evidence가 있을 때만 만든다.
 - 점수, 개인 기여율, 사용자 역량, 경력 수준 충족 여부, 취업 또는 합격 가능성을 생성하지 않는다.
 - 입력에 없는 기술, 파일 경로, 코드, 호출 관계와 구현 기능을 생성하지 않는다.
@@ -84,7 +85,7 @@ def build_repository_prompt(
             "Repository context and criteria must use the same analysis depth."
         )
 
-    task = _build_repository_task(context)
+    task = _build_repository_task(context, criteria)
 
     return "\n\n".join(
         (
@@ -115,7 +116,7 @@ def build_repository_correction_prompt(
         raise PromptContextError("Repository correction requires a policy violation code.")
 
     task = _CORRECTION_TASK_TEMPLATE.format(
-        base_task=_build_repository_task(context),
+        base_task=_build_repository_task(context, criteria),
         violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
     )
     return "\n\n".join(
@@ -130,7 +131,10 @@ def build_repository_correction_prompt(
     )
 
 
-def _build_repository_task(context: NormalizedRepositoryContext) -> str:
+def _build_repository_task(
+    context: NormalizedRepositoryContext,
+    criteria: CriteriaSet,
+) -> str:
     depth_rules = [_P0_REPOSITORY_RULES]
     if context.analysis_depth in {AnalysisDepth.P1, AnalysisDepth.P2}:
         depth_rules.append(_P1_REPOSITORY_RULES)
@@ -140,5 +144,6 @@ def _build_repository_task(context: NormalizedRepositoryContext) -> str:
     return _REPOSITORY_TASK_TEMPLATE.format(
         analysis_depth=context.analysis_depth.value,
         completed_levels=",".join(level.value for level in context.completed_evidence_levels),
+        user_claim_rules=build_user_claim_rules(criteria),
         depth_rules="\n".join(depth_rules),
     )

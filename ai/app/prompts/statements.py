@@ -14,6 +14,7 @@ from app.prompts.context import (
     TASK_SECTION,
     PromptContextError,
     build_repository_data,
+    build_user_claim_rules,
     render_section,
     serialize_criteria,
     serialize_untrusted_data,
@@ -43,6 +44,7 @@ PortfolioStatement를 최대 {statement_count}개 생성한다.
 - UserClaim 기반 문장은 사용자 진술임을 자연어에서도 명시하고 GitHub에서 검증된 사실로
   승격하지 않는다.
 - Evidence와 UserClaim을 함께 사용해도 두 근거 유형의 의미를 혼동하지 않는다.
+{user_claim_rules}
 - P0에서는 README, 의존성·설정, 테스트 파일, Docker와 GitHub Actions의 관찰 범위만 사용한다.
 - P1에서는 전달된 Commit, PR과 변경 경로의 관찰 범위만 사용하고 활동량을 개인 기여도나
   실력으로 해석하지 않는다.
@@ -90,6 +92,7 @@ def build_statement_prompt(
     task = _STATEMENT_TASK_TEMPLATE.format(
         analysis_depth=maximum_depth.value,
         statement_count=statement_count,
+        user_claim_rules=build_user_claim_rules(criteria),
     )
     return _render_statement_prompt(
         context_items,
@@ -125,6 +128,7 @@ def build_statement_correction_prompt(
     base_task = _STATEMENT_TASK_TEMPLATE.format(
         analysis_depth=maximum_depth.value,
         statement_count=statement_count,
+        user_claim_rules=build_user_claim_rules(criteria),
     )
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=base_task,
