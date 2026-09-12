@@ -62,10 +62,14 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] `POST /internal/v1/portfolio-reports`
 - [x] Request Mapper → Report Service → Response Mapper HTTP 연결
 - [x] GeminiProvider lifespan 생성·종료와 테스트 Runtime 주입
+- [x] Backend P1 Example 기반 실제 Gemini HTTP 200
+- [ ] Backend P2 Example 기반 실제 Gemini HTTP
 - [ ] Backend HTTP Client와 실제 E2E
 
-현재 전체 테스트 기준은 1181개이다. Portfolio Report Wire API는 주입 Runtime으로 검증하며 실제
-Gemini HTTP 호출과 Backend HTTP E2E는 포함하지 않는다.
+현재 전체 테스트 기준은 1201개이다. Portfolio Report Wire API는 주입 Runtime으로 P0/P1/P2를
+검증했고, P1은 실제 GeminiProvider를 사용한 HTTP 호출까지 성공했다. P2는 Backend Example의
+`completedEvidenceLevels`와 실제 Evidence 깊이가 달라 Gemini 호출 전 Validator에서 차단된다.
+Spring Boot HTTP E2E는 아직 수행하지 않았다.
 
 ## 목표 지원 범위
 
@@ -234,7 +238,8 @@ Service, Interview·Statement 생성 및 검증 완료 결과를 `PortfolioAnaly
 합치고 전체 흐름에 600초 deadline을 적용한다. Request Mapper는 Backend 입력의 Repository와
 Snapshot 소유권을 검증해 내부 입력으로 바꾸고, Response Mapper는 검증된 내부 리포트를 Backend
 v1.1 응답으로 변환한다. 식별자와 Snapshot은 원본 Request에서 복사하며 Mapper는 LLM 호출이나
-새 문장 생성을 하지 않는다. `api/reports.py`는 아직 빈 파일이다.
+새 문장 생성을 하지 않는다. `api/reports.py`는 Request Mapper → Report Service → Response
+Mapper를 연결한다.
 
 ## 환경 설정
 
@@ -317,13 +322,25 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 - Prompt·응답 전문과 민감 원문을 운영 로그에 기록하지 않는다.
 - API key와 token을 코드, Fixture 또는 로그에 넣지 않는다.
 
+## 현재 확인된 정합성 과제
+
+- Backend P2 Example은 `[P0,P1,P2]` 완료를 선언하지만 실제 Evidence에는 P1/P2만 있다.
+- Request Wire Mapper는 구조화된 기술명 입력이 없어 내부 `technology_names`를 빈 값으로 만든다.
+  기술명 allowlist를 만들 Backend Evidence 계약 또는 결정적 변환 규칙이 필요하다.
+- `collectionWarnings`는 내부 입력·최종 Wire limitation으로 이어지지 않는다. Warning을 사용자에게
+  보존할 Limitation Code와 매핑 정책이 필요하다.
+- 현재 Route 테스트는 가짜 Report Service를 사용한다. 실제 Mapper·Validator·Report Service와
+  Fake LLMProvider를 연결한 HTTP 통합 테스트가 추가로 필요하다.
+- 요청 본문 크기와 민감 데이터 로그 제한은 아직 확정하지 않았다.
+
 ## 다음 작업
 
 내부 분석 파이프라인과 Request·Response·Error Wire Mapper, FastAPI Report Endpoint 연결이
-준비됐다. 다음 단계는 Backend를 `GITDDO_AI_MODE=http`로 실행해 실제 HTTP E2E를 검증하는 것이다.
-그 전에 AI 전체 600초와 Backend read 300초의 timeout 차이를 합의하고, 요청 본문 크기 제한과
-배포 환경의 Gemini 설정을 확정해야 한다. 상세 순서는 [`docs/guide.md`](../docs/guide.md)의 Phase 10을
-따른다.
+준비됐다. 다음 단계는 Backend P2 Example의 깊이 불일치를 정리한 뒤 P2 실제 Gemini HTTP Smoke를
+완료하고, Backend를 `GITDDO_AI_MODE=http`로 실행해 전체 E2E를 검증하는 것이다. Backend 기본값은
+connect 5초, read 600초, 최대 3회 호출, 재시도 간격 2초이다. AI 전체 deadline도 600초이므로
+배포 전 Backend read timeout에 네트워크·직렬화 여유를 추가해야 한다. 상세 순서는
+[`docs/guide.md`](../docs/guide.md)의 Phase 10을 따른다.
 
 ```text
 입력 참조·깊이 검증

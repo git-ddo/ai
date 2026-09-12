@@ -44,9 +44,12 @@ Response schemaVersion: "1.1"
 - [x] P0 수집과 Evidence Snapshot
 - [x] P1 커밋·PR·변경 경로 수집
 - [x] Mock AI Client, 응답 Validator와 Job 저장 흐름
-- [ ] P2 코드 snippet Collector `main` 병합
+- [x] P2 코드 snippet Collector `main` 병합
+- [x] HTTP AI Client와 Error Envelope 처리
+- [x] AI HTTP connect 5초·read 600초 timeout 적용
+- [x] retry 가능한 실패의 최대 3회 재호출
 - [ ] P2 전역 snippet/token 예산
-- [ ] AI HTTP connect 5초·read 300초 timeout 적용
+- [ ] P2 Example의 `completedEvidenceLevels`와 실제 Evidence 깊이 정합성 수정
 
 ### AI
 
@@ -85,8 +88,9 @@ Response schemaVersion: "1.1"
 - [x] GeminiProvider lifespan 생성·종료
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 1181개와 Ruff·mypy 통과이다. Wire API는 주입 Runtime으로
-검증하며 실제 Gemini HTTP 호출과 Backend HTTP E2E는 포함하지 않는다.
+현재 AI 검증 기준은 전체 `pytest` 1201개와 Ruff·mypy 통과이다. Wire API는 주입 Runtime으로
+P0/P1/P2를 검증했고, Backend P1 Example을 사용한 실제 Gemini HTTP 호출도 HTTP 200으로
+완료했다. Spring Boot 전체 E2E는 아직 수행하지 않았다.
 
 ## 4. 아키텍처 경계
 
@@ -221,7 +225,7 @@ Retry:
 ```text
 Gemini Provider: 429, timeout, 5xx 제한적 retry
 AI 최종 실패: Error Envelope
-Backend: 자동 재호출 없이 Job FAILED
+Backend: 연결 실패·retry 가능한 응답을 최대 3회 호출한 뒤 Job FAILED
 ```
 
 Timeout 계약:
@@ -229,11 +233,14 @@ Timeout 계약:
 ```text
 Backend Connect: 5초
 AI 전체 Deadline: 600초
-Backend Read: 300초
+Backend Read: 600초
+Backend 최대 호출 횟수: 3회
+Backend 재시도 간격: 2초
 ```
 
-Gemini 개별 호출 timeout과 전체 600초 deadline은 구현됐다. Backend Read 300초는 AI의 최악
-처리 시간보다 짧으므로 실제 HTTP 연동 전 timeout 계약을 다시 맞춰야 한다.
+Gemini 개별 호출 timeout과 전체 600초 deadline은 구현됐다. Backend는 연결 실패와 retry 가능한
+응답을 설정 범위 안에서 재호출한다. Backend read timeout과 AI deadline이 같아 운영 환경의
+네트워크·직렬화 여유가 없으므로 배포 전 read timeout을 더 크게 잡는 합의가 필요하다.
 
 ## 8. 구현 순서
 
@@ -585,8 +592,8 @@ GeminiProvider 없이 동일 HTTP 경계를 검증한다.
 - [x] P0 Repository (주입 Runtime HTTP 계약 테스트)
 - [x] P0+P1 Repository (주입 Runtime HTTP 계약 테스트)
 - [x] P0+P1+P2 Repository (주입 Runtime HTTP 계약 테스트)
-- [ ] Repository별 깊이가 다른 요청
-- [ ] Repository 1개와 5개
+- [x] Repository별 깊이가 다른 요청 (Report Service 단위 테스트)
+- [x] Repository 1개와 5개 (Report Service 단위 테스트)
 - [ ] UserClaim만 있고 공개 근거가 부족한 경우
 - [ ] collection warning이 있는 경우
 - [ ] Prompt Injection이 포함된 README·commit·code snippet
@@ -594,12 +601,25 @@ GeminiProvider 없이 동일 HTTP 경계를 검증한다.
 - [ ] 입력에 없는 기술·파일 생성
 - [ ] P2 snippet을 Repository 전체로 일반화한 출력
 - [x] Gemini timeout·429·5xx·잘못된 Structured Output의 HTTP Error Envelope
-- [ ] Backend Example JSON과 Pydantic 호환
+- [x] Backend P0/P1 Example JSON과 Pydantic·Mapper 호환
+- [x] Backend P1 Example 기반 실제 Gemini HTTP 200
+- [ ] Backend P2 Example 기반 실제 Gemini HTTP
 - [ ] Spring Boot Mock·HTTP E2E
 
-## 9. P2 구현 시 Backend 재확인 항목
+P2 HTTP Smoke는 Gemini 호출 전에 다음 입력 정합성 오류로 중단된다.
 
-P2 `main` 병합 전에 다음은 아직 최종 구현값이 아니다.
+```text
+Backend P2 Example completedEvidenceLevels: [P0, P1, P2]
+Example의 실제 Evidence depth: [P1, P1, P2]
+AI Validator: COMPLETED_LEVELS_INVALID
+```
+
+Backend 실제 Assembler는 Evidence에 존재하는 깊이만 `completedEvidenceLevels`로 계산한다. 따라서
+P2 Example에 P0 Evidence를 추가하거나 완료 깊이 선언을 실제 Evidence와 맞춘 뒤 재검증한다.
+
+## 9. Backend와 재확인할 운영·계약 항목
+
+다음은 P2 Collector 병합 후에도 아직 최종 운영값 또는 계약이 아니다.
 
 - 전체 요청 snippet 상한
 - 전체 Evidence/token 예산
@@ -609,6 +629,12 @@ P2 `main` 병합 전에 다음은 아직 최종 구현값이 아니다.
 - Warning→Limitation 변환
 - 모든 Finding의 Evidence 최소 1개 강제
 - 문장·질문의 Repository 범위
+- Wire Evidence에서 AI 기술명 allowlist를 구성하는 규칙
+- `collectionWarnings`를 Response `limitations`로 보존하는 규칙
+
+현재 Request Wire Mapper는 Evidence의 `technology_names`를 빈 값으로 만들고, Response Mapper는
+내부 limitation 대신 사용 깊이 기반의 고정 limitation만 생성한다. 기술명 검증을 약화하거나
+Warning을 조용히 버리지 말고 Backend 구조화 Evidence와 Limitation Code를 먼저 합의한다.
 
 AI는 이러한 값을 임의로 만들어 Backend 계약처럼 구현하지 않는다.
 
@@ -627,21 +653,18 @@ docker build -t gitddo-ai .
 단계별로 관련 단위 테스트를 먼저 실행한 뒤 전체 검증을 수행한다. 계약 변경은 Backend
 Schema·Example과 Pydantic 간 일치 테스트를 추가한다.
 
-## 11. 커밋 순서
+## 11. 다음 작업 순서
 
-권장 후속 커밋 순서는 다음과 같다.
+내부 분석과 Wire API 구현 커밋은 완료됐다. 남은 검증·보완 순서는 다음과 같다.
 
 ```text
-1. feat: P1/P2 내부 Evidence 모델 확장
-2. feat: Backend P1/P2 Criteria 추가
-3. feat: 혼합 깊이 근거 기반 Prompt 추가
-4. feat: P1/P2 입력 정규화와 Context 추가
-5. feat: Evidence 참조와 분석 깊이 검증 추가
-6. feat: Repository P0/P1/P2 분석 서비스 추가
-7. feat: Portfolio 코칭 생성 서비스 추가
-8. feat: 전체 리포트 오케스트레이션 추가
-9. feat: Backend 평가 Wire 계약 구현
-10. feat: 포트폴리오 리포트 내부 API 추가
+1. Backend P2 Example 깊이 불일치 정리
+2. P2 실제 Gemini HTTP Smoke
+3. 실제 Mapper·Validator·Report Service를 사용하는 HTTP 통합 테스트
+4. Spring Boot GITDDO_AI_MODE=http E2E
+5. 기술명 grounding과 Warning→Limitation 계약 보완
+6. 요청 크기·민감 로그 제한
+7. P2 전역 snippet/token 예산과 snippet 보관 정책 확정
 ```
 
 각 커밋은 관련 pytest, Ruff와 mypy를 통과한 뒤 생성한다. Push, branch 전환 또는 PR은 사용자

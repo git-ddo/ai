@@ -22,9 +22,9 @@ backend/backend/docs/contracts/analysis-error.schema.json
 6. `README.md`, `ai/README.md`
 7. 기존 AI 내부 모델과 과거 문서
 
-Markdown과 Schema가 충돌하면 Schema와 Backend 구현을 먼저 확인한다. P2 관련 내용은 현재
-`origin/feat/portfolio-evaluation-p2`의 `bcc9a4f` 구현을 기준으로 임시 동기화한 상태이며,
-Backend `main` 병합 후 다시 확인한다.
+Markdown과 Schema가 충돌하면 Schema와 Backend 구현을 먼저 확인한다. 현재 Backend 원격 기준선은
+`origin/main`의 `9d9fc7c`이다. 로컬 `backend/backend` checkout은 이 기준선보다 뒤처질 수 있으므로
+계약을 검토할 때는 로컬 파일만 보지 말고 `origin/main`의 Schema와 구현도 함께 확인한다.
 
 ## 2. 서비스 원칙
 
@@ -49,16 +49,18 @@ UserClaim과 AI 추천은 Evidence가 아니다. `NOT_OBSERVED`는 수집 범위
 
 - 평가 저장소는 1~5개이다.
 - 목표 조합은 `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0/P1/P2`이다.
-- Backend `main`은 P0/P1 수집과 Mock AI 흐름을 구현했다.
-- Backend P2는 별도 작업 브랜치에 구현되어 아직 `main`에 병합되지 않았다.
+- Backend `origin/main`은 P0/P1/P2 수집, Mock·HTTP AI Client, 응답 검증과 Job 저장 흐름을 구현했다.
 - AI는 P0/P1/P2 누적 Criteria·Loader, 혼합 깊이 System Prompt, Provider, 내부 Evidence 모델,
   정규화·Prompt Context와 입력 참조·깊이 Validator를 구현했다.
 - Repository 분석, Portfolio synthesis, InterviewQuestion, PortfolioStatement 생성과 정책 검증,
   검증 완료 결과의 `PortfolioAnalysis` 최종 조립까지 구현했다.
 - Report Service, 전체 600초 deadline과 generation metadata 집계까지 구현했다.
-- 최종 Wire DTO·Error Envelope와 실제 리포트 API는 후속 구현 대상이다.
-- `ai/app/schemas/`의 현재 모델과 테스트 Fixture는 과거 계약 초안이므로 Backend JSON Schema와
-  일치하는 최종 Wire 계약으로 취급하지 않는다.
+- Request/Error v1.0, Response v1.1 Wire DTO와 Mapper, Error Envelope, Exception Handler,
+  `POST /internal/v1/portfolio-reports`와 GeminiProvider lifespan을 구현했다.
+- P1 Backend Fixture를 사용한 실제 Gemini HTTP Smoke는 성공했다.
+- P2 HTTP Smoke는 Backend P2 Example이 `completedEvidenceLevels=[P0,P1,P2]`를 선언하면서 실제
+  Evidence에는 P1/P2만 포함해 입력 깊이 Validator에서 중단된다. 이 Example 또는 완료 깊이 의미를
+  정정한 뒤 다시 검증한다.
 
 Schema에 표현 가능한 enum과 현재 실행 가능한 기능을 혼동하지 않는다. 구현되지 않은 깊이나
 기능을 완료 상태로 표시하지 않는다.
@@ -89,7 +91,8 @@ in-memory Job Lock 없이 stateless로 유지한다.
 현재 Backend 계약에서 사용하는 주요 값은 다음과 같다.
 
 ```text
-schemaVersion: "1.0"
+Request/Error schemaVersion: "1.0"
+Response schemaVersion: "1.1"
 analysisId: UUID 문자열
 repositoryId: GitHub Repository ID의 문자열 표현
 findingId: ^find_[0-9]{3,}$
@@ -110,9 +113,10 @@ EvidenceType: GITHUB_STATIC, GITHUB_ACTIVITY, CODE_EVIDENCE, BACKEND_DERIVED
 - `strengths`, `gaps`, `nextActions`: Evidence 최소 1개
 - `findings`: Repository 안에서 같은 Repository의 Evidence·Claim만 참조
 
-`portfolioStatements`의 `repositoryId`·`type`, `interviewQuestions`의 `repositoryId`·
-`followUpQuestions`는 현재 Backend Schema에 없다. Schema가 변경되기 전 Wire 필드로 생성하지
-않는다.
+Response v1.1의 Finding에는 `confidence`와 `filePaths`가 있고, Coaching 항목에도
+`confidence`가 필요하다. `interviewQuestions.answerGuide`는 문자열 배열이며
+`followUpQuestions`도 포함한다. `portfolioStatements`의 `repositoryId`·`type`과
+`interviewQuestions.repositoryId`는 현재 Backend Schema에 없으므로 Wire 필드로 생성하지 않는다.
 
 ## 6. 깊이별 판단 범위
 
@@ -139,7 +143,8 @@ P2 코드는 Backend가 선별한 제한된 snippet만 분석한다. 코드를 �
 
 - Gemini Provider는 429, timeout, 5xx만 제한적으로 재시도한다.
 - AI 서버 최종 실패는 Error Envelope로 반환한다.
-- MVP Backend는 AI 실패 시 자동 재호출하지 않고 Job을 `FAILED`로 종료한다.
+- Backend HTTP Client는 연결 실패와 retry 가능한 응답을 설정된 최대 시도 횟수 안에서 재호출하고,
+  최종 실패 시 Job을 `FAILED`로 종료한다.
 - `retryable`은 향후 수동 재분석 또는 retry 정책을 위한 메타데이터이다.
 
 임시 운영 계약은 다음과 같다.
@@ -147,12 +152,14 @@ P2 코드는 Backend가 선별한 제한된 snippet만 분석한다. 코드를 �
 ```text
 Backend → AI Connect Timeout: 5초
 AI 전체 처리 Deadline: 600초
-Backend → AI Read Timeout: 300초
+Backend → AI Read Timeout: 600초
+Backend 최대 호출 횟수: 3회
+Backend 재시도 간격: 2초
 ```
 
-Gemini 개별 호출 timeout과 AI 전체 600초 deadline은 별도 개념이다. Backend Read Timeout
-300초는 AI의 최악 처리 시간보다 짧으므로 실제 HTTP 연동 전에 양쪽 값을 다시 합의해야 한다.
-현재 코드에 적용되지 않은 값은 구현 완료로 표시하지 않는다.
+Gemini 개별 호출 timeout과 AI 전체 600초 deadline은 별도 개념이다. Backend read timeout과
+AI deadline이 같아 네트워크·직렬화 여유가 없으므로 배포 전에 운영 여유 시간을 다시 합의한다.
+현재 값은 Backend `origin/main` 설정 기본값을 기준으로 한다.
 
 ## 9. 작업 방식
 

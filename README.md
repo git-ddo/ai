@@ -44,7 +44,8 @@ backend/backend/docs/contracts/analysis-error.schema.json
 현재 계약의 핵심 값은 다음과 같다.
 
 ```text
-schemaVersion: "1.0"
+Request/Error schemaVersion: "1.0"
+Response schemaVersion: "1.1"
 Repository: 1~5개
 TargetJob: BACKEND, FRONTEND, AI, CLOUD_INFRA
 TargetCareerLevel: ENTRY, JUNIOR, MID, SENIOR
@@ -62,17 +63,17 @@ Schema가 표현하는 enum과 실제 분석 구현 범위는 다르다. 현재 
 
 | 영역 | 상태 |
 | --- | --- |
-| Backend `main` | P0/P1 수집, Mock AI, 응답 검증과 Job 저장 흐름 구현 |
-| Backend P2 | `origin/feat/portfolio-evaluation-p2`의 `bcc9a4f`에서 코드 snippet 수집 구현, 아직 `main` 미병합 |
+| Backend `origin/main` | P0/P1/P2 수집, Mock·HTTP AI Client, 응답 검증과 Job 저장 흐름 구현 |
 | AI 기반 | FastAPI, `/health`, Gemini/Fake Provider, P0/P1/P2 Criteria와 혼합 깊이 System Prompt 구현 |
 | AI 입력 처리 | 내부 Evidence·UserClaim 모델, 정규화, Prompt Context, 참조·깊이 Validator 구현 |
 | AI 분석 코어 | Repository 분석, Portfolio 종합, 면접 질문, 포트폴리오 문장과 정책 재생성 구현 |
 | AI 최종 내부 결과 | 검증 완료 결과를 결정적으로 조립하는 `PortfolioAnalysisAssembler` 구현 |
 | AI 서버 오케스트레이션 | Report Service, 전체 600초 deadline과 generation metadata 집계 구현 |
-| 실제 Gemini Smoke | `gemini-3.5-flash-lite`로 Repository 1개 P0/P1/P2 정식 파이프라인 완주 |
-| 실제 연동 | Backend 기준 Wire DTO·Error Envelope와 리포트 API 구현 후 진행 예정 |
+| 실제 Gemini Smoke | 내부 P0/P1/P2 완주, Backend P1 Fixture 기반 실제 HTTP 200 응답 검증 |
+| Wire 연동 | Request/Error v1.0, Response v1.1 DTO·Mapper·Error 처리와 Report API 구현 |
+| P2 HTTP Smoke | Backend P2 Example의 완료 깊이와 실제 Evidence 불일치로 Gemini 호출 전 차단 |
 
-Backend P2 브랜치는 저장소당 최대 8개, snippet당 최대 40줄·4,000자, 원본 파일 최대
+Backend P2 Collector는 저장소당 최대 8개, snippet당 최대 40줄·4,000자, 원본 파일 최대
 80,000 byte 제한을 적용한다. 전체 요청 기준 snippet·token 예산과 P2 대상 저장소 제한은
 아직 Backend 추가 합의가 필요하다.
 
@@ -85,9 +86,9 @@ Backend P2 브랜치는 저장소당 최대 8개, snippet당 최대 40줄·4,000
 - Evidence 또는 UserClaim을 참조하는 `interviewQuestions`
 - 수집·분석 범위를 설명하는 `limitations`
 
-현재 Backend Schema에는 `portfolioStatements.type`, 문장·질문의 `repositoryId`,
-`followUpQuestions`가 없다. 해당 필드는 Backend Schema가 변경되기 전 현재 계약으로 취급하지
-않는다.
+Response v1.1은 Finding의 `confidence`·`filePaths`, Coaching 항목의 `confidence`,
+면접 질문의 문자열 배열 `answerGuide`와 `followUpQuestions`를 포함한다. 현재 Backend Schema에는
+`portfolioStatements.type`과 문장·질문의 `repositoryId`가 없으므로 Wire 출력에 포함하지 않는다.
 
 ## 기술 스택
 
@@ -121,7 +122,7 @@ MVP에서는 LangChain, RAG, Vector Database, Fine-tuning 또는 자체 ML 모�
 
 ## 다음 작업
 
-AI의 내부 Report Service 구현은 완료됐다.
+AI의 내부 Report Service와 Backend Wire HTTP 경계 구현은 완료됐다.
 
 ```text
 입력 참조·깊이 검증
@@ -134,10 +135,11 @@ AI의 내부 Report Service 구현은 완료됐다.
 ```
 
 Report Service는 Repository 하나의 필수 분석이 실패하면 전체 분석을 실패시키고, Gemini
-호출·Provider retry·정책 재생성을 모두 포함하는 600초 전체 deadline을 적용한다. 다음으로 기존
-`ai/app/schemas/` 초안을 Backend JSON Schema 기준으로 교체하고 Error Envelope,
-`POST /internal/v1/portfolio-reports`, Fake Provider 기반 HTTP E2E를 순서대로 구현한다.
+호출·Provider retry·정책 재생성을 모두 포함하는 600초 전체 deadline을 적용한다. 다음 단계는
+Backend P2 Example의 깊이 불일치를 정리해 실제 P2 HTTP Smoke를 완료하고, Spring Boot
+`GITDDO_AI_MODE=http` 전체 E2E를 검증하는 것이다. 함께 해결할 설계 항목은 Wire 입력의 기술명
+grounding, `collectionWarnings`의 사용자 Limitation 반영, 요청 크기·민감 로그 제한이다.
 
-실제 Gemini 내부 파이프라인 검증 기록은
-[`docs/gemini-smoke-test.md`](./docs/gemini-smoke-test.md)에 정리한다. 최종 Wire API와 Spring
-Boot E2E는 아직 검증 범위에 포함되지 않는다.
+실제 Gemini 내부·HTTP 파이프라인 검증 기록은
+[`docs/gemini-smoke-test.md`](./docs/gemini-smoke-test.md)에 정리한다. Spring Boot E2E는 아직
+검증 범위에 포함되지 않는다.

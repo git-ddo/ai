@@ -1,8 +1,8 @@
-# Gemini 정식 내부 파이프라인 Smoke 기록
+# Gemini 내부·HTTP 파이프라인 Smoke 기록
 
 ## 목적
 
-Backend Wire DTO와 HTTP API를 연결하기 전에 실제 Gemini 호출로 다음 내부 흐름을 검증한다.
+실제 Gemini 호출로 내부 분석 파이프라인과 Backend Wire HTTP 경계를 단계적으로 검증한다.
 
 ```text
 InternalPortfolioInput
@@ -94,10 +94,57 @@ PYTHONPATH=. .venv/bin/python scripts/smoke_internal_report.py \
 
 Runtime 결과 JSON은 `ai/scripts/*.output.json`에 생성되며 Git 추적에서 제외한다.
 
+## Backend P1 Wire HTTP Smoke
+
+Backend `origin/main`의 P1 request Example을 입력으로 다음 전체 HTTP 경계를 검증했다.
+
+```text
+Backend Request v1.0
+→ POST /internal/v1/portfolio-reports
+→ Request Wire Mapper
+→ 실제 GeminiProvider와 Report Service
+→ Response Wire Mapper
+→ Backend Response v1.1
+```
+
+결과는 HTTP 200이며 `usedEvidenceLevels=[P0,P1]`, camelCase v1.1 Envelope, Finding·Coaching의
+신뢰도와 참조 무결성을 확인했다. Portfolio 공개 강점에는 UserClaim을 사실처럼 참조하지 않고,
+UserClaim은 계약상 `claimRefs`를 받을 수 있는 면접 질문·포트폴리오 문장에만 사용한다.
+
+## Backend P2 Wire HTTP Smoke
+
+P2는 Gemini 호출 전에 입력 깊이 검증에서 중단됐다.
+
+```text
+Backend P2 Example completedEvidenceLevels: [P0, P1, P2]
+Example의 실제 Evidence depth: [P1, P1, P2]
+오류 코드: COMPLETED_LEVELS_INVALID
+오류 위치: repositories[0].completed_evidence_levels
+```
+
+Wire Pydantic 검증, Request Mapper의 Repository·Snapshot 검증과 Evidence 참조 검증은 통과했다.
+AI는 선언된 완료 깊이와 실제 Evidence의 일치를 요구하므로 Gemini를 호출하거나 P2 응답 파일을
+생성하지 않았다. Backend 실제 Assembler는 존재하는 Evidence 깊이만 완료 깊이로 계산하므로,
+Example에 P0 Evidence를 추가하거나 선언을 실제 데이터와 맞춘 뒤 재실행한다.
+
+## 현재 검증 기준
+
+```text
+pytest: 1201 passed
+ruff check: passed
+ruff format --check: passed
+mypy app: passed
+```
+
+외부 SDK deprecation warning 2건과 sandbox의 pytest cache 쓰기 warning 1건 외 테스트 실패는
+없다. 이 문서 최신화 작업에서는 Docker build와 실제 Gemini 호출을 다시 실행하지 않았다.
+
 ## 아직 검증하지 않은 범위
 
 - Repository 2~5개의 정식 전체 파이프라인
 - 기본 질문 5개·문장 6개 출력
-- Backend Wire Mapper와 `POST /internal/v1/portfolio-reports`
+- Backend P2 Example 기반 실제 Gemini HTTP 성공
+- 실제 Mapper·Validator·Report Service와 Fake LLMProvider를 연결한 HTTP 통합 테스트
 - Spring Boot HTTP E2E
-- Backend Read Timeout과 AI 600초 deadline의 최종 운영 계약
+- P2 전역 snippet/token 예산과 수집 Warning 반영
+- Backend Read Timeout 600초와 AI deadline 600초 사이의 운영 여유

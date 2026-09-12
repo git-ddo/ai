@@ -17,13 +17,14 @@ Markdown과 Schema가 충돌하면 Backend Schema, Java DTO, Assembler, Validato
 이 문서의 Backend 기준선은 다음과 같다.
 
 ```text
-Backend main: 21a8c30 (P1 병합)
-Backend P2 branch: origin/feat/portfolio-evaluation-p2
-Backend P2 commit: bcc9a4f
+Backend origin/main: 9d9fc7c
+Request/Error contract: 1.0
+Response contract: 1.1
 ```
 
-P2 관련 내용은 아직 병합되지 않은 위 작업 브랜치를 읽기 전용으로 확인해 동기화했다. P2가
-`main`에 병합되면 Schema와 구현을 다시 점검한다.
+Backend 원격 `main`에는 P0/P1/P2 Collector와 Mock·HTTP AI Client가 포함돼 있다. 로컬
+`backend/backend` checkout은 원격보다 뒤처질 수 있으므로 계약 판단은 `origin/main`을 기준으로
+한다.
 
 ## 2. 서비스 정의
 
@@ -97,7 +98,8 @@ Backend Schema·DTO·Assembler가 일치하는 현재 계약은 다음과 같다
 | 항목 | 현재 계약 |
 | --- | --- |
 | 계약 버전 필드 | `schemaVersion` |
-| 계약 버전 값 | `"1.0"` |
+| Request/Error 버전 | `"1.0"` |
+| Response 버전 | `"1.1"` |
 | `analysisId` | UUID 문자열 |
 | `repositoryId` | GitHub Repository numeric ID의 문자열 표현 |
 | Finding ID | `findingId`, `^find_[0-9]{3,}$` |
@@ -106,9 +108,9 @@ Backend Schema·DTO·Assembler가 일치하는 현재 계약은 다음과 같다
 | 분석 목적 | `PORTFOLIO_ANALYSIS` |
 | 분석 깊이 | `P0`, `P1`, `P2` |
 
-Snapshot 내부 구조 버전은 Backend의 정수 `schemaVersion`을 별도로 사용한다. Wire
-`schemaVersion="1.0"`, Snapshot 구조 버전, `extractorVersion`, AI `evaluatorVersion`을 서로
-혼동하지 않는다.
+Snapshot 내부 구조 버전은 Backend의 정수 `schemaVersion`을 별도로 사용한다. Wire request/error
+`schemaVersion="1.0"`, response `schemaVersion="1.1"`, Snapshot 구조 버전, `extractorVersion`,
+AI `evaluatorVersion`을 서로 혼동하지 않는다.
 
 현재 Backend는 `findingId`를 하나의 응답 전체에서 유일하게 검증한다. Evidence와 Claim ID도
 Assembler가 분석 전체 범위에서 연속 발급하지만, Schema만으로는 전역 유일성을 표현할 수
@@ -296,6 +298,8 @@ findings[]
   detail
   evidenceRefs
   claimRefs
+  confidence
+  filePaths
 ```
 
 Backend Validator는 Finding이 같은 Repository의 Evidence·Claim만 참조하도록 검증한다.
@@ -308,16 +312,16 @@ Finding은 Evidence를 최소 하나 가져야 한다는 최종 정책을 적용
 
 | 필드 | 현재 구조와 참조 규칙 |
 | --- | --- |
-| `strengths` | 배열, 각 항목 Evidence 최소 1개 |
-| `gaps` | 배열, 각 항목 Evidence 최소 1개 |
-| `nextActions` | 배열, 각 항목 Evidence 최소 1개 |
-| `jobAppeal` | 전체 포트폴리오 기준 단일 객체, Evidence 최소 1개 |
-| `portfolioStatements` | 배열, Evidence 또는 Claim 최소 1개 |
-| `interviewQuestions` | 배열, Evidence 또는 Claim 최소 1개 |
+| `strengths` | 배열, 각 항목 Evidence 최소 1개와 `confidence` |
+| `gaps` | 배열, 각 항목 Evidence 최소 1개와 `confidence` |
+| `nextActions` | 배열, 각 항목 Evidence 최소 1개와 `confidence` |
+| `jobAppeal` | 전체 포트폴리오 기준 단일 객체, Evidence 최소 1개와 `confidence` |
+| `portfolioStatements` | 배열, Evidence 또는 Claim 최소 1개와 `confidence` |
+| `interviewQuestions` | 배열, Evidence 또는 Claim 최소 1개와 `confidence` |
 
 `jobAppeal`, `strengths`, `gaps`, `nextActions`는 전체 Portfolio 범위 Evidence를 참조할 수 있다.
 
-현재 `portfolioStatements`에는 `text`, `evidenceRefs`, `claimRefs`만 있다. 다음 필드는 과거
+현재 `portfolioStatements`에는 `text`, `evidenceRefs`, `claimRefs`, `confidence`가 있다. 다음 필드는 과거
 합의가 있었지만 Backend Schema에 아직 반영되지 않았다.
 
 ```text
@@ -325,17 +329,19 @@ repositoryId
 type: RESUME | PORTFOLIO | INTERVIEW
 ```
 
-현재 `interviewQuestions`에는 다음 필드만 있다.
+현재 `interviewQuestions`에는 다음 필드가 있다.
 
 ```text
 question
 intent
 answerGuide
+followUpQuestions
 evidenceRefs
 claimRefs
+confidence
 ```
 
-`repositoryId`와 `followUpQuestions`는 현재 계약에 없다. 문장·질문에 Repository 범위를
+`answerGuide`는 문자열 배열이다. `repositoryId`는 현재 계약에 없다. 문장·질문에 Repository 범위를
 강제하려면 `repositoryId`를 Backend Schema·DTO·Validator에 먼저 추가해야 한다.
 
 ## 10. Limitations와 Collection Warnings
@@ -381,7 +387,7 @@ STRUCTURED_OUTPUT_INVALID
 INTERNAL_ERROR
 ```
 
-AI API의 HTTP status 계약은 다음으로 확정한다. AI 서버 구현은 아직 필요하다.
+AI API의 HTTP status 계약은 다음으로 구현됐다.
 
 | Code | HTTP | retryable |
 | --- | ---: | --- |
@@ -395,7 +401,7 @@ AI API의 HTTP status 계약은 다음으로 확정한다. AI 서버 구현은 �
 | `INTERNAL_ERROR` | 500 | false |
 
 Backend HTTP Client는 non-2xx 응답의 Error Envelope를 파싱해 `code`와 `retryable`을 실패
-사유에 보존한다. 현재 Backend는 Error Code별로 재시도하지 않는다.
+사유에 보존한다. 연결 실패와 retry 가능한 응답은 설정된 최대 시도 횟수 안에서 재호출한다.
 
 ## 12. Retry와 Timeout
 
@@ -409,8 +415,8 @@ AI 서버 최종 실패
 → Error Envelope 반환
 
 Spring Boot
-→ 자동 재호출하지 않음
-→ Evaluation Job FAILED
+→ 연결 실패·retry 가능한 응답을 제한적으로 재호출
+→ 최종 실패 시 Evaluation Job FAILED
 ```
 
 `retryable`은 향후 수동 재분석 또는 자동 retry 기능을 위한 메타데이터이다.
@@ -420,12 +426,14 @@ Spring Boot
 ```text
 Backend → AI Connect Timeout: 5초
 AI 서버 전체 처리 Deadline: 600초
-Backend → AI Read Timeout: 300초
+Backend → AI Read Timeout: 600초
+Backend 최대 호출 횟수: 3회
+Backend 재시도 간격: 2초
 ```
 
 Gemini 개별 호출 timeout은 전체 600초 deadline과 다르다. retry와 backoff도 600초 안에
-포함된다. Backend Read Timeout 300초는 AI의 최악 처리 시간보다 짧으므로 실제 HTTP 연동 전에
-양쪽 timeout을 다시 합의해야 한다.
+포함된다. Backend read timeout과 AI deadline이 같아 네트워크·직렬화 여유가 없으므로 배포 전
+운영 timeout에는 별도 여유를 두는 것이 필요하다.
 
 ## 13. 부분 성공 정책
 
@@ -443,7 +451,7 @@ Backend Validator도 request와 response의 Repository 수·ID가 정확히 일�
 
 ## 14. P2 수집 예산 현황
 
-Backend P2 브랜치에서 실제로 적용되는 제한은 다음과 같다.
+Backend `origin/main`의 P2 Collector에 실제로 적용되는 제한은 다음과 같다.
 
 | 항목 | 현재 P2 구현 |
 | --- | ---: |
@@ -468,7 +476,7 @@ Backend P2 브랜치에서 실제로 적용되는 제한은 다음과 같다.
 
 ## 15. P2 보안과 보관 현황
 
-P2 브랜치는 다음 파일·내용을 제외한다.
+Backend P2 Collector는 다음 파일·내용을 제외한다.
 
 - `.env`, `.env.*`, `*.pem`, `*.key`
 - 경로에 `credentials` 또는 `/secrets/`가 포함된 파일
@@ -478,8 +486,8 @@ P2 브랜치는 다음 파일·내용을 제외한다.
 현재 Secret marker 검사는 제한적이다. 일반 token·password·API key 패턴과
 `application-local.*` 등 추가 파일 정책은 보완이 필요하다.
 
-Backend는 `evidence_snapshot`과 `ai_request`를 JSONB로 저장한다. P2 브랜치가 병합되면 snippet
-원문도 현재 구조상 DB에 저장된다. 과거 문서의 “P2 snippet을 영구 저장하지 않는다”는 현재
+Backend는 `evidence_snapshot`과 `ai_request`를 JSONB로 저장하므로 P2 snippet 원문도 현재
+구조상 DB에 저장된다. 과거 문서의 “P2 snippet을 영구 저장하지 않는다”는 현재
 구현과 일치하지 않는다. 보관 기간, 암호화·접근 통제, 삭제 정책 또는 원문 비저장 구조를
 Backend에서 결정해야 한다.
 
@@ -498,12 +506,13 @@ AnalysisDepth: P0, P1, P2
 
 | 영역 | 현재 상태 |
 | --- | --- |
-| Backend `main` | BACKEND 중심 P0/P1 수집과 Mock 리포트 |
-| Backend P2 branch | P2 코드 snippet 수집과 Mock P2 리포트 구현, 미병합 |
+| Backend `origin/main` | BACKEND 중심 P0/P1/P2 수집, Mock·HTTP AI Client, 응답 검증과 Job 저장 |
 | AI 입력 계층 | P0/P1/P2 내부 Evidence·Criteria·System Prompt·정규화·Prompt Context와 입력 Validator 구현 |
 | AI 분석 계층 | Repository·Portfolio·Interview·Statement 생성, 정책 재생성과 최종 `PortfolioAnalysis` 조립 구현 |
 | AI 전체 오케스트레이션 | Report Service, 600초 deadline과 generation metadata 집계 구현 |
-| AI Wire API | `/health`만 구현, 실제 portfolio report API 미구현 |
+| AI Wire API | Request/Error v1.0·Response v1.1 DTO/Mapper, Error 처리와 `POST /internal/v1/portfolio-reports` 구현 |
+| 실제 Gemini HTTP | Backend P1 Example 기반 HTTP 200 응답 검증 완료 |
+| P2 HTTP | Backend P2 Example의 완료 깊이와 실제 Evidence 불일치로 Gemini 호출 전 차단 |
 
 개발 목표:
 
@@ -535,19 +544,18 @@ BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0/P1/P2
 | 문장·질문에 `repositoryId` 없음 | 참조를 Repository 단위로 제한할 수 없음 | 두 응답 항목에 `repositoryId` 추가 후 같은 Repository 참조 검증 |
 | `portfolioStatements.type` 없음 | 이력서·포트폴리오·면접 용도를 구분할 수 없음 | `RESUME`, `PORTFOLIO`, `INTERVIEW` enum 추가 |
 | Warning→Limitation 계약 없음 | 수집 축소·실패가 결과에 일관되게 노출되지 않음 | `PARTIAL_COLLECTION` 등 Limitation과 매핑 정책 추가 |
-| Backend AI HTTP timeout 미적용 | 합의한 5초/300초가 실제로 보장되지 않음 | RestClient request factory에 connect/read timeout 적용 |
+| AI deadline과 Backend read timeout에 여유 없음 | 둘 다 600초라 응답 직렬화·네트워크 지연 전에 Backend가 끊을 수 있음 | 운영 read timeout을 AI deadline보다 크게 설정 |
 | 입력 참조 Validator 부족 | 중복 ID·교차 Repository `sourceEvidenceRefs`가 계약상 통과 가능 | 요청 의미 Validator에 전역 유일성·소유 관계·깊이 검사 추가 |
 | P2 snippet 저장 정책 미확정 | 코드 원문이 JSONB에 장기 보관될 수 있음 | 보관 기간·접근 통제·삭제 또는 비저장 정책 확정 |
 | Secret 탐지 범위가 좁음 | 일부 credential 원문이 snippet에 포함될 수 있음 | 제외 파일과 token/password/API key 탐지 규칙 보완 |
 | Snapshot SHA 형식 검증 부재 | 알고리즘과 실제 SHA 길이가 불일치해도 Schema를 통과할 수 있음 | SHA1 40자·SHA256 64자 hex 조건을 Schema/Validator에 추가 |
 
-`followUpQuestions`는 현재 MVP 필수 계약이 아니므로 Backend 수정 필요 항목으로 보지 않는다.
-필요해질 때 별도 확장한다.
+`followUpQuestions`는 Response v1.1 면접 질문의 필드로 구현됐다. `answerGuide`는 문자열 배열이고,
+Finding과 Coaching 항목은 `confidence`를 포함해야 한다.
 
 ## 19. AI 구현 순서
 
-Backend P2 흐름에 맞추는 AI 구현 순서는 다음과 같다. 현재 내부 분석 코어와 전체
-오케스트레이션인 1~8단계는 완료했고, 9단계부터가 다음 구현 범위이다.
+Backend P2 흐름에 맞추는 AI 구현 단계는 다음과 같다. 1~11단계는 완료했다.
 
 1. P1/P2 내부 Evidence 도메인 모델 확장 (완료)
 2. P1/P2 Criteria와 Loader 확장 (완료)
@@ -557,15 +565,20 @@ Backend P2 흐름에 맞추는 AI 구현 순서는 다음과 같다. 현재 내�
 6. Repository Service와 결과 정책 Validator 구현 (완료)
 7. Portfolio·Interview·Statement 생성과 `PortfolioAnalysis` 최종 조립 (완료)
 8. Report Service, 전체 600초 deadline과 generation metadata 집계 구현 (완료)
-9. Backend Schema 기준 Pydantic Wire DTO와 Error Envelope 구현
-10. `POST /internal/v1/portfolio-reports` 구현
-11. Fake Provider 기반 P0/P1/P2 계약 테스트
-12. 실제 Gemini와 Spring Boot E2E 연동
+9. Backend Schema 기준 Pydantic Wire DTO와 Error Envelope 구현 (완료)
+10. `POST /internal/v1/portfolio-reports` 구현 (완료)
+11. Fake Provider 기반 P0/P1/P2 계약 테스트 (완료)
+12. 실제 Gemini HTTP와 Spring Boot E2E 연동 (진행 중)
 
-현재 `ai/app/services/report_service.py`는 구현됐고 `ai/app/api/reports.py`는 구현 전 빈
-파일이다. `ai/app/schemas/`와 관련 테스트 Fixture는 과거 계약 초안이며, 9단계에서 Backend JSON
-Schema를 기준으로 교체한다. 기존 파일이 존재하거나 해당 초안 테스트가 통과하는 것을 Wire 계약
-구현 완료로 해석하지 않는다.
+현재 `ai/app/api/reports.py`는 Request Mapper → Report Service → Response Mapper를 연결하고,
+FastAPI lifespan은 GeminiProvider를 생성·종료한다. P1 실제 Gemini HTTP Smoke는 성공했다.
+P2는 Backend Example의 `completedEvidenceLevels`에 P0가 선언됐지만 실제 P0 Evidence가 없어
+`COMPLETED_LEVELS_INVALID`로 차단된다. Example을 실제 Assembler 출력과 맞춘 뒤 P2 HTTP Smoke와
+Spring Boot `GITDDO_AI_MODE=http` E2E를 수행한다.
+
+현재 AI 쪽 추가 정합성 과제는 Wire Evidence에서 기술명 allowlist를 만드는 명시적 계약,
+`collectionWarnings`를 사용자 `limitations`로 보존하는 규칙, 실제 Service를 사용하는 HTTP 통합
+테스트, 요청 크기·민감 로그 제한이다.
 
 각 작업은 별도 논리적 커밋으로 구현하고, 구현되지 않은 기능을 문서에서 완료 상태로 표시하지
 않는다.
