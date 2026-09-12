@@ -1,3 +1,5 @@
+from pathlib import PurePosixPath
+
 from pydantic import ValidationError
 
 from app.core.exceptions import (
@@ -25,6 +27,7 @@ from app.schemas.common import (
 )
 from app.schemas.common import (
     RequestAnalysisPurpose,
+    RequestEvidenceType,
     TargetCareerLevel,
     TargetJob,
 )
@@ -45,6 +48,8 @@ _DEPTH_RANK = {
     WireAnalysisDepth.P1: 1,
     WireAnalysisDepth.P2: 2,
 }
+_P1_FILE_LIST_FACT_KEYS = frozenset({"CHANGED_FILES", "PULL_REQUEST"})
+_P1_FILE_LIST_MARKER = "files:"
 
 
 class RequestWireMapper:
@@ -151,6 +156,7 @@ class RequestWireMapper:
     ) -> InternalEvidence:
         evidence_path = f"repositories[{repository_index}].evidence[{evidence_index}]"
         self._validate_evidence_ownership(repository, evidence, evidence_path)
+        source_paths = self._map_source_paths(evidence)
 
         try:
             return InternalEvidence(
@@ -161,7 +167,7 @@ class RequestWireMapper:
                 key=evidence.fact_key,
                 summary=evidence.value,
                 value_type=InternalEvidenceValueType(evidence.value_type.value),
-                source_paths=((evidence.path,) if evidence.path is not None else ()),
+                source_paths=source_paths,
                 technology_names=(),
                 path=evidence.path,
                 start_line=evidence.start_line,
@@ -177,6 +183,20 @@ class RequestWireMapper:
             )
         except ValidationError as exc:
             raise RequestMappingError(f"Evidence mapping failed at {evidence_path}.") from exc
+
+    @staticmethod
+    def _map_source_paths(evidence: Evidence) -> tuple[str, ...]:
+        paths: list[str] = []
+        if evidence.path is not None:
+            paths.append(evidence.path)
+
+        if (
+            evidence.evidence_type is RequestEvidenceType.GITHUB_ACTIVITY
+            and evidence.fact_key in _P1_FILE_LIST_FACT_KEYS
+        ):
+            paths.extend(_extract_p1_file_list_paths(evidence.value))
+
+        return tuple(dict.fromkeys(paths))
 
     @staticmethod
     def _validate_evidence_ownership(
@@ -223,6 +243,35 @@ class RequestWireMapper:
     @staticmethod
     def _map_depth(depth: WireAnalysisDepth) -> InternalAnalysisDepth:
         return InternalAnalysisDepth(depth.value)
+
+
+def _extract_p1_file_list_paths(value: str) -> tuple[str, ...]:
+    lines = value.splitlines()
+    try:
+        marker_index = lines.index(_P1_FILE_LIST_MARKER)
+    except ValueError:
+        return ()
+
+    paths: list[str] = []
+    for line in lines[marker_index + 1 :]:
+        if not line:
+            continue
+        fields = line.split("\t")
+        if len(fields) != 3:
+            continue
+        _status, path, _change_count = fields
+        if _is_safe_repository_path(path):
+            paths.append(path)
+    return tuple(dict.fromkeys(paths))
+
+
+def _is_safe_repository_path(path: str) -> bool:
+    if not path or path != path.strip() or "\\" in path or "\x00" in path:
+        return False
+    candidate = PurePosixPath(path)
+    return not candidate.is_absolute() and all(
+        part not in {"", ".", ".."} for part in candidate.parts
+    )
 
 
 __all__ = ["RequestWireMapper"]

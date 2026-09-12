@@ -222,6 +222,73 @@ def test_evidence_without_path_has_no_source_paths() -> None:
     assert evidence.source_paths == ()
 
 
+def test_maps_backend_p1_changed_file_list_to_source_paths() -> None:
+    evidence = map_data(load_example(WireAnalysisDepth.P1)).repositories[0].evidence[2]
+
+    assert evidence.key == "CHANGED_FILES"
+    assert evidence.path is None
+    assert evidence.source_paths == ("src/AuthFilter.java",)
+
+
+def test_maps_multiple_unique_p1_file_paths_in_wire_order() -> None:
+    data = load_example(WireAnalysisDepth.P1)
+    evidence = data["repositories"][0]["evidence"][2]
+    evidence["value"] = (
+        "sha=abc123\nfiles:\n"
+        "modified\tsrc/AuthFilter.java\t+20/-1\n"
+        "added\tsrc/AuthConfig.java\t+10/-0\n"
+        "modified\tsrc/AuthFilter.java\t+2/-1"
+    )
+
+    internal = map_data(data).repositories[0].evidence[2]
+
+    assert internal.source_paths == (
+        "src/AuthFilter.java",
+        "src/AuthConfig.java",
+    )
+
+
+def test_maps_p1_pull_request_file_list_to_source_paths() -> None:
+    data = load_example(WireAnalysisDepth.P1)
+    evidence = data["repositories"][0]["evidence"][3]
+    evidence["value"] = (
+        "number=12\ntitle=Add auth filter\nfiles:\nadded\tsrc/AuthFilter.java\t+20/-1"
+    )
+
+    internal = map_data(data).repositories[0].evidence[3]
+
+    assert internal.key == "PULL_REQUEST"
+    assert internal.source_paths == ("src/AuthFilter.java",)
+
+
+def test_skips_malformed_and_unsafe_p1_file_list_entries() -> None:
+    data = load_example(WireAnalysisDepth.P1)
+    evidence = data["repositories"][0]["evidence"][2]
+    evidence["value"] = (
+        "sha=abc123\nfiles:\n"
+        "modified\tsrc/Safe.java\t+1/-1\n"
+        "missing-tabs\n"
+        "added\t../secret.env\t+1/-0\n"
+        "added\t/absolute/path.java\t+1/-0\n"
+        "added\tsrc\\windows.java\t+1/-0"
+    )
+
+    internal = map_data(data).repositories[0].evidence[2]
+
+    assert internal.source_paths == ("src/Safe.java",)
+
+
+def test_does_not_parse_file_like_text_from_unrelated_evidence() -> None:
+    data = load_example(WireAnalysisDepth.P1)
+    evidence = data["repositories"][0]["evidence"][1]
+    evidence["value"] = "message=files:\nadded\tsrc/AuthFilter.java\t+20/-1"
+
+    internal = map_data(data).repositories[0].evidence[1]
+
+    assert internal.key == "COMMIT_SUMMARY"
+    assert internal.source_paths == ()
+
+
 def test_maps_p2_location_and_source_metadata() -> None:
     data = load_example(WireAnalysisDepth.P2)
     data["repositories"][0]["evidence"][-1]["pullRequestNumber"] = 12
