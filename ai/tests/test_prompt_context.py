@@ -735,6 +735,50 @@ def test_portfolio_task_contains_grounding_rules(criteria: CriteriaSet) -> None:
     assert "PortfolioAnalysis Structured Output Schema" not in task
 
 
+@pytest.mark.parametrize("analysis_depth", [AnalysisDepth.P1, AnalysisDepth.P2])
+def test_portfolio_task_forbids_all_synthesis_claim_refs(
+    analysis_depth: AnalysisDepth,
+) -> None:
+    context = make_context(analysis_depth=analysis_depth)
+    criteria = CriteriaLoader().load("BACKEND", analysis_depth.value)
+    task = extract_section(
+        build_portfolio_prompt((context,), (make_analysis(),), criteria),
+        TASK_SECTION,
+    )
+
+    for field_name in (
+        "overall_summary",
+        "representative_projects",
+        "strengths",
+        "gaps",
+        "next_actions",
+        "job_appeal",
+    ):
+        assert field_name in task
+    assert "claim_refs는 항상 빈 배열" in task
+    assert "PortfolioSynthesis는 공개 Evidence만" in task
+    assert "UserClaim은 후속 PortfolioStatement와 InterviewQuestion 생성 단계에서만" in task
+    assert "allow_user_claims=true인 Criteria에만" not in task
+
+
+def test_portfolio_correction_keeps_synthesis_claim_refs_forbidden() -> None:
+    context = make_context(analysis_depth=AnalysisDepth.P1)
+    criteria = CriteriaLoader().load("BACKEND", "P1")
+    task = extract_section(
+        build_portfolio_correction_prompt(
+            (context,),
+            (make_analysis(),),
+            criteria,
+            (PolicyViolationCode.CLAIM_REF_NOT_ALLOWED,),
+        ),
+        TASK_SECTION,
+    )
+
+    assert PolicyViolationCode.CLAIM_REF_NOT_ALLOWED.value in task
+    assert "claim_refs는 항상 빈 배열" in task
+    assert "PortfolioSynthesis 전체" in task
+
+
 def test_portfolio_task_excludes_later_assembly_outputs(criteria: CriteriaSet) -> None:
     task = extract_section(
         build_portfolio_prompt((make_context(),), (make_analysis(),), criteria),
@@ -1031,17 +1075,23 @@ def test_all_p0_task_prompts_forbid_claim_refs_without_enabled_criteria(
     analysis = make_analysis()
     synthesis = make_synthesis((context,))
 
-    prompts = (
+    criteria_scoped_prompts = (
         build_repository_prompt(context, criteria),
-        build_portfolio_prompt((context,), (analysis,), criteria),
         build_interview_prompt(context, analysis, criteria),
         build_statement_prompt((context,), (analysis,), synthesis, criteria),
     )
 
-    for prompt in prompts:
+    for prompt in criteria_scoped_prompts:
         task = extract_section(prompt, TASK_SECTION)
         assert "현재 Criteria는 UserClaim 참조를 허용하지 않는다" in task
         assert "모든 claim_refs를 빈 배열로 반환한다" in task
+
+    portfolio_task = extract_section(
+        build_portfolio_prompt((context,), (analysis,), criteria),
+        TASK_SECTION,
+    )
+    assert "PortfolioSynthesis는 공개 Evidence만" in portfolio_task
+    assert "claim_refs는 항상 빈 배열" in portfolio_task
 
 
 def test_all_p1_task_prompts_limit_claims_to_enabled_criteria() -> None:
@@ -1050,18 +1100,25 @@ def test_all_p1_task_prompts_limit_claims_to_enabled_criteria() -> None:
     synthesis = make_synthesis((context,))
     criteria = CriteriaLoader().load("BACKEND", "P1")
 
-    prompts = (
+    claim_enabled_prompts = (
         build_repository_prompt(context, criteria),
-        build_portfolio_prompt((context,), (analysis,), criteria),
         build_interview_prompt(context, analysis, criteria),
         build_statement_prompt((context,), (analysis,), synthesis, criteria),
     )
 
-    for prompt in prompts:
+    for prompt in claim_enabled_prompts:
         task = extract_section(prompt, TASK_SECTION)
         assert "allow_user_claims=true인 Criteria에만" in task
         assert "CLAIM_ACTIVITY_LINK" in task
         assert "허용 Criteria key와 claim_refs를 함께 포함" in task
+
+    portfolio_task = extract_section(
+        build_portfolio_prompt((context,), (analysis,), criteria),
+        TASK_SECTION,
+    )
+    assert "PortfolioSynthesis는 공개 Evidence만" in portfolio_task
+    assert "claim_refs는 항상 빈 배열" in portfolio_task
+    assert "allow_user_claims=true인 Criteria에만" not in portfolio_task
 
 
 def test_interview_prompt_rejects_criteria_depth_mismatch() -> None:

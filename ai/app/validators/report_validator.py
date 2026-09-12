@@ -49,6 +49,7 @@ class PolicyViolationCode(StrEnum):
     P1_SCOPE_VIOLATION = "P1_SCOPE_VIOLATION"
     P2_SCOPE_VIOLATION = "P2_SCOPE_VIOLATION"
     REPOSITORY_WIDE_GENERALIZATION = "REPOSITORY_WIDE_GENERALIZATION"
+    CLAIM_REF_NOT_ALLOWED = "CLAIM_REF_NOT_ALLOWED"
 
 
 _DEPTH_RANK = {
@@ -768,6 +769,12 @@ class PortfolioPolicyValidator:
                     claim_owners=claim_owners,
                 )
             )
+            violations.extend(
+                _find_disallowed_claim_ref_violations(
+                    item=item,
+                    field_path=field_path,
+                )
+            )
 
         for index, project in enumerate(synthesis.representative_projects):
             field_path = f"representative_projects[{index}]"
@@ -785,6 +792,12 @@ class PortfolioPolicyValidator:
                     field_path=field_path,
                     evidence_owners=evidence_owners,
                     claim_owners=claim_owners,
+                )
+            )
+            violations.extend(
+                _find_disallowed_claim_ref_violations(
+                    item=project,
+                    field_path=field_path,
                 )
             )
 
@@ -1017,6 +1030,21 @@ def _find_global_reference_violations(
                 )
             )
     return tuple(violations)
+
+
+def _find_disallowed_claim_ref_violations(
+    *,
+    item: _GroundedMetadata | RepresentativeProject,
+    field_path: str,
+) -> tuple[PolicyViolation, ...]:
+    return tuple(
+        PolicyViolation(
+            code=PolicyViolationCode.CLAIM_REF_NOT_ALLOWED,
+            message="Portfolio synthesis items must not reference user claims.",
+            field_path=f"{field_path}.claim_refs[{index}]",
+        )
+        for index, _claim_ref in enumerate(item.claim_refs)
+    )
 
 
 def _find_representative_reference_violations(

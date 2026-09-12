@@ -315,6 +315,114 @@ def test_rejects_unknown_global_references(
     assert expected_code in violation_codes(exc_info.value)
 
 
+@pytest.mark.parametrize(
+    "field_name",
+    (
+        "overall_summary",
+        "representative_projects",
+        "strengths",
+        "gaps",
+        "next_actions",
+        "job_appeal",
+    ),
+)
+def test_rejects_claim_refs_in_portfolio_synthesis(field_name: str) -> None:
+    context = make_context(1, AnalysisDepth.P1)
+    claim_refs = ("claim_001",)
+    claim_item = make_item(
+        content="사용자는 인증 API 구현을 담당했다고 진술했습니다.",
+        evidence_refs=("ev_101",),
+        claim_refs=claim_refs,
+        criterion_keys=("CLAIM_ACTIVITY_LINK",),
+    )
+    synthesis_kwargs: dict[str, object] = {}
+    expected_path = f"{field_name}.claim_refs[0]"
+
+    if field_name == "representative_projects":
+        synthesis_kwargs["representatives"] = (
+            make_representative(
+                evidence_refs=("ev_101",),
+                claim_refs=claim_refs,
+            ),
+        )
+        expected_path = "representative_projects[0].claim_refs[0]"
+    elif field_name == "strengths":
+        synthesis_kwargs["strengths"] = (claim_item,)
+        expected_path = "strengths[0].claim_refs[0]"
+    elif field_name == "gaps":
+        synthesis_kwargs["gaps"] = (claim_item,)
+        expected_path = "gaps[0].claim_refs[0]"
+    elif field_name == "next_actions":
+        synthesis_kwargs["next_actions"] = (
+            claim_item.model_copy(
+                update={
+                    "item_type": AnalysisItemType.RECOMMENDATION,
+                    "priority": RecommendationPriority.HIGH,
+                }
+            ),
+        )
+        expected_path = "next_actions[0].claim_refs[0]"
+    elif field_name == "job_appeal":
+        synthesis_kwargs["job_appeal"] = claim_item.model_copy(
+            update={"item_type": AnalysisItemType.JOB_APPEAL}
+        )
+    else:
+        synthesis_kwargs["overall_summary"] = claim_item
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioPolicyValidator().validate_references(
+            make_synthesis(**synthesis_kwargs),
+            (context,),
+        )
+
+    violations = exc_info.value.violations
+    assert PolicyViolationCode.CLAIM_REF_NOT_ALLOWED in {violation.code for violation in violations}
+    assert expected_path in {violation.field_path for violation in violations}
+
+
+def test_unknown_synthesis_claim_reports_unknown_and_disallowed_codes() -> None:
+    context = make_context(1, AnalysisDepth.P1)
+    synthesis = make_synthesis(
+        overall_summary=make_item(
+            evidence_refs=("ev_101",),
+            claim_refs=("claim_999",),
+            criterion_keys=("CLAIM_ACTIVITY_LINK",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        PortfolioPolicyValidator().validate_references(synthesis, (context,))
+
+    assert {
+        PolicyViolationCode.UNKNOWN_CLAIM_REF,
+        PolicyViolationCode.CLAIM_REF_NOT_ALLOWED,
+    } <= violation_codes(exc_info.value)
+
+
+def test_accepts_evidence_only_portfolio_synthesis_at_p1() -> None:
+    context = make_context(1, AnalysisDepth.P1)
+    synthesis = make_synthesis(
+        overall_summary=make_item(
+            evidence_refs=("ev_101",),
+            criterion_keys=("ACTIVITY_SCOPE",),
+        ),
+        representatives=(make_representative(evidence_refs=("ev_101",)),),
+        strengths=(
+            make_item(
+                evidence_refs=("ev_101",),
+                criterion_keys=("ACTIVITY_SCOPE",),
+            ),
+        ),
+        job_appeal=make_item(
+            item_type=AnalysisItemType.JOB_APPEAL,
+            evidence_refs=("ev_101",),
+            criterion_keys=("ACTIVITY_SCOPE",),
+        ),
+    )
+
+    assert PortfolioPolicyValidator().validate_references(synthesis, (context,)) is None
+
+
 def test_rejects_unknown_representative_repository() -> None:
     synthesis = make_synthesis(
         representatives=(make_representative(repository_full_name="git-ddo/unknown"),)

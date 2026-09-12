@@ -17,6 +17,7 @@ from app.domain import (
     GroundedAnalysisItem,
     InternalEvidence,
     InternalEvidenceType,
+    InternalUserClaim,
     NormalizedRepositoryContext,
     PortfolioSynthesis,
     RepositoryAnalysis,
@@ -26,6 +27,7 @@ from app.domain import (
 from app.llm import GenerationMetadata, StructuredGeneration
 from app.llm.provider import GenerationCall
 from app.services import PortfolioSynthesisService
+from app.validators import PolicyViolationCode
 
 
 class SequencedProvider:
@@ -138,6 +140,14 @@ def make_context(
         ),
         snapshot_sha=f"snapshot-{index}" if depth is not AnalysisDepth.P0 else None,
         evidence=tuple(evidence),
+        user_claims=(
+            InternalUserClaim(
+                claim_id=f"claim_{index:03d}",
+                repository_full_name=repository,
+                statement="사용자는 인증 API 구현을 담당했다고 진술했습니다.",
+                related_evidence_refs=((p1_id,) if depth is not AnalysisDepth.P0 else ()),
+            ),
+        ),
         technology_names=("Spring Boot",),
     )
 
@@ -163,6 +173,7 @@ def make_synthesis(
     *,
     overall_summary: GroundedAnalysisItem | None = None,
     representatives: tuple[RepresentativeProject, ...] | None = None,
+    strengths: tuple[GroundedAnalysisItem, ...] = (),
     gaps: tuple[GroundedAnalysisItem, ...] = (),
 ) -> PortfolioSynthesis:
     context_items = tuple(contexts)
@@ -186,6 +197,7 @@ def make_synthesis(
             )
             for context in context_items
         ),
+        strengths=strengths,
         gaps=gaps,
         job_appeal=GroundedAnalysisItem(
             item_type=AnalysisItemType.JOB_APPEAL,
@@ -413,6 +425,65 @@ async def test_regenerates_after_cross_repository_representative_reference() -> 
     await PortfolioSynthesisService(provider).synthesize(contexts, analyses)
 
     assert "CROSS_REPOSITORY_REF" in provider.calls[1].user_prompt
+
+
+@pytest.mark.asyncio
+async def test_regenerates_after_portfolio_strength_references_user_claim() -> None:
+    context = make_context(depth=AnalysisDepth.P1)
+    claim_strength = GroundedAnalysisItem(
+        item_type=AnalysisItemType.INTERPRETATION,
+        content="첫 Portfolio 응답의 금지된 주장 문장입니다.",
+        confidence=EvidenceConfidence.HIGH,
+        evidence_refs=(context.evidence[1].evidence_id,),
+        claim_refs=(context.user_claims[0].claim_id,),
+        criterion_keys=("CLAIM_ACTIVITY_LINK",),
+    )
+    invalid = make_synthesis((context,), strengths=(claim_strength,))
+    corrected = make_synthesis((context,))
+    provider = SequencedProvider(
+        [
+            generation(invalid, duration_ms=11, attempt_count=2),
+            generation(corrected, duration_ms=19, attempt_count=3),
+        ]
+    )
+
+    result = await PortfolioSynthesisService(provider).synthesize(
+        (context,),
+        (make_analysis(context),),
+    )
+
+    assert result.value == corrected
+    assert result.metadata == GenerationMetadata(duration_ms=30, attempt_count=5)
+    assert provider.call_count == 2
+    correction_prompt = provider.calls[1].user_prompt
+    assert PolicyViolationCode.CLAIM_REF_NOT_ALLOWED.value in correction_prompt
+    assert claim_strength.content not in correction_prompt
+
+
+@pytest.mark.asyncio
+async def test_raises_after_repeated_portfolio_claim_reference_violation() -> None:
+    context = make_context(depth=AnalysisDepth.P1)
+    claim_strength = GroundedAnalysisItem(
+        item_type=AnalysisItemType.INTERPRETATION,
+        content="사용자는 인증 API 구현을 담당했다고 진술했습니다.",
+        confidence=EvidenceConfidence.HIGH,
+        evidence_refs=(context.evidence[1].evidence_id,),
+        claim_refs=(context.user_claims[0].claim_id,),
+        criterion_keys=("CLAIM_ACTIVITY_LINK",),
+    )
+    invalid = make_synthesis((context,), strengths=(claim_strength,))
+    provider = SequencedProvider([generation(invalid), generation(invalid)])
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        await PortfolioSynthesisService(provider).synthesize(
+            (context,),
+            (make_analysis(context),),
+        )
+
+    assert provider.call_count == 2
+    assert PolicyViolationCode.CLAIM_REF_NOT_ALLOWED in {
+        violation.code for violation in exc_info.value.violations
+    }
 
 
 @pytest.mark.asyncio

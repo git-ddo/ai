@@ -9,7 +9,6 @@ from app.prompts.context import (
     TASK_SECTION,
     PromptContextError,
     build_repository_data,
-    build_user_claim_rules,
     render_section,
     serialize_criteria,
     serialize_untrusted_data,
@@ -29,11 +28,15 @@ PortfolioSynthesis를 생성한다.
 - overall_summary, strengths, gaps의 item_type은 INTERPRETATION으로 생성한다.
 - next_actions의 item_type은 RECOMMENDATION으로 생성한다.
 - job_appeal의 item_type은 JOB_APPEAL로 생성한다.
+- job_appeal은 단일 객체로 생성한다.
 - 대표 프로젝트는 제공된 Repository 중에서만 선택하고, 해당 Repository의
-  Evidence 또는 UserClaim만 참조한다.
+  공개 Evidence만 참조한다.
+- PortfolioSynthesis는 공개 Evidence만으로 생성한다.
+- overall_summary, representative_projects, strengths, gaps, next_actions, job_appeal의
+  claim_refs는 항상 빈 배열로 반환한다.
+- 위 필드의 문장에 UserClaim 내용을 복사하거나 객관적 사실처럼 사용하지 않는다.
 - strengths, gaps, next_actions, job_appeal은 공개 Evidence를 최소 하나 참조한다.
-- strengths와 단일 객체 job_appeal은 UserClaim만으로 확정하지 않는다.
-{user_claim_rules}
+- UserClaim은 후속 PortfolioStatement와 InterviewQuestion 생성 단계에서만 사용한다.
 - 누락을 기반으로 gaps 또는 next_actions을 생성하려면 명시적인
   BACKEND_DERIVED Evidence를 참조한다.
 - NOT_OBSERVED는 실제 부재, 거짓 또는 미기여를 의미하지 않는다.
@@ -76,7 +79,6 @@ def build_portfolio_prompt(
     )
     task = _PORTFOLIO_TASK_TEMPLATE.format(
         analysis_depth=maximum_depth.value,
-        user_claim_rules=build_user_claim_rules(criteria),
     )
     return _render_portfolio_prompt(
         ordered_contexts,
@@ -105,7 +107,6 @@ def build_portfolio_correction_prompt(
     )
     base_task = _PORTFOLIO_TASK_TEMPLATE.format(
         analysis_depth=maximum_depth.value,
-        user_claim_rules=build_user_claim_rules(criteria),
     )
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=base_task,
