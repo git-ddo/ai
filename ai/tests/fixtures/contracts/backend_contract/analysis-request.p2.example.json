@@ -24,6 +24,25 @@
     }],
     "evidence": [
       {
+        "evidenceId": "ev_001",
+        "evidenceType": "GITHUB_STATIC",
+        "analysisDepth": "P0",
+        "repositoryId": "123",
+        "repositoryFullName": "git-ddo/backend",
+        "snapshotHashAlgorithm": "SHA1",
+        "snapshotSha": "commit-sha",
+        "factKey": "README",
+        "valueType": "STRING",
+        "value": "# Backend",
+        "path": "README.md",
+        "startLine": null,
+        "endLine": null,
+        "commitSha": "commit-sha",
+        "pullRequestNumber": null,
+        "sourceEvidenceRefs": [],
+        "derivedFromLevel": null
+      },
+      {
         "evidenceId": "ev_002",
         "evidenceType": "GITHUB_ACTIVITY",
         "analysisDepth": "P1",

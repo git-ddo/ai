@@ -496,7 +496,11 @@ def test_maps_statement_and_question_fields() -> None:
             [AnalysisDepth.P0, AnalysisDepth.P1],
             [LimitationCode.MISSING_CODE_EVIDENCE],
         ),
-        (AnalysisDepth.P2, [AnalysisDepth.P1, AnalysisDepth.P2], []),
+        (
+            AnalysisDepth.P2,
+            [AnalysisDepth.P0, AnalysisDepth.P1, AnalysisDepth.P2],
+            [],
+        ),
     ],
 )
 def test_calculates_used_levels_and_limitations(
@@ -573,7 +577,10 @@ def test_rejects_source_evidence_cycle() -> None:
     request = load_request(AnalysisDepth.P2)
     repository = request.repositories[0]
     evidence = list(repository.evidence)
-    evidence[0] = evidence[0].model_copy(update={"source_evidence_refs": ["ev_005"]})
+    cycle_index = next(index for index, item in enumerate(evidence) if item.evidence_id == "ev_002")
+    evidence[cycle_index] = evidence[cycle_index].model_copy(
+        update={"source_evidence_refs": ["ev_005"]}
+    )
     repository = repository.model_copy(update={"evidence": evidence})
     request = request.model_copy(update={"repositories": [repository]})
 

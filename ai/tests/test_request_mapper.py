@@ -120,6 +120,8 @@ def add_second_repository(data: dict[str, Any]) -> None:
 @pytest.mark.parametrize("depth", list(WireAnalysisDepth))
 def test_backend_examples_map_to_internal_portfolio(depth: WireAnalysisDepth) -> None:
     result = map_data(load_example(depth))
+    EvidenceReferenceValidator().validate(result)
+    AnalysisDepthValidator().validate(result)
 
     assert result.requested_analysis_depth is InternalAnalysisDepth(depth.value)
     assert result.repositories[0].analysis_depth is InternalAnalysisDepth(depth.value)
