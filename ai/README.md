@@ -63,13 +63,13 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] Request Mapper → Report Service → Response Mapper HTTP 연결
 - [x] GeminiProvider lifespan 생성·종료와 테스트 Runtime 주입
 - [x] Backend P1 Example 기반 실제 Gemini HTTP 200
-- [ ] Backend P2 Example 기반 실제 Gemini HTTP
+- [x] 실제 Backend Assembler P2 Request 기반 실제 Gemini HTTP 200 및 양쪽 Validator 통과
 - [ ] Backend HTTP Client와 실제 E2E
 
 현재 전체 테스트 기준은 1201개이다. Portfolio Report Wire API는 주입 Runtime으로 P0/P1/P2를
-검증했고, P1은 실제 GeminiProvider를 사용한 HTTP 호출까지 성공했다. P2는 Backend Example의
-`completedEvidenceLevels`와 실제 Evidence 깊이가 달라 Gemini 호출 전 Validator에서 차단된다.
-Spring Boot HTTP E2E는 아직 수행하지 않았다.
+검증했고, P1 및 실제 Backend Assembler P2 Request는 실제 GeminiProvider HTTP 호출까지
+성공했다. P2 응답은 AI Response v1.1 DTO와 Backend 응답 Validator를 모두 통과했다. Spring Boot
+HTTP E2E는 아직 수행하지 않았다.
 
 ## 목표 지원 범위
 
@@ -324,7 +324,6 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 현재 확인된 정합성 과제
 
-- Backend P2 Example은 `[P0,P1,P2]` 완료를 선언하지만 실제 Evidence에는 P1/P2만 있다.
 - Request Wire Mapper는 구조화된 기술명 입력이 없어 내부 `technology_names`를 빈 값으로 만든다.
   기술명 allowlist를 만들 Backend Evidence 계약 또는 결정적 변환 규칙이 필요하다.
 - `collectionWarnings`는 내부 입력·최종 Wire limitation으로 이어지지 않는다. Warning을 사용자에게
@@ -335,9 +334,9 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 다음 작업
 
-내부 분석 파이프라인과 Request·Response·Error Wire Mapper, FastAPI Report Endpoint 연결이
-준비됐다. 다음 단계는 Backend P2 Example의 깊이 불일치를 정리한 뒤 P2 실제 Gemini HTTP Smoke를
-완료하고, Backend를 `GITDDO_AI_MODE=http`로 실행해 전체 E2E를 검증하는 것이다. Backend 기본값은
+내부 분석 파이프라인과 Request·Response·Error Wire Mapper, FastAPI Report Endpoint 연결 및
+실제 Backend Assembler P2 Request 기반 Gemini HTTP Smoke까지 완료됐다. 다음 단계는 Backend를
+`GITDDO_AI_MODE=http`로 실행해 전체 E2E를 검증하는 것이다. Backend 기본값은
 connect 5초, read 600초, 최대 3회 호출, 재시도 간격 2초이다. AI 전체 deadline도 600초이므로
 배포 전 Backend read timeout에 네트워크·직렬화 여유를 추가해야 한다. 상세 순서는
 [`docs/guide.md`](../docs/guide.md)의 Phase 10을 따른다.

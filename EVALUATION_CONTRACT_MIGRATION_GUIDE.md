@@ -511,8 +511,7 @@ AnalysisDepth: P0, P1, P2
 | AI 분석 계층 | Repository·Portfolio·Interview·Statement 생성, 정책 재생성과 최종 `PortfolioAnalysis` 조립 구현 |
 | AI 전체 오케스트레이션 | Report Service, 600초 deadline과 generation metadata 집계 구현 |
 | AI Wire API | Request/Error v1.0·Response v1.1 DTO/Mapper, Error 처리와 `POST /internal/v1/portfolio-reports` 구현 |
-| 실제 Gemini HTTP | Backend P1 Example 기반 HTTP 200 응답 검증 완료 |
-| P2 HTTP | Backend P2 Example의 완료 깊이와 실제 Evidence 불일치로 Gemini 호출 전 차단 |
+| 실제 Gemini HTTP | Backend P1 Example과 실제 Assembler P2 Request 기반 HTTP 200 및 양쪽 Validator 검증 완료 |
 
 개발 목표:
 
@@ -571,10 +570,10 @@ Backend P2 흐름에 맞추는 AI 구현 단계는 다음과 같다. 1~11단계�
 12. 실제 Gemini HTTP와 Spring Boot E2E 연동 (진행 중)
 
 현재 `ai/app/api/reports.py`는 Request Mapper → Report Service → Response Mapper를 연결하고,
-FastAPI lifespan은 GeminiProvider를 생성·종료한다. P1 실제 Gemini HTTP Smoke는 성공했다.
-P2는 Backend Example의 `completedEvidenceLevels`에 P0가 선언됐지만 실제 P0 Evidence가 없어
-`COMPLETED_LEVELS_INVALID`로 차단된다. Example을 실제 Assembler 출력과 맞춘 뒤 P2 HTTP Smoke와
-Spring Boot `GITDDO_AI_MODE=http` E2E를 수행한다.
+FastAPI lifespan은 GeminiProvider를 생성·종료한다. P1 실제 Gemini HTTP Smoke와 실제 Backend
+Assembler Request 기반 P2 Gemini HTTP Smoke가 HTTP 200으로 성공했다. P2 응답은 AI Response v1.1
+DTO와 Backend `AiAnalysisResponseValidator`를 모두 통과했다. 다음 연동 단계로 Spring Boot
+`GITDDO_AI_MODE=http` E2E를 수행한다.
 
 현재 AI 쪽 추가 정합성 과제는 Wire Evidence에서 기술명 allowlist를 만드는 명시적 계약,
 `collectionWarnings`를 사용자 `limitations`로 보존하는 규칙, 실제 Service를 사용하는 HTTP 통합

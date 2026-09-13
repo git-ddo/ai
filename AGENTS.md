@@ -58,9 +58,9 @@ UserClaim과 AI 추천은 Evidence가 아니다. `NOT_OBSERVED`는 수집 범위
 - Request/Error v1.0, Response v1.1 Wire DTO와 Mapper, Error Envelope, Exception Handler,
   `POST /internal/v1/portfolio-reports`와 GeminiProvider lifespan을 구현했다.
 - P1 Backend Fixture를 사용한 실제 Gemini HTTP Smoke는 성공했다.
-- P2 HTTP Smoke는 Backend P2 Example이 `completedEvidenceLevels=[P0,P1,P2]`를 선언하면서 실제
-  Evidence에는 P1/P2만 포함해 입력 깊이 Validator에서 중단된다. 이 Example 또는 완료 깊이 의미를
-  정정한 뒤 다시 검증한다.
+- Backend P2 Example에 P0 Evidence를 보완했고, 실제 Backend Assembler Request를 사용한 P2
+  Gemini HTTP Smoke도 HTTP 200으로 성공했다. 응답은 AI v1.1 DTO와 Backend 응답 Validator를
+  모두 통과했다.
 
 Schema에 표현 가능한 enum과 현재 실행 가능한 기능을 혼동하지 않는다. 구현되지 않은 깊이나
 기능을 완료 상태로 표시하지 않는다.

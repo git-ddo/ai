@@ -69,9 +69,9 @@ Schema가 표현하는 enum과 실제 분석 구현 범위는 다르다. 현재 
 | AI 분석 코어 | Repository 분석, Portfolio 종합, 면접 질문, 포트폴리오 문장과 정책 재생성 구현 |
 | AI 최종 내부 결과 | 검증 완료 결과를 결정적으로 조립하는 `PortfolioAnalysisAssembler` 구현 |
 | AI 서버 오케스트레이션 | Report Service, 전체 600초 deadline과 generation metadata 집계 구현 |
-| 실제 Gemini Smoke | 내부 P0/P1/P2 완주, Backend P1 Fixture 기반 실제 HTTP 200 응답 검증 |
+| 실제 Gemini Smoke | 내부 P0/P1/P2 완주, Backend P1 Fixture와 실제 Assembler P2 Request 기반 HTTP 200 검증 |
 | Wire 연동 | Request/Error v1.0, Response v1.1 DTO·Mapper·Error 처리와 Report API 구현 |
-| P2 HTTP Smoke | Backend P2 Example의 완료 깊이와 실제 Evidence 불일치로 Gemini 호출 전 차단 |
+| P2 HTTP Smoke | P0 Evidence가 포함된 실제 Backend Assembler Request로 HTTP 200 및 양쪽 Validator 통과 |
 
 Backend P2 Collector는 저장소당 최대 8개, snippet당 최대 40줄·4,000자, 원본 파일 최대
 80,000 byte 제한을 적용한다. 전체 요청 기준 snippet·token 예산과 P2 대상 저장소 제한은
@@ -135,9 +135,9 @@ AI의 내부 Report Service와 Backend Wire HTTP 경계 구현은 완료됐다.
 ```
 
 Report Service는 Repository 하나의 필수 분석이 실패하면 전체 분석을 실패시키고, Gemini
-호출·Provider retry·정책 재생성을 모두 포함하는 600초 전체 deadline을 적용한다. 다음 단계는
-Backend P2 Example의 깊이 불일치를 정리해 실제 P2 HTTP Smoke를 완료하고, Spring Boot
-`GITDDO_AI_MODE=http` 전체 E2E를 검증하는 것이다. 함께 해결할 설계 항목은 Wire 입력의 기술명
+호출·Provider retry·정책 재생성을 모두 포함하는 600초 전체 deadline을 적용한다. Backend P2
+Example과 AI Fixture의 깊이 정합성 및 실제 Assembler Request 기반 P2 HTTP Smoke까지 완료했다.
+다음 단계는 Spring Boot `GITDDO_AI_MODE=http` 전체 E2E이다. 함께 해결할 설계 항목은 Wire 입력의 기술명
 grounding, `collectionWarnings`의 사용자 Limitation 반영, 요청 크기·민감 로그 제한이다.
 
 실제 Gemini 내부·HTTP 파이프라인 검증 기록은

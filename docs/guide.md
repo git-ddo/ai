@@ -49,7 +49,7 @@ Response schemaVersion: "1.1"
 - [x] AI HTTP connect 5초·read 600초 timeout 적용
 - [x] retry 가능한 실패의 최대 3회 재호출
 - [ ] P2 전역 snippet/token 예산
-- [ ] P2 Example의 `completedEvidenceLevels`와 실제 Evidence 깊이 정합성 수정
+- [x] P2 Example에 P0 Evidence를 추가해 `completedEvidenceLevels`와 실제 Evidence 깊이 정합성 수정
 
 ### AI
 
@@ -89,8 +89,9 @@ Response schemaVersion: "1.1"
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
 현재 AI 검증 기준은 전체 `pytest` 1201개와 Ruff·mypy 통과이다. Wire API는 주입 Runtime으로
-P0/P1/P2를 검증했고, Backend P1 Example을 사용한 실제 Gemini HTTP 호출도 HTTP 200으로
-완료했다. Spring Boot 전체 E2E는 아직 수행하지 않았다.
+P0/P1/P2를 검증했고, Backend P1 Example과 실제 Backend Assembler P2 Request를 사용한 실제
+Gemini HTTP 호출도 HTTP 200으로 완료했다. P2 응답은 AI v1.1 DTO와 Backend 응답 Validator를
+모두 통과했다. Spring Boot 전체 E2E는 아직 수행하지 않았다.
 
 ## 4. 아키텍처 경계
 
@@ -603,19 +604,18 @@ GeminiProvider 없이 동일 HTTP 경계를 검증한다.
 - [x] Gemini timeout·429·5xx·잘못된 Structured Output의 HTTP Error Envelope
 - [x] Backend P0/P1 Example JSON과 Pydantic·Mapper 호환
 - [x] Backend P1 Example 기반 실제 Gemini HTTP 200
-- [ ] Backend P2 Example 기반 실제 Gemini HTTP
+- [x] 실제 Backend Assembler P2 Request 기반 실제 Gemini HTTP 200 및 양쪽 Validator 통과
 - [ ] Spring Boot Mock·HTTP E2E
 
-P2 HTTP Smoke는 Gemini 호출 전에 다음 입력 정합성 오류로 중단된다.
+Backend P2 Example에는 누락된 P0 README Evidence를 추가해 다음 누적 깊이를 만족하도록 수정했다.
 
 ```text
-Backend P2 Example completedEvidenceLevels: [P0, P1, P2]
-Example의 실제 Evidence depth: [P1, P1, P2]
-AI Validator: COMPLETED_LEVELS_INVALID
+completedEvidenceLevels: [P0, P1, P2]
+실제 Evidence depth: [P0, P1, P1, P2]
 ```
 
-Backend 실제 Assembler는 Evidence에 존재하는 깊이만 `completedEvidenceLevels`로 계산한다. 따라서
-P2 Example에 P0 Evidence를 추가하거나 완료 깊이 선언을 실제 Evidence와 맞춘 뒤 재검증한다.
+실제 Backend Assembler가 생성한 Request로 FastAPI → Gemini P2 HTTP Smoke를 수행해 HTTP 200을
+확인했다. Response v1.1은 AI Pydantic DTO와 Backend `AiAnalysisResponseValidator`를 모두 통과했다.
 
 ## 9. Backend와 재확인할 운영·계약 항목
 
@@ -658,13 +658,11 @@ Schema·Example과 Pydantic 간 일치 테스트를 추가한다.
 내부 분석과 Wire API 구현 커밋은 완료됐다. 남은 검증·보완 순서는 다음과 같다.
 
 ```text
-1. Backend P2 Example 깊이 불일치 정리
-2. P2 실제 Gemini HTTP Smoke
-3. 실제 Mapper·Validator·Report Service를 사용하는 HTTP 통합 테스트
-4. Spring Boot GITDDO_AI_MODE=http E2E
-5. 기술명 grounding과 Warning→Limitation 계약 보완
-6. 요청 크기·민감 로그 제한
-7. P2 전역 snippet/token 예산과 snippet 보관 정책 확정
+1. 실제 Mapper·Validator·Report Service를 사용하는 HTTP 통합 테스트
+2. Spring Boot GITDDO_AI_MODE=http E2E
+3. 기술명 grounding과 Warning→Limitation 계약 보완
+4. 요청 크기·민감 로그 제한
+5. P2 전역 snippet/token 예산과 snippet 보관 정책 확정
 ```
 
 각 커밋은 관련 pytest, Ruff와 mypy를 통과한 뒤 생성한다. Push, branch 전환 또는 PR은 사용자

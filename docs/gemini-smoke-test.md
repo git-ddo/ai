@@ -113,19 +113,21 @@ UserClaim은 계약상 `claimRefs`를 받을 수 있는 면접 질문·포트폴
 
 ## Backend P2 Wire HTTP Smoke
 
-P2는 Gemini 호출 전에 입력 깊이 검증에서 중단됐다.
+실제 Backend `AiAnalysisRequestAssembler`가 생성한 합성 P2 Request로 전체 HTTP 경계를 검증했다.
 
 ```text
-Backend P2 Example completedEvidenceLevels: [P0, P1, P2]
-Example의 실제 Evidence depth: [P1, P1, P2]
-오류 코드: COMPLETED_LEVELS_INVALID
-오류 위치: repositories[0].completed_evidence_levels
+검증일: 2026-09-13
+모델: gemini-3.5-flash-lite, thinking=minimal, Provider retry=0
+HTTP: 200
+completedEvidenceLevels: [P0, P1, P2]
+실제 Evidence depth: [P0, P1, P1, P2]
+usedEvidenceLevels: [P0, P1, P2]
 ```
 
-Wire Pydantic 검증, Request Mapper의 Repository·Snapshot 검증과 Evidence 참조 검증은 통과했다.
-AI는 선언된 완료 깊이와 실제 Evidence의 일치를 요구하므로 Gemini를 호출하거나 P2 응답 파일을
-생성하지 않았다. Backend 실제 Assembler는 존재하는 Evidence 깊이만 완료 깊이로 계산하므로,
-Example에 P0 Evidence를 추가하거나 선언을 실제 데이터와 맞춘 뒤 재실행한다.
+Backend P2 Example과 AI Fixture에는 누락됐던 P0 README Evidence를 추가했다. 실제 Assembler
+Request는 FastAPI Request Mapper·입력 Validator·Report Service·GeminiProvider·Response Mapper를
+거쳐 Response v1.1을 반환했다. 응답은 AI Pydantic DTO와 Backend
+`AiAnalysisResponseValidator`를 모두 통과했다.
 
 ## 현재 검증 기준
 
@@ -136,14 +138,13 @@ ruff format --check: passed
 mypy app: passed
 ```
 
-외부 SDK deprecation warning 2건과 sandbox의 pytest cache 쓰기 warning 1건 외 테스트 실패는
-없다. 이 문서 최신화 작업에서는 Docker build와 실제 Gemini 호출을 다시 실행하지 않았다.
+외부 SDK deprecation warning 2건 외 테스트 실패는 없다. Docker build는 이번 P2 HTTP Smoke에서
+다시 실행하지 않았다.
 
 ## 아직 검증하지 않은 범위
 
 - Repository 2~5개의 정식 전체 파이프라인
 - 기본 질문 5개·문장 6개 출력
-- Backend P2 Example 기반 실제 Gemini HTTP 성공
 - 실제 Mapper·Validator·Report Service와 Fake LLMProvider를 연결한 HTTP 통합 테스트
 - Spring Boot HTTP E2E
 - P2 전역 snippet/token 예산과 수집 Warning 반영
