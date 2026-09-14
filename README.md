@@ -59,6 +59,17 @@ Schema가 표현하는 enum과 실제 분석 구현 범위는 다르다. 현재 
 `BACKEND × ENTRY × PORTFOLIO_ANALYSIS × P0/P1/P2`이며, 다른 직무와 경력 수준 분석은
 후속 범위이다.
 
+구조화된 기술명은 일반 README·manifest 문자열을 AI가 추측해서 만들지 않는다. Backend가
+`BACKEND_DERIVED × P0 × TECHNOLOGY_DETECTED × STRING` Evidence를 기술 하나당 하나씩 만들고,
+같은 Repository의 P0 `GITHUB_STATIC` `BUILD_MANIFEST` 또는 `CONTAINER_CONFIGURATION`을
+`sourceEvidenceRefs`로 연결해야 한다. AI는 이 계약을 검증한 뒤 alias 정규화·중복 제거를 거쳐
+`technology_names` allowlist를 만든다.
+
+생성 항목의 Evidence와 Criteria는 `analysisDepth`가 정확히 같고, Evidence의 `evidenceType`이
+Criterion의 `allowedEvidenceTypes`에 포함될 때만 호환된다. Prompt Context의
+`evidenceCriterionCompatibility`가 Evidence별 허용 Criteria key를 명시하며, 혼합 깊이 항목은
+참조한 각 Evidence에 대응하는 Criteria를 모두 포함해야 한다.
+
 ## 현재 개발 상태
 
 | 영역 | 상태 |
@@ -72,6 +83,10 @@ Schema가 표현하는 enum과 실제 분석 구현 범위는 다르다. 현재 
 | 실제 Gemini Smoke | 내부 P0/P1/P2 완주, Backend P1 Fixture와 실제 Assembler P2 Request 기반 HTTP 200 검증 |
 | Wire 연동 | Request/Error v1.0, Response v1.1 DTO·Mapper·Error 처리와 Report API 구현 |
 | P2 HTTP Smoke | P0 Evidence가 포함된 실제 Backend Assembler Request로 HTTP 200 및 양쪽 Validator 통과 |
+
+위 P2 성공 기록은 기술명 전용 Evidence 계약 도입 전 실행이다. 2026-09-14 기준 Backend
+`origin/main` `eda39f8`에는 `TECHNOLOGY_DETECTED` 생성이 없어, 새 계약을 포함한 실제 P2 Smoke는
+요청을 조작하지 않고 대기 중이다.
 
 Backend P2 Collector는 저장소당 최대 8개, snippet당 최대 40줄·4,000자, 원본 파일 최대
 80,000 byte 제한을 적용한다. 전체 요청 기준 snippet·token 예산과 P2 대상 저장소 제한은

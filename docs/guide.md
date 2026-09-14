@@ -177,6 +177,29 @@ P2 Evidence는 `value`에 snippet을 담고 `path`, `startLine`, `endLine`, `com
 `pullRequestNumber`, `sourceEvidenceRefs`를 사용한다. `contentHash`와 `language`는 현재 Wire
 필드가 아니다.
 
+기술명은 `BACKEND_DERIVED/P0/TECHNOLOGY_DETECTED/STRING` Evidence의 `value`에 하나씩 담는다.
+`derivedFromLevel=P0`이어야 하며, `sourceEvidenceRefs`는 같은 Repository의 기존 P0
+`GITHUB_STATIC` `BUILD_MANIFEST` 또는 `CONTAINER_CONFIGURATION`을 최소 하나 가리켜야 한다.
+Mapper는 이 구조화된 Evidence만 `InternalEvidence.technology_names`로 옮긴다. README나 manifest
+원문의 문자열은 자동 승격하지 않는다. Normalization은 이후 alias 정규화·중복 제거·Repository
+집계를 담당한다.
+
+Prompt Context의 `evidenceCriterionCompatibility`는 다음 교집합을 Evidence별로 미리 계산한다.
+
+```text
+compatible(evidence, criterion)
+= evidence.analysisDepth == criterion.analysisDepth
+  and evidence.evidenceType in criterion.allowedEvidenceTypes
+```
+
+Repository, Portfolio, Interview, Statement의 일반·교정 Prompt는 각 `evidence_ref`마다 호환되는
+`criterion_key`를 최소 하나 요구한다. 혼합 깊이 참조는 깊이별 Criteria를 함께 사용하며, 호환
+Criteria가 없으면 해당 Evidence를 인용하지 않는다.
+
+AI 경계 구현과 Fake Provider 회귀는 완료했지만, 2026-09-14 기준 Backend `origin/main`
+`eda39f8`에는 `TECHNOLOGY_DETECTED` 생성이 없다. 새 계약의 실제 Gemini P2 Smoke는 Backend
+커밋과 실제 Assembler Request가 제공될 때까지 실행하지 않는다.
+
 ### Response
 
 `schemaVersion="1.1"`을 사용한다.

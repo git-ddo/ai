@@ -102,6 +102,17 @@ AnalysisDepth: P0, P1, P2
 EvidenceType: GITHUB_STATIC, GITHUB_ACTIVITY, CODE_EVIDENCE, BACKEND_DERIVED
 ```
 
+기술명 allowlist는 `BACKEND_DERIVED × P0 × TECHNOLOGY_DETECTED × STRING` Evidence만 사용한다.
+`value`에는 기술 하나를 담고 `derivedFromLevel=P0`으로 설정하며, 같은 Repository의 기존 P0
+`GITHUB_STATIC` `BUILD_MANIFEST` 또는 `CONTAINER_CONFIGURATION`을 `sourceEvidenceRefs`로 최소
+하나 연결한다. README·UserClaim·Commit·자유 텍스트나 원본 manifest 정규식으로 기술명을
+승격하지 않는다.
+
+Evidence와 Criterion은 `analysisDepth`가 같고 Evidence의 `evidenceType`이 Criterion의
+`allowedEvidenceTypes`에 포함될 때만 호환된다. 모든 생성·교정 Prompt는
+`evidenceCriterionCompatibility`를 따르며, 혼합 깊이 Evidence를 참조하는 항목은 각 Evidence에
+호환되는 Criteria key를 포함해야 한다. 호환 Criteria가 없으면 인용하지 않는다.
+
 `requestedAnalysisDepth=P2`여도 모든 Repository가 P2인 것은 아니다. AI는 각 Repository의
 `completedEvidenceLevels`까지만 판단한다.
 
@@ -128,6 +139,9 @@ Response v1.1의 Finding에는 `confidence`와 `filePaths`가 있고, Coaching �
 
 P2 코드는 Backend가 선별한 제한된 snippet만 분석한다. 코드를 실행하거나 입력에 없는 기술,
 파일, 기능을 생성하지 않는다.
+
+기술명 계약 변경 후 실제 P2 Smoke는 `TECHNOLOGY_DETECTED`를 포함한 Backend Assembler Request만
+사용한다. 항목이 없으면 Request를 임의 수정하지 않고 Backend 커밋과 실제 JSON을 요청한다.
 
 ## 7. 보안과 Prompt 경계
 

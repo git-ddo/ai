@@ -129,10 +129,36 @@ Request는 FastAPI Request Mapper·입력 Validator·Report Service·GeminiProvi
 거쳐 Response v1.1을 반환했다. 응답은 AI Pydantic DTO와 Backend
 `AiAnalysisResponseValidator`를 모두 통과했다.
 
+### 구조화된 기술명 Smoke 선행 조건
+
+기술명 grounding 변경 이후의 P2 HTTP Smoke는 실제 Backend Assembler Request에 다음 Evidence가
+포함된 경우에만 실행한다.
+
+```text
+BACKEND_DERIVED / P0 / TECHNOLOGY_DETECTED / STRING
+derivedFromLevel=P0
+sourceEvidenceRefs -> P0 GITHUB_STATIC BUILD_MANIFEST 또는 CONTAINER_CONFIGURATION
+```
+
+해당 Evidence가 없는 기존 Request에 임의로 항목을 추가해 실제 Smoke로 보고하지 않는다. 먼저
+Backend Assembler가 기술 하나당 하나의 Evidence를 생성하고 Backend Request Validator를 통과한
+JSON을 확보해야 한다. 외부 Gemini 호출 전에는 같은 형태의 최소 Fixture로 Mapper → 입력
+Validator → Normalization → Fake Provider → 전체 정책 Validator → Response Mapper v1.1 경계를
+회귀 검증한다.
+
+2026-09-14에 Backend `origin/main` `eda39f8`과 제공된 실제 Request를 확인했으나
+`TECHNOLOGY_DETECTED` Evidence는 없었다. 따라서 새 계약 기준의 실제 Gemini HTTP 요청은 0회이며,
+Smoke와 Backend Response Validator 실행을 중단했다. 재개하려면 해당 Evidence 생성이 포함된
+Backend 커밋과 그 Assembler가 만든 P2 Request JSON이 필요하다. 기존 Request를 수정한 JSON은
+실제 Backend Request로 간주하지 않는다.
+
+동일 원격의 P2 Example은 `completedEvidenceLevels=[P0,P1,P2]`를 선언하면서 실제 Evidence는
+`[P1,P1,P2]`만 포함한다. 이 파일도 현재 상태로는 AI의 완료 깊이 prefix 검증을 통과하지 못한다.
+
 ## 현재 검증 기준
 
 ```text
-pytest: 1201 passed
+pytest: 1222 passed
 ruff check: passed
 ruff format --check: passed
 mypy app: passed

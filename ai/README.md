@@ -39,6 +39,8 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] 입력 Evidence·UserClaim 참조 그래프 Validator
 - [x] 요청 최대 깊이와 Repository별 완료 깊이 Validator
 - [x] Repository 결과의 Criteria·기술·파일 grounding 메타데이터
+- [x] Backend `TECHNOLOGY_DETECTED` Evidence 기반 기술 allowlist와 alias 정규화·중복 제거
+- [x] Evidence별 `evidenceCriterionCompatibility` Prompt Context와 혼합 깊이 Criteria 규칙
 - [x] P0/P1/P2 Repository 생성 결과 내용 정책 Validator
 - [x] Repository 분석 Service와 정책 실패 1회 재생성
 - [x] `PortfolioSynthesis` Structured Output과 최종 `PortfolioAnalysis` 조립 책임 분리
@@ -66,7 +68,7 @@ Spring Boot가 수집한 GitHub Evidence와 UserClaim을 해석해 근거가 연
 - [x] 실제 Backend Assembler P2 Request 기반 실제 Gemini HTTP 200 및 양쪽 Validator 통과
 - [ ] Backend HTTP Client와 실제 E2E
 
-현재 전체 테스트 기준은 1201개이다. Portfolio Report Wire API는 주입 Runtime으로 P0/P1/P2를
+현재 전체 테스트 기준은 1222개이다. Portfolio Report Wire API는 주입 Runtime으로 P0/P1/P2를
 검증했고, P1 및 실제 Backend Assembler P2 Request는 실제 GeminiProvider HTTP 호출까지
 성공했다. P2 응답은 AI Response v1.1 DTO와 Backend 응답 Validator를 모두 통과했다. Spring Boot
 HTTP E2E는 아직 수행하지 않았다.
@@ -324,12 +326,14 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 
 ## 현재 확인된 정합성 과제
 
-- Request Wire Mapper는 구조화된 기술명 입력이 없어 내부 `technology_names`를 빈 값으로 만든다.
-  기술명 allowlist를 만들 Backend Evidence 계약 또는 결정적 변환 규칙이 필요하다.
+- AI는 `BACKEND_DERIVED/P0/TECHNOLOGY_DETECTED/STRING`과 P0 build/container source 계약을
+  검증해 내부 `technology_names`를 만든다. 실제 Backend Assembler도 같은 Evidence를 생성해야
+  기술명을 포함한 Gemini HTTP Smoke를 수행할 수 있다.
 - `collectionWarnings`는 내부 입력·최종 Wire limitation으로 이어지지 않는다. Warning을 사용자에게
   보존할 Limitation Code와 매핑 정책이 필요하다.
-- 현재 Route 테스트는 가짜 Report Service를 사용한다. 실제 Mapper·Validator·Report Service와
-  Fake LLMProvider를 연결한 HTTP 통합 테스트가 추가로 필요하다.
+- 최소 P2 Fixture는 Mapper·입력 Validator·Normalization·Fake Provider·전체 정책 Validator·
+  Response Mapper v1.1 경계를 연결한다. FastAPI Route까지 같은 실제 Service를 주입하는 HTTP
+  통합 테스트는 별도 과제이다.
 - 요청 본문 크기와 민감 데이터 로그 제한은 아직 확정하지 않았다.
 
 ## 다음 작업
@@ -340,6 +344,10 @@ Schema·Example과 Pydantic 모델의 호환 테스트를 추가한다.
 connect 5초, read 600초, 최대 3회 호출, 재시도 간격 2초이다. AI 전체 deadline도 600초이므로
 배포 전 Backend read timeout에 네트워크·직렬화 여유를 추가해야 한다. 상세 순서는
 [`docs/guide.md`](../docs/guide.md)의 Phase 10을 따른다.
+
+단, 위 성공 기록은 기술명 전용 Evidence 계약 도입 전 Request 기준이다. 2026-09-14 Backend
+`origin/main` `eda39f8`에는 `TECHNOLOGY_DETECTED` 생성이 없어 새 계약 기반 실제 Gemini P2
+Smoke는 실행하지 않았다. 먼저 Backend 변경과 실제 Assembler Request를 확보해야 한다.
 
 ```text
 입력 참조·깊이 검증

@@ -242,6 +242,33 @@ Evidence 타입은 다음과 같다.
 | `CODE_EVIDENCE` | P2 | Backend가 선별한 코드·테스트 snippet |
 | `BACKEND_DERIVED` | P0+ | Backend가 명시적 규칙으로 도출한 사실 |
 
+기술명 grounding은 다음 전용 계약만 허용한다.
+
+```text
+evidenceType = BACKEND_DERIVED
+analysisDepth = P0
+factKey = TECHNOLOGY_DETECTED
+valueType = STRING
+value = 기술명 하나
+derivedFromLevel = P0
+sourceEvidenceRefs = 같은 Repository의 P0 BUILD_MANIFEST 또는 CONTAINER_CONFIGURATION
+```
+
+README, UserClaim, Commit 메시지, 임의 자유 텍스트 또는 원본 manifest 정규식 추출로 기술명을
+승격하지 않는다. AI Mapper는 전용 계약과 확인 가능한 source 관계를 검사하고, 공통 Reference
+Validator는 source의 존재·같은 Repository·Snapshot 범위를 검사한다. 그 뒤 Normalization이
+alias 정규화, 대소문자 기준 중복 제거와 Repository 단위 집계를 수행한다.
+
+Evidence–Criteria 호환 조건은 두 가지를 모두 만족해야 한다.
+
+1. `Evidence.analysisDepth == Criterion.analysisDepth`
+2. `Evidence.evidenceType in Criterion.allowedEvidenceTypes`
+
+Prompt Context는 이 결과를 `evidenceCriterionCompatibility: {evidenceId: [criterionKey...]}`로
+제공한다. 생성 항목이 여러 깊이·유형의 Evidence를 참조하면 각 Evidence에 호환되는 Criteria
+key를 하나 이상 포함해야 한다. 호환 Criteria가 없는 Evidence는 인용하지 않으며 최대 깊이만으로
+Criteria를 고르지 않는다. 기존 정책 Validator도 같은 조건을 계속 강제한다.
+
 현재 request의 UserClaim 필드는 다음과 같다.
 
 ```text
@@ -266,6 +293,13 @@ Claim의 `relatedEvidenceRefs`는 주장과 공개 근거의 연결 후보이다
 
 Backend Assembler는 ID를 전역 순번으로 생성하지만, 입력 참조의 전역 유일성·Repository 범위와
 `sourceEvidenceRefs` 무결성은 Backend Validator에서 아직 전부 강제하지 않는다.
+
+2026-09-14 기준 Backend `origin/main` `eda39f8`의 Assembler는 아직
+`TECHNOLOGY_DETECTED`를 생성하지 않는다. 기술명 계약을 포함한 실제 P2 Smoke에는 이 기능이
+반영된 Backend 커밋과 그 커밋의 Assembler가 만든 Request JSON이 필요하다.
+또한 같은 원격의 P2 Example은 `completedEvidenceLevels=[P0,P1,P2]`이지만 실제 Evidence 깊이가
+`[P1,P1,P2]`여서 P0 prefix 정합성이 깨져 있다. 로컬 보정 커밋을 원격 변경과 합칠 때 이 예시도
+다시 수정해야 한다.
 
 ## 9. 현재 Response 계약
 
