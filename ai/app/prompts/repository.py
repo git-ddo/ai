@@ -7,6 +7,7 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    build_evidence_criterion_rules,
     build_repository_data,
     build_user_claim_rules,
     render_section,
@@ -24,6 +25,7 @@ BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의
 - 강점 해석은 INTERPRETATION으로 만들고 Evidence 또는 UserClaim을 참조한다.
 - 개선 제안은 RECOMMENDATION으로 만들고 Evidence와 우선순위를 포함한다.
 - 모든 분석 항목은 실제 적용한 Criteria key를 criterion_keys에 하나 이상 반환한다.
+{evidence_criterion_rules}
 - content에서 기술을 언급하면 같은 기술명을 technology_names에 반환한다.
 - content에서 파일 경로를 언급하면 같은 Repository 상대 경로를 file_paths에 반환한다.
 - technology_names는 입력 Repository의 technology_names에서만 선택한다.
@@ -92,7 +94,7 @@ def build_repository_prompt(
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data(build_repository_data(context)),
+                serialize_untrusted_data(build_repository_data(context, criteria)),
             ),
             render_section(TASK_SECTION, task),
         )
@@ -124,7 +126,7 @@ def build_repository_correction_prompt(
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data(build_repository_data(context)),
+                serialize_untrusted_data(build_repository_data(context, criteria)),
             ),
             render_section(TASK_SECTION, task),
         )
@@ -145,5 +147,6 @@ def _build_repository_task(
         analysis_depth=context.analysis_depth.value,
         completed_levels=",".join(level.value for level in context.completed_evidence_levels),
         user_claim_rules=build_user_claim_rules(criteria),
+        evidence_criterion_rules=build_evidence_criterion_rules(),
         depth_rules="\n".join(depth_rules),
     )

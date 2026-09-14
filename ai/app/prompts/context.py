@@ -70,7 +70,44 @@ def render_section(name: str, content: str) -> str:
     return f"[{name}_BEGIN]\n{content}\n[{name}_END]"
 
 
-def build_repository_data(context: NormalizedRepositoryContext) -> dict[str, object]:
+def build_evidence_criterion_compatibility(
+    context: NormalizedRepositoryContext,
+    criteria: CriteriaSet,
+) -> dict[str, tuple[str, ...]]:
+    """Map every Evidence id to exactly depth-and-type-compatible Criteria keys."""
+
+    return {
+        evidence.evidence_id: tuple(
+            criterion.key
+            for criterion in criteria.criteria
+            if criterion.analysis_depth is evidence.analysis_depth
+            and evidence.evidence_type in criterion.allowed_evidence_types
+        )
+        for evidence in context.evidence
+    }
+
+
+def build_evidence_criterion_rules() -> str:
+    """Describe the same compatibility rule enforced by report validation."""
+
+    return "\n".join(
+        (
+            "- 각 evidence_ref는 evidenceCriterionCompatibility에서 실제 적용한 "
+            "criterion_key를 하나 이상 가져야 한다.",
+            "- Evidence와 Criterion은 analysisDepth가 정확히 같고 Evidence의 "
+            "evidenceType이 Criterion의 allowedEvidenceTypes에 포함될 때만 호환된다.",
+            "- 여러 깊이 또는 유형의 Evidence를 함께 참조하면 각 Evidence마다 호환되는 "
+            "Criterion key를 criterion_keys에 포함한다.",
+            "- 호환되는 Criterion이 없는 Evidence는 인용하지 않는다.",
+            "- 최대 분석 깊이만 보고 Criterion을 선택하지 않는다.",
+        )
+    )
+
+
+def build_repository_data(
+    context: NormalizedRepositoryContext,
+    criteria: CriteriaSet,
+) -> dict[str, object]:
     """Keep repository metadata, depth-scoped evidence, and user claims separate."""
 
     evidence_by_depth = {
@@ -92,6 +129,10 @@ def build_repository_data(context: NormalizedRepositoryContext) -> dict[str, obj
             "technology_names": context.technology_names,
         },
         "evidence_by_depth": evidence_by_depth,
+        "evidenceCriterionCompatibility": build_evidence_criterion_compatibility(
+            context,
+            criteria,
+        ),
         "user_claims": context.user_claims,
     }
 

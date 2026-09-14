@@ -8,6 +8,7 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    build_evidence_criterion_rules,
     build_repository_data,
     build_user_claim_rules,
     render_section,
@@ -27,6 +28,7 @@ InterviewQuestion을 생성한다.
 - confidence는 HIGH, MEDIUM, LOW, NOT_VERIFIABLE 중 하나를 사용한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - Evidence 기반 질문은 evidence_refs를 포함한다.
+{evidence_criterion_rules}
 {user_claim_rules}
 - 입력에 없는 기술, 파일, 기능과 구현 경험을 질문의 전제로 사용하지 않는다.
 - P1의 Commit 수나 변경량을 개인 기여도 또는 실력 질문으로 변환하지 않는다.
@@ -135,7 +137,7 @@ def _render_interview_prompt(
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data(build_repository_data(context)),
+                serialize_untrusted_data(build_repository_data(context, criteria)),
             ),
             render_section(
                 PRIOR_ANALYSIS_SECTION,
@@ -162,5 +164,6 @@ def _build_interview_task(
         question_count=question_count,
         completed_levels=",".join(level.value for level in context.completed_evidence_levels),
         user_claim_rules=build_user_claim_rules(criteria),
+        evidence_criterion_rules=build_evidence_criterion_rules(),
         depth_rules="\n".join(depth_rules),
     )

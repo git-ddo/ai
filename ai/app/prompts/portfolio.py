@@ -8,6 +8,7 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    build_evidence_criterion_rules,
     build_repository_data,
     render_section,
     serialize_criteria,
@@ -36,6 +37,7 @@ PortfolioSynthesis를 생성한다.
   claim_refs는 항상 빈 배열로 반환한다.
 - 위 필드의 문장에 UserClaim 내용을 복사하거나 객관적 사실처럼 사용하지 않는다.
 - strengths, gaps, next_actions, job_appeal은 공개 Evidence를 최소 하나 참조한다.
+{evidence_criterion_rules}
 - UserClaim은 후속 PortfolioStatement와 InterviewQuestion 생성 단계에서만 사용한다.
 - 누락을 기반으로 gaps 또는 next_actions을 생성하려면 명시적인
   BACKEND_DERIVED Evidence를 참조한다.
@@ -79,6 +81,7 @@ def build_portfolio_prompt(
     )
     task = _PORTFOLIO_TASK_TEMPLATE.format(
         analysis_depth=maximum_depth.value,
+        evidence_criterion_rules=build_evidence_criterion_rules(),
     )
     return _render_portfolio_prompt(
         ordered_contexts,
@@ -107,6 +110,7 @@ def build_portfolio_correction_prompt(
     )
     base_task = _PORTFOLIO_TASK_TEMPLATE.format(
         analysis_depth=maximum_depth.value,
+        evidence_criterion_rules=build_evidence_criterion_rules(),
     )
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=base_task,
@@ -147,7 +151,7 @@ def _render_portfolio_prompt(
     criteria: CriteriaSet,
     task: str,
 ) -> str:
-    repository_data = [build_repository_data(context) for context in ordered_contexts]
+    repository_data = [build_repository_data(context, criteria) for context in ordered_contexts]
 
     return "\n\n".join(
         (

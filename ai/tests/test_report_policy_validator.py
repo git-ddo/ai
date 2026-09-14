@@ -724,6 +724,39 @@ def test_repository_content_validator_accepts_grounded_p2_snippet_result() -> No
     validate_content(analysis, context)
 
 
+def test_repository_content_validator_accepts_mixed_p0_p2_with_criteria_for_each_depth() -> None:
+    context = make_depth_context(AnalysisDepth.P2)
+    analysis = make_analysis(
+        summary=make_item(
+            content="README와 제공된 snippet 범위의 입력 검증 근거가 관찰됩니다.",
+            evidence_refs=("ev_001", "ev_003"),
+            claim_refs=(),
+            criterion_keys=("README_READINESS", "SNIPPET_SCOPE"),
+        )
+    )
+
+    validate_content(analysis, context)
+
+
+def test_repository_content_validator_rejects_mixed_p0_p2_missing_p0_criterion() -> None:
+    context = make_depth_context(AnalysisDepth.P2)
+    analysis = make_analysis(
+        summary=make_item(
+            content="README와 제공된 snippet 범위의 입력 검증 근거가 관찰됩니다.",
+            evidence_refs=("ev_001", "ev_003"),
+            claim_refs=(),
+            criterion_keys=("SNIPPET_SCOPE",),
+        )
+    )
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        validate_content(analysis, context)
+
+    assert PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH in {
+        violation.code for violation in exc_info.value.violations
+    }
+
+
 def test_repository_content_validator_rejects_unknown_criterion() -> None:
     context = make_depth_context(AnalysisDepth.P0)
     analysis = make_analysis(

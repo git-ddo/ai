@@ -13,6 +13,7 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    build_evidence_criterion_rules,
     build_repository_data,
     build_user_claim_rules,
     render_section,
@@ -38,6 +39,7 @@ PortfolioStatement를 최대 {statement_count}개 생성한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - 각 문장은 evidence_refs 또는 claim_refs 중 최소 하나를 포함한다.
 - 각 문장은 입력에 존재하는 criterion_keys만 사용한다.
+{evidence_criterion_rules}
 - Repository별 completedEvidenceLevels까지만 사용하고 완료되지 않은 깊이로 판단하지 않는다.
 - 여러 Repository를 참조하는 문장은 가장 얕은 Repository 분석 깊이를 상한으로 사용한다.
 - 입력에 없는 기술, 파일 경로, 기능 또는 구현 경험을 생성하지 않는다.
@@ -93,6 +95,7 @@ def build_statement_prompt(
         analysis_depth=maximum_depth.value,
         statement_count=statement_count,
         user_claim_rules=build_user_claim_rules(criteria),
+        evidence_criterion_rules=build_evidence_criterion_rules(),
     )
     return _render_statement_prompt(
         context_items,
@@ -129,6 +132,7 @@ def build_statement_correction_prompt(
         analysis_depth=maximum_depth.value,
         statement_count=statement_count,
         user_claim_rules=build_user_claim_rules(criteria),
+        evidence_criterion_rules=build_evidence_criterion_rules(),
     )
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=base_task,
@@ -206,7 +210,7 @@ def _render_statement_prompt(
     criteria: CriteriaSet,
     task: str,
 ) -> str:
-    repository_data = [build_repository_data(context) for context in contexts]
+    repository_data = [build_repository_data(context, criteria) for context in contexts]
     prior_analysis = {
         "repository_analyses": repository_analyses,
         "portfolio_synthesis": synthesis,

@@ -37,6 +37,7 @@ from app.prompts.context import (
     PRIOR_ANALYSIS_SECTION,
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
+    build_evidence_criterion_compatibility,
     serialize_untrusted_data,
 )
 from app.validators import PolicyViolationCode
@@ -384,8 +385,104 @@ def test_repository_data_is_json_and_separates_evidence_and_claims(
     assert parsed["user_claims"][0]["claim_id"] == "claim_001"
     assert parsed["evidence_by_depth"]["P0"][0]["source_paths"] == ["build.gradle"]
     assert parsed["evidence_by_depth"]["P0"][0]["technology_names"] == ["Spring Boot"]
+    assert parsed["evidenceCriterionCompatibility"]["ev_001"]
     assert "statement" not in parsed["evidence_by_depth"]["P0"][0]
     assert "evidence_type" not in parsed["user_claims"][0]
+
+
+def test_evidence_criterion_compatibility_is_exact_by_depth_and_type() -> None:
+    criteria = CriteriaLoader().load("BACKEND", "P2")
+    context = make_context(analysis_depth=AnalysisDepth.P2)
+
+    compatibility = build_evidence_criterion_compatibility(context, criteria)
+
+    assert compatibility == {
+        evidence.evidence_id: tuple(
+            criterion.key
+            for criterion in criteria.criteria
+            if criterion.analysis_depth is evidence.analysis_depth
+            and evidence.evidence_type in criterion.allowed_evidence_types
+        )
+        for evidence in context.evidence
+    }
+    assert compatibility["ev_001"] == (
+        "README_READINESS",
+        "TECH_STACK_EVIDENCE",
+        "TEST_PRESENCE",
+        "DOCKER_CONFIGURATION",
+        "GITHUB_ACTIONS_CONFIGURATION",
+    )
+    assert compatibility["ev_101"] == (
+        "ACTIVITY_SCOPE",
+        "CLAIM_ACTIVITY_LINK",
+        "CHANGE_AREA_OBSERVATION",
+    )
+    assert compatibility["ev_201"] == (
+        "SNIPPET_SCOPE",
+        "INPUT_VALIDATION_OBSERVATION",
+        "ERROR_HANDLING_OBSERVATION",
+        "RESPONSIBILITY_OBSERVATION",
+        "TEST_CASE_OBSERVATION",
+    )
+
+
+def test_backend_derived_compatibility_is_calculated_for_each_depth() -> None:
+    criteria = CriteriaLoader().load("BACKEND", "P2")
+    context = make_context(analysis_depth=AnalysisDepth.P2)
+    derived = tuple(
+        InternalEvidence(
+            evidence_id=f"ev_{index:03d}",
+            repository_full_name=context.repository_full_name,
+            evidence_type=InternalEvidenceType.BACKEND_DERIVED,
+            analysis_depth=depth,
+            key="DERIVED_FACT",
+            summary="Backend가 구조화한 사실입니다.",
+            derived_from_level=depth,
+        )
+        for index, depth in enumerate(AnalysisDepth, start=301)
+    )
+    context_with_derived = context.model_copy(update={"evidence": (*context.evidence, *derived)})
+
+    compatibility = build_evidence_criterion_compatibility(
+        context_with_derived,
+        criteria,
+    )
+
+    for evidence in derived:
+        assert compatibility[evidence.evidence_id] == tuple(
+            criterion.key
+            for criterion in criteria.criteria
+            if criterion.analysis_depth is evidence.analysis_depth
+        )
+
+
+def test_all_normal_and_correction_tasks_require_evidence_criterion_compatibility() -> None:
+    criteria = CriteriaLoader().load("BACKEND", "P0")
+    context = make_context()
+    analysis = make_analysis()
+    synthesis = make_synthesis((context,))
+    violation_codes = (PolicyViolationCode.CRITERIA_EVIDENCE_MISMATCH,)
+    prompts = (
+        build_repository_prompt(context, criteria),
+        build_repository_correction_prompt(context, criteria, violation_codes),
+        build_portfolio_prompt((context,), (analysis,), criteria),
+        build_portfolio_correction_prompt((context,), (analysis,), criteria, violation_codes),
+        build_interview_prompt(context, analysis, criteria),
+        build_interview_correction_prompt(context, analysis, criteria, violation_codes),
+        build_statement_prompt((context,), (analysis,), synthesis, criteria),
+        build_statement_correction_prompt(
+            (context,), (analysis,), synthesis, criteria, violation_codes
+        ),
+    )
+
+    for prompt in prompts:
+        task = extract_section(prompt, TASK_SECTION)
+        assert "evidenceCriterionCompatibility" in task
+        assert "analysisDepth가 정확히 같고" in task
+        assert "allowedEvidenceTypes" in task
+        assert "여러 깊이 또는 유형의 Evidence" in task
+        assert "호환되는 Criterion이 없는 Evidence는 인용하지 않는다" in task
+        assert "최대 분석 깊이만 보고 Criterion을 선택하지 않는다" in task
 
 
 def test_prompt_uses_json_not_python_repr_and_preserves_korean(criteria: CriteriaSet) -> None:
