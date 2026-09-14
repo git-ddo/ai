@@ -26,6 +26,7 @@ from app.domain import (
 from app.mappers import RequestWireMapper
 from app.schemas.common import AnalysisDepth as WireAnalysisDepth
 from app.schemas.request import PortfolioReportRequest
+from app.services import NormalizationService
 from app.validators import AnalysisDepthValidator, EvidenceReferenceValidator
 
 BACKEND_CONTRACT_COMMIT = "9d9fc7caf36150bc090c7a5b9bad62ce33743fc3"
@@ -115,6 +116,52 @@ def add_second_repository(data: dict[str, Any]) -> None:
             evidence_id_map.get(reference, reference) for reference in claim["relatedEvidenceRefs"]
         ]
     data["repositories"].append(second)
+
+
+def add_technology_evidence(
+    data: dict[str, Any],
+    *,
+    evidence_id: str = "ev_900",
+    value: str = "SpringBoot",
+    source_evidence_id: str = "ev_001",
+) -> dict[str, Any]:
+    repository = data["repositories"][0]
+    source = next(
+        evidence
+        for evidence in repository["evidence"]
+        if evidence["evidenceId"] == source_evidence_id
+    )
+    source.update(
+        {
+            "evidenceType": "GITHUB_STATIC",
+            "analysisDepth": "P0",
+            "factKey": "BUILD_MANIFEST",
+            "valueType": "STRING",
+            "value": "Backend build manifest",
+            "path": "build.gradle",
+            "startLine": None,
+            "endLine": None,
+            "sourceEvidenceRefs": [],
+            "derivedFromLevel": None,
+        }
+    )
+    technology = deepcopy(source)
+    technology.update(
+        {
+            "evidenceId": evidence_id,
+            "evidenceType": "BACKEND_DERIVED",
+            "analysisDepth": "P0",
+            "factKey": "TECHNOLOGY_DETECTED",
+            "valueType": "STRING",
+            "value": value,
+            "path": None,
+            "commitSha": None,
+            "sourceEvidenceRefs": [source_evidence_id],
+            "derivedFromLevel": "P0",
+        }
+    )
+    repository["evidence"].append(technology)
+    return technology
 
 
 @pytest.mark.parametrize("depth", list(WireAnalysisDepth))
@@ -212,6 +259,125 @@ def test_maps_evidence_content_path_and_internal_defaults_without_inference() ->
     assert evidence.path == "build.gradle"
     assert evidence.source_paths == ("build.gradle",)
     assert evidence.technology_names == ()
+
+
+def test_does_not_promote_technology_names_from_readme_text() -> None:
+    data = load_example()
+    data["repositories"][0]["evidence"][0]["value"] = "Spring Boot, MySQL, Redis"
+
+    evidence = map_data(data).repositories[0].evidence[0]
+
+    assert evidence.key == "README"
+    assert evidence.technology_names == ()
+
+
+def test_maps_only_backend_derived_technology_evidence_to_technology_names() -> None:
+    data = load_example()
+    add_technology_evidence(data)
+
+    result = map_data(data)
+    EvidenceReferenceValidator().validate(result)
+    AnalysisDepthValidator().validate(result)
+
+    technology = result.repositories[0].evidence[-1]
+    assert technology.key == "TECHNOLOGY_DETECTED"
+    assert technology.technology_names == ("SpringBoot",)
+
+
+def test_normalizes_aliases_deduplicates_and_aggregates_derived_technologies() -> None:
+    data = load_example()
+    add_technology_evidence(data, evidence_id="ev_900", value="SpringBoot")
+    add_technology_evidence(data, evidence_id="ev_901", value="spring-boot")
+    add_technology_evidence(data, evidence_id="ev_902", value="mysql")
+    add_technology_evidence(data, evidence_id="ev_903", value="Redis")
+
+    repository = map_data(data).repositories[0]
+    context = NormalizationService().normalize(repository)
+
+    assert context.technology_names == ("MySQL", "Redis", "Spring Boot")
+    assert context.evidence[-1].technology_names == ("Redis",)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("evidenceType", "GITHUB_STATIC"),
+        ("analysisDepth", "P1"),
+        ("valueType", "INTEGER"),
+        ("derivedFromLevel", "P1"),
+        ("value", "   "),
+        ("sourceEvidenceRefs", []),
+    ],
+)
+def test_rejects_invalid_technology_evidence_contract(field: str, value: object) -> None:
+    data = load_example(WireAnalysisDepth.P1)
+    technology = add_technology_evidence(data)
+    technology[field] = value
+
+    with pytest.raises(RequestMappingError, match="Technology Evidence contract mismatch"):
+        map_data(data)
+
+
+@pytest.mark.parametrize(
+    ("evidence_type", "analysis_depth", "fact_key"),
+    [
+        ("GITHUB_STATIC", "P0", "README"),
+        ("GITHUB_ACTIVITY", "P1", "COMMIT_SUMMARY"),
+        ("CODE_EVIDENCE", "P2", "CODE_SNIPPET"),
+        ("BACKEND_DERIVED", "P0", "BUILD_MANIFEST"),
+    ],
+)
+def test_rejects_invalid_technology_source_contract(
+    evidence_type: str,
+    analysis_depth: str,
+    fact_key: str,
+) -> None:
+    requested_depth = WireAnalysisDepth.P2 if analysis_depth == "P2" else WireAnalysisDepth.P1
+    data = load_example(requested_depth)
+    add_technology_evidence(data)
+    source = data["repositories"][0]["evidence"][0]
+    source.update(
+        {
+            "evidenceType": evidence_type,
+            "analysisDepth": analysis_depth,
+            "factKey": fact_key,
+            "derivedFromLevel": "P0" if evidence_type == "BACKEND_DERIVED" else None,
+        }
+    )
+    if evidence_type == "CODE_EVIDENCE":
+        source.update(
+            {
+                "path": "src/App.java",
+                "startLine": 1,
+                "endLine": 1,
+                "commitSha": "abc123",
+                "sourceEvidenceRefs": ["ev_002"],
+            }
+        )
+
+    with pytest.raises(RequestMappingError, match="Technology Evidence source contract mismatch"):
+        map_data(data)
+
+
+def test_shared_reference_validator_rejects_unknown_technology_source() -> None:
+    data = load_example()
+    technology = add_technology_evidence(data)
+    technology["sourceEvidenceRefs"] = ["ev_999"]
+    result = map_data(data)
+
+    with pytest.raises(ValueError, match="UNKNOWN_SOURCE_EVIDENCE_REF"):
+        EvidenceReferenceValidator().validate(result)
+
+
+def test_shared_reference_validator_rejects_cross_repository_technology_source() -> None:
+    data = load_example()
+    technology = add_technology_evidence(data)
+    add_second_repository(data)
+    technology["sourceEvidenceRefs"] = ["ev_101"]
+    result = map_data(data)
+
+    with pytest.raises(ValueError, match="CROSS_REPOSITORY_REF"):
+        EvidenceReferenceValidator().validate(result)
 
 
 def test_evidence_without_path_has_no_source_paths() -> None:

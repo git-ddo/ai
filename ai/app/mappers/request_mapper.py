@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from pathlib import PurePosixPath
 
 from pydantic import ValidationError
@@ -50,6 +51,8 @@ _DEPTH_RANK = {
 }
 _P1_FILE_LIST_FACT_KEYS = frozenset({"CHANGED_FILES", "PULL_REQUEST"})
 _P1_FILE_LIST_MARKER = "files:"
+_TECHNOLOGY_FACT_KEY = "TECHNOLOGY_DETECTED"
+_TECHNOLOGY_SOURCE_FACT_KEYS = frozenset({"BUILD_MANIFEST", "CONTAINER_CONFIGURATION"})
 
 
 class RequestWireMapper:
@@ -95,8 +98,15 @@ class RequestWireMapper:
             requested_depth,
             repository_index,
         )
+        evidence_by_id = {item.evidence_id: item for item in repository.evidence}
         evidence = tuple(
-            self._map_evidence(repository, item, repository_index, evidence_index)
+            self._map_evidence(
+                repository,
+                item,
+                evidence_by_id,
+                repository_index,
+                evidence_index,
+            )
             for evidence_index, item in enumerate(repository.evidence)
         )
         claims = tuple(
@@ -151,6 +161,7 @@ class RequestWireMapper:
         self,
         repository: RepositoryInput,
         evidence: Evidence,
+        evidence_by_id: Mapping[str, Evidence],
         repository_index: int,
         evidence_index: int,
     ) -> InternalEvidence:
@@ -168,7 +179,11 @@ class RequestWireMapper:
                 summary=evidence.value,
                 value_type=InternalEvidenceValueType(evidence.value_type.value),
                 source_paths=source_paths,
-                technology_names=(),
+                technology_names=self._map_technology_names(
+                    evidence,
+                    evidence_by_id,
+                    evidence_path,
+                ),
                 path=evidence.path,
                 start_line=evidence.start_line,
                 end_line=evidence.end_line,
@@ -221,6 +236,42 @@ class RequestWireMapper:
                 raise RequestMappingError(
                     f"Evidence ownership mismatch at {evidence_path}.{field_name}."
                 )
+
+    @staticmethod
+    def _map_technology_names(
+        evidence: Evidence,
+        evidence_by_id: Mapping[str, Evidence],
+        evidence_path: str,
+    ) -> tuple[str, ...]:
+        if evidence.fact_key != _TECHNOLOGY_FACT_KEY:
+            return ()
+
+        if (
+            evidence.evidence_type is not RequestEvidenceType.BACKEND_DERIVED
+            or evidence.analysis_depth is not WireAnalysisDepth.P0
+            or evidence.value_type.value != "STRING"
+            or evidence.derived_from_level is not WireAnalysisDepth.P0
+            or not evidence.value.strip()
+            or not evidence.source_evidence_refs
+        ):
+            raise RequestMappingError(f"Technology Evidence contract mismatch at {evidence_path}.")
+
+        for source_evidence_id in evidence.source_evidence_refs:
+            source = evidence_by_id.get(source_evidence_id)
+            # Unknown and cross-repository references are rejected by the shared
+            # EvidenceReferenceValidator before normalization and provider calls.
+            if source is None:
+                continue
+            if (
+                source.evidence_type is not RequestEvidenceType.GITHUB_STATIC
+                or source.analysis_depth is not WireAnalysisDepth.P0
+                or source.fact_key not in _TECHNOLOGY_SOURCE_FACT_KEYS
+            ):
+                raise RequestMappingError(
+                    f"Technology Evidence source contract mismatch at {evidence_path}."
+                )
+
+        return (evidence.value,)
 
     @staticmethod
     def _map_claim(
