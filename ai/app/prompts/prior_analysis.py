@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from pydantic import BaseModel, ConfigDict
 
 from app.domain import (
-    AnalysisItemType,
     EvidenceConfidence,
     PortfolioSynthesis,
     RecommendationPriority,
@@ -20,7 +19,6 @@ class _PriorAnalysisDTO(BaseModel):
 
 
 class PriorGroundedAnalysisDTO(_PriorAnalysisDTO):
-    item_type: AnalysisItemType
     content: str
     confidence: EvidenceConfidence
     evidence_refs: tuple[str, ...]

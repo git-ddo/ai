@@ -26,10 +26,13 @@ _REPOSITORY_TASK_TEMPLATE = """
 BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의 RepositoryAnalysis를 생성한다.
 이 Repository에서 완료된 Evidence 깊이는 {completed_levels}이며 이 범위를 넘어 판단하지 않는다.
 
-- Repository 요약은 INTERPRETATION으로 만들고 Evidence 또는 UserClaim을 참조한다.
-- 관찰 항목은 OBSERVATION으로 만들고 Evidence를 참조한다.
-- 강점 해석은 INTERPRETATION으로 만들고 Evidence 또는 UserClaim을 참조한다.
-- 개선 제안은 RECOMMENDATION으로 만들고 Evidence와 우선순위를 포함한다.
+- Repository 요약은 Evidence 또는 UserClaim을 참조한다.
+- 관찰 항목은 Evidence를 참조한다.
+- 강점 해석은 Evidence 또는 UserClaim을 참조한다.
+- 개선 제안은 Evidence와 우선순위를 포함한다.
+- item_type은 생성하거나 반환하지 않는다. 서비스가 결과 필드 위치에 따라 summary와
+  strengths에는 INTERPRETATION, observations에는 OBSERVATION,
+  recommendations에는 RECOMMENDATION을 주입한다.
 - 모든 분석 항목은 실제 인용 범위를 허용하는 criterion_context_refs를 하나 이상 반환한다.
 {evidence_criterion_rules}
 - content에서 기술을 언급하면 같은 기술명을 technology_names에 반환한다.

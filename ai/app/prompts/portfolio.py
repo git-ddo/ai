@@ -35,9 +35,9 @@ PortfolioSynthesis를 생성한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - overall_summary, representative_projects, strengths, gaps, next_actions, job_appeal,
   limitations만 생성한다.
-- overall_summary, strengths, gaps의 item_type은 INTERPRETATION으로 생성한다.
-- next_actions의 item_type은 RECOMMENDATION으로 생성한다.
-- job_appeal의 item_type은 JOB_APPEAL로 생성한다.
+- item_type은 생성하거나 반환하지 않는다. 서비스가 결과 필드 위치에 따라
+  overall_summary, strengths, gaps에는 INTERPRETATION, next_actions에는 RECOMMENDATION,
+  job_appeal에는 JOB_APPEAL을 주입한다.
 - job_appeal은 단일 객체로 생성한다.
 - 대표 프로젝트는 제공된 Repository 중에서만 선택하고, 해당 Repository의
   공개 Evidence만 참조한다.

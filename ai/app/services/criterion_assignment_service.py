@@ -5,6 +5,7 @@ from typing import Protocol
 
 from app.core.exceptions import ReportPolicyError
 from app.domain import (
+    AnalysisItemType,
     GroundedAnalysisDraft,
     GroundedAnalysisItem,
     InterviewQuestion,
@@ -31,7 +32,7 @@ class _ContextGroundedDraft(Protocol):
 
 
 class CriterionAssignmentService:
-    """Validate Criterion Context references and inject their owned Criterion keys."""
+    """Validate Criterion Context references and inject service-owned roles and keys."""
 
     def assign_repository(
         self,
@@ -41,17 +42,37 @@ class CriterionAssignmentService:
         context_items = self._validate_contexts(contexts)
         return RepositoryAnalysis(
             repository_full_name=draft.repository_full_name,
-            summary=self._analysis_item(draft.summary, context_items, "summary"),
+            summary=self._analysis_item(
+                draft.summary,
+                context_items,
+                "summary",
+                AnalysisItemType.INTERPRETATION,
+            ),
             observations=tuple(
-                self._analysis_item(item, context_items, f"observations[{index}]")
+                self._analysis_item(
+                    item,
+                    context_items,
+                    f"observations[{index}]",
+                    AnalysisItemType.OBSERVATION,
+                )
                 for index, item in enumerate(draft.observations)
             ),
             strengths=tuple(
-                self._analysis_item(item, context_items, f"strengths[{index}]")
+                self._analysis_item(
+                    item,
+                    context_items,
+                    f"strengths[{index}]",
+                    AnalysisItemType.INTERPRETATION,
+                )
                 for index, item in enumerate(draft.strengths)
             ),
             recommendations=tuple(
-                self._analysis_item(item, context_items, f"recommendations[{index}]")
+                self._analysis_item(
+                    item,
+                    context_items,
+                    f"recommendations[{index}]",
+                    AnalysisItemType.RECOMMENDATION,
+                )
                 for index, item in enumerate(draft.recommendations)
             ),
             limitations=draft.limitations,
@@ -68,24 +89,41 @@ class CriterionAssignmentService:
                 draft.overall_summary,
                 context_items,
                 "overall_summary",
+                AnalysisItemType.INTERPRETATION,
             ),
             representative_projects=draft.representative_projects,
             strengths=tuple(
-                self._analysis_item(item, context_items, f"strengths[{index}]")
+                self._analysis_item(
+                    item,
+                    context_items,
+                    f"strengths[{index}]",
+                    AnalysisItemType.INTERPRETATION,
+                )
                 for index, item in enumerate(draft.strengths)
             ),
             gaps=tuple(
-                self._analysis_item(item, context_items, f"gaps[{index}]")
+                self._analysis_item(
+                    item,
+                    context_items,
+                    f"gaps[{index}]",
+                    AnalysisItemType.INTERPRETATION,
+                )
                 for index, item in enumerate(draft.gaps)
             ),
             next_actions=tuple(
-                self._analysis_item(item, context_items, f"next_actions[{index}]")
+                self._analysis_item(
+                    item,
+                    context_items,
+                    f"next_actions[{index}]",
+                    AnalysisItemType.RECOMMENDATION,
+                )
                 for index, item in enumerate(draft.next_actions)
             ),
             job_appeal=self._analysis_item(
                 draft.job_appeal,
                 context_items,
                 "job_appeal",
+                AnalysisItemType.JOB_APPEAL,
             ),
             limitations=draft.limitations,
         )
@@ -121,10 +159,12 @@ class CriterionAssignmentService:
         draft: GroundedAnalysisDraft,
         contexts: tuple[CriterionEvidenceContext, ...],
         field_path: str,
+        item_type: AnalysisItemType,
     ) -> GroundedAnalysisItem:
         criterion_keys = self._criterion_keys(draft, contexts, field_path)
         return GroundedAnalysisItem(
             **draft.model_dump(exclude={"criterion_context_refs", "criterion_keys"}),
+            item_type=item_type,
             criterion_keys=criterion_keys,
         )
 
