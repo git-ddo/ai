@@ -1,5 +1,7 @@
+import pytest
+
 from app.criteria import CriteriaLoader
-from app.domain import AnalysisDepth, CodeObservationType
+from app.domain import AnalysisDepth, CodeObservationType, InternalEvidenceType
 from app.services import CriterionContextService, CriterionEvidenceContext
 from tests.test_repository_service import make_context
 
@@ -63,3 +65,80 @@ def test_exposes_claims_only_to_claim_compatible_context() -> None:
         repository.user_claims[0].claim_id,
     )
     assert by_key["ACTIVITY_SCOPE"].eligible_claim_refs == ()
+
+
+@pytest.mark.parametrize(
+    ("depth", "evidence_index", "fact_key", "evidence_type", "expected_criterion"),
+    [
+        (
+            AnalysisDepth.P0,
+            0,
+            "README_SECTIONS_OBSERVED",
+            InternalEvidenceType.GITHUB_STATIC,
+            "README_READINESS",
+        ),
+        (
+            AnalysisDepth.P0,
+            0,
+            "TEST_FILES_OBSERVED",
+            InternalEvidenceType.GITHUB_STATIC,
+            "TEST_PRESENCE",
+        ),
+        (
+            AnalysisDepth.P0,
+            0,
+            "DOCKER_COMPOSE_OBSERVED",
+            InternalEvidenceType.GITHUB_STATIC,
+            "DOCKER_CONFIGURATION",
+        ),
+        (
+            AnalysisDepth.P0,
+            0,
+            "GITHUB_ACTIONS_NOT_OBSERVED",
+            InternalEvidenceType.BACKEND_DERIVED,
+            "GITHUB_ACTIONS_CONFIGURATION",
+        ),
+        (
+            AnalysisDepth.P0,
+            0,
+            "GITHUB_ACTIONS_WORKFLOW_OBSERVED",
+            InternalEvidenceType.GITHUB_STATIC,
+            "GITHUB_ACTIONS_CONFIGURATION",
+        ),
+        (
+            AnalysisDepth.P1,
+            1,
+            "COMMIT_ACTIVITY_OBSERVED",
+            InternalEvidenceType.GITHUB_ACTIVITY,
+            "ACTIVITY_SCOPE",
+        ),
+    ],
+)
+def test_narrows_actual_backend_fact_keys_to_one_criterion(
+    depth: AnalysisDepth,
+    evidence_index: int,
+    fact_key: str,
+    evidence_type: InternalEvidenceType,
+    expected_criterion: str,
+) -> None:
+    repository = make_context(depth)
+    target = repository.evidence[evidence_index].model_copy(
+        update={
+            "key": fact_key,
+            "evidence_type": evidence_type,
+        }
+    )
+    evidence = list(repository.evidence)
+    evidence[evidence_index] = target
+    repository = repository.model_copy(update={"evidence": tuple(evidence)})
+
+    contexts = CriterionContextService().build(
+        (repository,), CriteriaLoader().load("BACKEND", depth.value)
+    )
+    matched_criteria = {
+        context.criterion_key
+        for context in contexts
+        if target.evidence_id in context.eligible_evidence_refs
+    }
+
+    assert matched_criteria == {expected_criterion}
