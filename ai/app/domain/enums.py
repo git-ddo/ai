@@ -18,6 +18,16 @@ class AnalysisDepth(StrEnum):
     P2 = "P2"
 
 
+class CodeObservationType(StrEnum):
+    """Deterministic code aspects observed while normalizing P2 evidence."""
+
+    SNIPPET_SCOPE = "SNIPPET_SCOPE"
+    INPUT_VALIDATION = "INPUT_VALIDATION"
+    ERROR_HANDLING = "ERROR_HANDLING"
+    RESPONSIBILITY = "RESPONSIBILITY"
+    TEST_CASE = "TEST_CASE"
+
+
 class EvidenceValueType(StrEnum):
     """Semantic type of an evidence value supplied by the backend."""
 

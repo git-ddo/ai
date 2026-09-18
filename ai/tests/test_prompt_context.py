@@ -37,7 +37,6 @@ from app.prompts.context import (
     PRIOR_ANALYSIS_SECTION,
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
-    build_evidence_criterion_compatibility,
     serialize_untrusted_data,
 )
 from app.validators import PolicyViolationCode
@@ -271,6 +270,14 @@ def assert_single_structural_section(prompt: str, section: str) -> None:
     assert prompt.count(f"[{section}_END]") == 1
 
 
+def contains_mapping_key(value: object, target: str) -> bool:
+    if isinstance(value, dict):
+        return target in value or any(contains_mapping_key(item, target) for item in value.values())
+    if isinstance(value, list):
+        return any(contains_mapping_key(item, target) for item in value)
+    return False
+
+
 @pytest.mark.parametrize("marker", RESERVED_SECTION_MARKERS)
 def test_untrusted_serialization_escapes_every_reserved_marker(marker: str) -> None:
     serialized = serialize_untrusted_data({"value": marker})
@@ -278,6 +285,46 @@ def test_untrusted_serialization_escapes_every_reserved_marker(marker: str) -> N
     assert marker not in serialized
     assert escape_marker(marker) in serialized
     assert json.loads(serialized) == {"value": marker}
+
+
+def test_downstream_prior_analysis_never_exposes_service_owned_fields(
+    criteria: CriteriaSet,
+) -> None:
+    context = make_context()
+    analysis = make_analysis()
+    synthesis = make_synthesis((context,))
+    violation_codes = (PolicyViolationCode.UNKNOWN_EVIDENCE_REF,)
+    prompts = (
+        build_portfolio_prompt((context,), (analysis,), criteria),
+        build_portfolio_correction_prompt(
+            (context,),
+            (analysis,),
+            criteria,
+            violation_codes,
+        ),
+        build_interview_prompt(context, analysis, criteria),
+        build_interview_correction_prompt(
+            context,
+            analysis,
+            criteria,
+            violation_codes,
+        ),
+        build_statement_prompt((context,), (analysis,), synthesis, criteria),
+        build_statement_correction_prompt(
+            (context,),
+            (analysis,),
+            synthesis,
+            criteria,
+            violation_codes,
+        ),
+    )
+
+    assert analysis.summary.criterion_keys
+    assert synthesis.overall_summary.criterion_keys
+    for prompt in prompts:
+        prior_data = json.loads(extract_section(prompt, PRIOR_ANALYSIS_SECTION))
+        assert not contains_mapping_key(prior_data, "criterion_keys")
+        assert not contains_mapping_key(prior_data, "item_type")
 
 
 def test_untrusted_serialization_preserves_ordinary_brackets() -> None:
@@ -385,78 +432,13 @@ def test_repository_data_is_json_and_separates_evidence_and_claims(
     assert parsed["user_claims"][0]["claim_id"] == "claim_001"
     assert parsed["evidence_by_depth"]["P0"][0]["source_paths"] == ["build.gradle"]
     assert parsed["evidence_by_depth"]["P0"][0]["technology_names"] == ["Spring Boot"]
-    assert parsed["evidenceCriterionCompatibility"]["ev_001"]
+    assert parsed["criterionContexts"][0]["context_id"].startswith("ctx_")
+    assert "ev_001" in parsed["criterionContexts"][0]["eligible_evidence_refs"]
     assert "statement" not in parsed["evidence_by_depth"]["P0"][0]
     assert "evidence_type" not in parsed["user_claims"][0]
 
 
-def test_evidence_criterion_compatibility_is_exact_by_depth_and_type() -> None:
-    criteria = CriteriaLoader().load("BACKEND", "P2")
-    context = make_context(analysis_depth=AnalysisDepth.P2)
-
-    compatibility = build_evidence_criterion_compatibility(context, criteria)
-
-    assert compatibility == {
-        evidence.evidence_id: tuple(
-            criterion.key
-            for criterion in criteria.criteria
-            if criterion.analysis_depth is evidence.analysis_depth
-            and evidence.evidence_type in criterion.allowed_evidence_types
-        )
-        for evidence in context.evidence
-    }
-    assert compatibility["ev_001"] == (
-        "README_READINESS",
-        "TECH_STACK_EVIDENCE",
-        "TEST_PRESENCE",
-        "DOCKER_CONFIGURATION",
-        "GITHUB_ACTIONS_CONFIGURATION",
-    )
-    assert compatibility["ev_101"] == (
-        "ACTIVITY_SCOPE",
-        "CLAIM_ACTIVITY_LINK",
-        "CHANGE_AREA_OBSERVATION",
-    )
-    assert compatibility["ev_201"] == (
-        "SNIPPET_SCOPE",
-        "INPUT_VALIDATION_OBSERVATION",
-        "ERROR_HANDLING_OBSERVATION",
-        "RESPONSIBILITY_OBSERVATION",
-        "TEST_CASE_OBSERVATION",
-    )
-
-
-def test_backend_derived_compatibility_is_calculated_for_each_depth() -> None:
-    criteria = CriteriaLoader().load("BACKEND", "P2")
-    context = make_context(analysis_depth=AnalysisDepth.P2)
-    derived = tuple(
-        InternalEvidence(
-            evidence_id=f"ev_{index:03d}",
-            repository_full_name=context.repository_full_name,
-            evidence_type=InternalEvidenceType.BACKEND_DERIVED,
-            analysis_depth=depth,
-            key="DERIVED_FACT",
-            summary="Backend가 구조화한 사실입니다.",
-            derived_from_level=depth,
-        )
-        for index, depth in enumerate(AnalysisDepth, start=301)
-    )
-    context_with_derived = context.model_copy(update={"evidence": (*context.evidence, *derived)})
-
-    compatibility = build_evidence_criterion_compatibility(
-        context_with_derived,
-        criteria,
-    )
-
-    for evidence in derived:
-        assert compatibility[evidence.evidence_id] == tuple(
-            criterion.key
-            for criterion in criteria.criteria
-            if criterion.analysis_depth is evidence.analysis_depth
-        )
-
-
-def test_all_normal_and_correction_tasks_require_evidence_criterion_compatibility() -> None:
+def test_all_normal_and_correction_tasks_require_criterion_context_refs() -> None:
     criteria = CriteriaLoader().load("BACKEND", "P0")
     context = make_context()
     analysis = make_analysis()
@@ -477,12 +459,12 @@ def test_all_normal_and_correction_tasks_require_evidence_criterion_compatibilit
 
     for prompt in prompts:
         task = extract_section(prompt, TASK_SECTION)
-        assert "evidenceCriterionCompatibility" in task
-        assert "analysisDepth가 정확히 같고" in task
-        assert "allowedEvidenceTypes" in task
-        assert "여러 깊이 또는 유형의 Evidence" in task
-        assert "호환되는 Criterion이 없는 Evidence는 인용하지 않는다" in task
-        assert "최대 분석 깊이만 보고 Criterion을 선택하지 않는다" in task
+        assert "criterionContexts" in task
+        assert "criterion_context_refs" in task
+        assert "criterionKey를 생성하거나 수정하지 않는다" in task
+        assert "실제 인용한 Evidence 또는" in task
+        assert "허용된 Criterion Context가 없는 Evidence" in task
+        assert "analysisDepth와 evidenceType만으로" in task
 
 
 def test_prompt_uses_json_not_python_repr_and_preserves_korean(criteria: CriteriaSet) -> None:
@@ -601,7 +583,7 @@ def test_repository_task_contains_p0_grounding_and_forbidden_rules(
         "점수",
         "개인 기여율",
         "합격 가능성",
-        "criterion_keys",
+        "criterion_context_refs",
         "technology_names",
         "file_paths",
         "입력 Repository의 technology_names에서만 선택",
@@ -610,6 +592,12 @@ def test_repository_task_contains_p0_grounding_and_forbidden_rules(
         "RepositoryAnalysis Structured Output Schema",
     ):
         assert required in task
+
+    assert "item_type은 생성하거나 반환하지 않는다" in task
+    assert "summary와" in task
+    assert "strengths에는 INTERPRETATION" in task
+    assert "observations에는 OBSERVATION" in task
+    assert "recommendations에는 RECOMMENDATION" in task
 
 
 def test_repository_data_separates_p0_p1_p2_evidence_and_preserves_metadata() -> None:
@@ -825,9 +813,10 @@ def test_portfolio_task_contains_grounding_rules(criteria: CriteriaSet) -> None:
     ):
         assert field_name in task
 
-    assert "overall_summary, strengths, gaps의 item_type은 INTERPRETATION" in task
-    assert "next_actions의 item_type은 RECOMMENDATION" in task
-    assert "job_appeal의 item_type은 JOB_APPEAL" in task
+    assert "item_type은 생성하거나 반환하지 않는다" in task
+    assert "overall_summary, strengths, gaps에는 INTERPRETATION" in task
+    assert "next_actions에는 RECOMMENDATION" in task
+    assert "job_appeal에는 JOB_APPEAL" in task
 
     assert "PortfolioAnalysis Structured Output Schema" not in task
 
@@ -855,7 +844,7 @@ def test_portfolio_task_forbids_all_synthesis_claim_refs(
     assert "claim_refs는 항상 빈 배열" in task
     assert "PortfolioSynthesis는 공개 Evidence만" in task
     assert "UserClaim은 후속 PortfolioStatement와 InterviewQuestion 생성 단계에서만" in task
-    assert "allow_user_claims=true인 Criteria에만" not in task
+    assert "allow_user_claims=true인 Criterion Context에서만" not in task
 
 
 def test_portfolio_correction_keeps_synthesis_claim_refs_forbidden() -> None:
@@ -978,6 +967,7 @@ def test_portfolio_correction_prompt_does_not_accept_previous_synthesis() -> Non
         "repository_analyses",
         "criteria",
         "violation_codes",
+        "criterion_contexts",
     )
 
 
@@ -1156,7 +1146,7 @@ def test_interview_prompt_contains_depth_specific_rules(
     assert "Commit, PR과 변경 경로" in task
     assert "개인 기여도 또는 실력 질문으로 변환하지 않는다" in task
     assert "relatedEvidenceRefs가 비어 있어도" in task
-    assert "allow_user_claims=true인 Criteria에만" in task
+    assert "allow_user_claims=true인 Criterion Context에서만" in task
     assert "CLAIM_ACTIVITY_LINK" in task
     assert "검증된 GitHub 사실처럼 표현하지 않는다" in task
     if analysis_depth is AnalysisDepth.P2:
@@ -1205,9 +1195,9 @@ def test_all_p1_task_prompts_limit_claims_to_enabled_criteria() -> None:
 
     for prompt in claim_enabled_prompts:
         task = extract_section(prompt, TASK_SECTION)
-        assert "allow_user_claims=true인 Criteria에만" in task
+        assert "allow_user_claims=true인 Criterion Context에서만" in task
         assert "CLAIM_ACTIVITY_LINK" in task
-        assert "허용 Criteria key와 claim_refs를 함께 포함" in task
+        assert "claim_refs를 허용하는 criterion_context_refs" in task
 
     portfolio_task = extract_section(
         build_portfolio_prompt((context,), (analysis,), criteria),
@@ -1215,7 +1205,7 @@ def test_all_p1_task_prompts_limit_claims_to_enabled_criteria() -> None:
     )
     assert "PortfolioSynthesis는 공개 Evidence만" in portfolio_task
     assert "claim_refs는 항상 빈 배열" in portfolio_task
-    assert "allow_user_claims=true인 Criteria에만" not in portfolio_task
+    assert "allow_user_claims=true인 Criterion Context에서만" not in portfolio_task
 
 
 def test_interview_prompt_rejects_criteria_depth_mismatch() -> None:
@@ -1304,6 +1294,7 @@ def test_interview_correction_prompt_excludes_previous_output_and_violation_deta
         "criteria",
         "violation_codes",
         "question_count",
+        "criterion_contexts",
     )
 
 
@@ -1594,6 +1585,7 @@ def test_statement_correction_prompt_does_not_accept_previous_output() -> None:
         "criteria",
         "violation_codes",
         "statement_count",
+        "criterion_contexts",
     )
 
 

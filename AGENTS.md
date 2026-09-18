@@ -108,10 +108,24 @@ EvidenceType: GITHUB_STATIC, GITHUB_ACTIVITY, CODE_EVIDENCE, BACKEND_DERIVED
 하나 연결한다. README·UserClaim·Commit·자유 텍스트나 원본 manifest 정규식으로 기술명을
 승격하지 않는다.
 
-Evidence와 Criterion은 `analysisDepth`가 같고 Evidence의 `evidenceType`이 Criterion의
-`allowedEvidenceTypes`에 포함될 때만 호환된다. 모든 생성·교정 Prompt는
-`evidenceCriterionCompatibility`를 따르며, 혼합 깊이 Evidence를 참조하는 항목은 각 Evidence에
-호환되는 Criteria key를 포함해야 한다. 호환 Criteria가 없으면 인용하지 않는다.
+### Evidence–Criterion 매핑 원칙
+
+Evidence–Criterion 호환성은 결정적(deterministic)인 계약 규칙이므로 Prompt 준수에 의존하지
+않고 서비스 코드가 보장한다. 서비스는 LLM에 Criterion별로 허용된 Evidence 범위를 제공하고,
+LLM은 그 범위 안에서 Evidence의 의미를 해석해 분석 결과와 설명을 생성한다.
+
+P2에서는 하나의 `CODE_EVIDENCE`가 복수 Criterion과 의미적으로 연관될 수 있으므로
+`analysisDepth + evidenceType`만으로 Criterion을 단일 결정하지 않는다. 수집·정규화 단계에서
+`factKey`와 코드 관찰 유형을 구조화해 Criterion 후보군을 좁힌다.
+
+서비스는 이를 바탕으로 Criterion별 호환 Evidence Context를 구성하고 최종 분석 항목의
+`criterionKey`를 관리·주입한다. LLM은 `criterionKey`를 직접 선택하거나 생성하지 않으며, 주어진
+Criterion과 Evidence 범위 안에서 의미적 관련성을 판단하고 분석 내용을 생성한다. 관련성이 없으면
+해당 Criterion의 분석 항목을 생성하지 않을 수 있다.
+
+Validator는 정상 경로에서 매핑을 수행하는 수단이 아니라 최종 계약 위반을 탐지하는 방어선으로
+유지한다. Validator가 불일치를 발견했을 때 Evidence 참조나 Criterion을 임의로 변경하지 않으며,
+제한된 교정 절차를 거친 뒤에도 해결되지 않으면 명시적인 실패로 처리한다.
 
 `requestedAnalysisDepth=P2`여도 모든 Repository가 P2인 것은 아니다. AI는 각 Repository의
 `completedEvidenceLevels`까지만 판단한다.

@@ -24,6 +24,7 @@ from app.mappers import RequestWireMapper, ResponseWireMapper
 from app.schemas.request import PortfolioReportRequest
 from app.services import NormalizationService, PortfolioReportService
 from app.validators import AnalysisDepthValidator, EvidenceReferenceValidator
+from tests.provider_drafts import project_provider_result
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "technology-grounded-p2-request.json"
 MIXED_EVIDENCE_REFS = ("ev_003", "ev_005", "ev_006")
@@ -54,9 +55,10 @@ class SequencedFakeProvider:
             )
         )
         output = self._outputs.pop(0)
-        assert isinstance(output, response_model)
+        provider_output = project_provider_result(output, response_model, user_prompt)
+        assert isinstance(provider_output, response_model)
         return StructuredGeneration(
-            value=output,
+            value=provider_output,
             metadata=GenerationMetadata(duration_ms=1, attempt_count=1),
         )
 
@@ -168,11 +170,11 @@ async def test_technology_grounding_crosses_the_complete_fake_provider_boundary(
     assert response.used_evidence_levels == ["P0", "P1", "P2"]
     assert len(provider.calls) == 4
     for call in provider.calls:
-        assert "evidenceCriterionCompatibility" in call.user_prompt
+        assert "criterionContexts" in call.user_prompt
+        assert "evidenceCriterionCompatibility" not in call.user_prompt
         repository_data = call.user_prompt.split("[UNTRUSTED_REPOSITORY_DATA_BEGIN]\n", 1)[1].split(
             "\n[UNTRUSTED_REPOSITORY_DATA_END]", 1
         )[0]
         parsed_repository_data = json.loads(repository_data)
-        if "repositories" in parsed_repository_data:
-            parsed_repository_data = parsed_repository_data["repositories"][0]
-        assert "ev_003" in parsed_repository_data["evidenceCriterionCompatibility"]
+        criterion_contexts = parsed_repository_data["criterionContexts"]
+        assert any("ev_003" in context["eligible_evidence_refs"] for context in criterion_contexts)

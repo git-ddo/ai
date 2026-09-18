@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from app.criteria.models import CriteriaSet
 from app.domain import AnalysisDepth, NormalizedRepositoryContext
@@ -16,21 +19,27 @@ from app.prompts.context import (
 )
 from app.validators.report_validator import PolicyViolationCode
 
+if TYPE_CHECKING:
+    from app.services import CriterionEvidenceContext
+
 _REPOSITORY_TASK_TEMPLATE = """
 BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의 RepositoryAnalysis를 생성한다.
 이 Repository에서 완료된 Evidence 깊이는 {completed_levels}이며 이 범위를 넘어 판단하지 않는다.
 
-- Repository 요약은 INTERPRETATION으로 만들고 Evidence 또는 UserClaim을 참조한다.
-- 관찰 항목은 OBSERVATION으로 만들고 Evidence를 참조한다.
-- 강점 해석은 INTERPRETATION으로 만들고 Evidence 또는 UserClaim을 참조한다.
-- 개선 제안은 RECOMMENDATION으로 만들고 Evidence와 우선순위를 포함한다.
-- 모든 분석 항목은 실제 적용한 Criteria key를 criterion_keys에 하나 이상 반환한다.
+- Repository 요약은 Evidence 또는 UserClaim을 참조한다.
+- 관찰 항목은 Evidence를 참조한다.
+- 강점 해석은 Evidence 또는 UserClaim을 참조한다.
+- 개선 제안은 Evidence와 우선순위를 포함한다.
+- item_type은 생성하거나 반환하지 않는다. 서비스가 결과 필드 위치에 따라 summary와
+  strengths에는 INTERPRETATION, observations에는 OBSERVATION,
+  recommendations에는 RECOMMENDATION을 주입한다.
+- 모든 분석 항목은 실제 인용 범위를 허용하는 criterion_context_refs를 하나 이상 반환한다.
 {evidence_criterion_rules}
 - content에서 기술을 언급하면 같은 기술명을 technology_names에 반환한다.
 - content에서 파일 경로를 언급하면 같은 Repository 상대 경로를 file_paths에 반환한다.
 - technology_names는 입력 Repository의 technology_names에서만 선택한다.
 - file_paths는 입력 Evidence의 path 또는 source_paths에서만 선택한다.
-- 입력에 없는 Criteria key, 기술명 또는 파일 경로를 생성하지 않는다.
+- 입력에 없는 Criterion Context, 기술명 또는 파일 경로를 생성하지 않는다.
 - 공개 근거에서 포트폴리오로 설명 가능한 범위와 실제 분석 깊이의 한계를 제시한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 {user_claim_rules}
@@ -79,6 +88,8 @@ _CORRECTION_TASK_TEMPLATE = """
 def build_repository_prompt(
     context: NormalizedRepositoryContext,
     criteria: CriteriaSet,
+    *,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build the user prompt for one depth-scoped repository analysis."""
 
@@ -94,7 +105,9 @@ def build_repository_prompt(
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data(build_repository_data(context, criteria)),
+                serialize_untrusted_data(
+                    build_repository_data(context, criteria, criterion_contexts)
+                ),
             ),
             render_section(TASK_SECTION, task),
         )
@@ -105,6 +118,8 @@ def build_repository_correction_prompt(
     context: NormalizedRepositoryContext,
     criteria: CriteriaSet,
     violation_codes: Sequence[PolicyViolationCode],
+    *,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build a full-regeneration prompt using only stable policy codes."""
 
@@ -126,7 +141,9 @@ def build_repository_correction_prompt(
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data(build_repository_data(context, criteria)),
+                serialize_untrusted_data(
+                    build_repository_data(context, criteria, criterion_contexts)
+                ),
             ),
             render_section(TASK_SECTION, task),
         )
