@@ -6,6 +6,7 @@ from app.domain import (
     AnalysisDepth,
     NormalizedRepositoryContext,
     PortfolioStatementBatch,
+    PortfolioStatementBatchDraft,
     PortfolioSynthesis,
     RepositoryAnalysis,
 )
@@ -15,6 +16,8 @@ from app.prompts import (
     build_statement_prompt,
     build_system_prompt,
 )
+from app.services.criterion_assignment_service import CriterionAssignmentService
+from app.services.criterion_context_service import CriterionContextService
 from app.validators import PortfolioStatementPolicyValidator
 
 _DEPTH_RANK = {
@@ -32,10 +35,16 @@ class PortfolioStatementService:
         llm_provider: LLMProvider,
         criteria_loader: CriteriaLoader | None = None,
         policy_validator: PortfolioStatementPolicyValidator | None = None,
+        criterion_context_service: CriterionContextService | None = None,
+        criterion_assignment_service: CriterionAssignmentService | None = None,
     ) -> None:
         self._llm_provider = llm_provider
         self._criteria_loader = criteria_loader or CriteriaLoader()
         self._policy_validator = policy_validator or PortfolioStatementPolicyValidator()
+        self._criterion_context_service = criterion_context_service or CriterionContextService()
+        self._criterion_assignment_service = (
+            criterion_assignment_service or CriterionAssignmentService()
+        )
 
     async def generate(
         self,
@@ -59,6 +68,7 @@ class PortfolioStatementService:
             raise PortfolioStatementGenerationError(
                 "Loaded criteria depth does not match the portfolio maximum depth."
             )
+        criterion_contexts = self._criterion_context_service.build(context_items, criteria)
 
         system_prompt = build_system_prompt()
         initial_prompt = build_statement_prompt(
@@ -67,15 +77,20 @@ class PortfolioStatementService:
             synthesis,
             criteria,
             statement_count=statement_count,
+            criterion_contexts=criterion_contexts,
         )
         initial_generation = await self._llm_provider.generate_structured(
             system_prompt=system_prompt,
             user_prompt=initial_prompt,
-            response_model=PortfolioStatementBatch,
+            response_model=PortfolioStatementBatchDraft,
         )
 
         try:
-            self._validate_generation(initial_generation.value, context_items, criteria)
+            batch = self._criterion_assignment_service.assign_statements(
+                initial_generation.value,
+                criterion_contexts,
+            )
+            self._validate_generation(batch, context_items, criteria)
         except ReportPolicyError as policy_error:
             correction_prompt = build_statement_correction_prompt(
                 context_items,
@@ -84,22 +99,27 @@ class PortfolioStatementService:
                 criteria,
                 tuple(violation.code for violation in policy_error.violations),
                 statement_count=statement_count,
+                criterion_contexts=criterion_contexts,
             )
             corrected_generation = await self._llm_provider.generate_structured(
                 system_prompt=system_prompt,
                 user_prompt=correction_prompt,
-                response_model=PortfolioStatementBatch,
+                response_model=PortfolioStatementBatchDraft,
             )
-            self._validate_generation(corrected_generation.value, context_items, criteria)
+            corrected_batch = self._criterion_assignment_service.assign_statements(
+                corrected_generation.value,
+                criterion_contexts,
+            )
+            self._validate_generation(corrected_batch, context_items, criteria)
             return StructuredGeneration(
-                value=corrected_generation.value,
+                value=corrected_batch,
                 metadata=_combine_metadata(
                     initial_generation.metadata,
                     corrected_generation.metadata,
                 ),
             )
 
-        return initial_generation
+        return StructuredGeneration(value=batch, metadata=initial_generation.metadata)
 
     def _validate_generation(
         self,

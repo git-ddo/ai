@@ -20,6 +20,7 @@ from app.domain import (
     InternalUserClaim,
     NormalizedRepositoryContext,
     PortfolioSynthesis,
+    PortfolioSynthesisDraft,
     RepositoryAnalysis,
     RepresentativeProject,
     SnapshotHashAlgorithm,
@@ -185,7 +186,7 @@ def make_synthesis(
             content="공개 근거에서 포트폴리오 설명 요소가 관찰됩니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=(first_evidence,),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
         representative_projects=representatives
         or tuple(
@@ -204,7 +205,7 @@ def make_synthesis(
             content="공개 Evidence를 직무 관련 설명에 활용할 수 있습니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=tuple(context.evidence[0].evidence_id for context in context_items),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
         limitations=("공개 근거 범위만 분석했습니다.",),
     )
@@ -240,7 +241,7 @@ async def test_synthesizes_portfolio_at_each_supported_depth(depth: AnalysisDept
     assert result.metadata == GenerationMetadata(duration_ms=12, attempt_count=2)
     assert provider.call_count == 1
     call = provider.calls[0]
-    assert call.response_model is PortfolioSynthesis
+    assert call.response_model is PortfolioSynthesisDraft
     assert call.system_prompt != call.user_prompt
     assert "공개 GitHub" in call.system_prompt
     assert f"최대 {depth.value}" in call.user_prompt
@@ -389,7 +390,7 @@ async def test_regenerates_once_after_reference_policy_failure() -> None:
             content="근거가 연결된 요약입니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=("ev_999",),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
     )
     corrected = make_synthesis((context,))
@@ -496,7 +497,7 @@ async def test_raises_after_repeated_portfolio_claim_reference_violation() -> No
                 content="민감한 첫 응답 문장",
                 confidence=EvidenceConfidence.HIGH,
                 evidence_refs=("ev_011",),
-                criterion_keys=("README_READINESS",),
+                criterion_keys=("TECH_STACK_EVIDENCE",),
                 technology_names=("Redis",),
             ),
             "UNKNOWN_TECHNOLOGY",
@@ -507,7 +508,7 @@ async def test_raises_after_repeated_portfolio_claim_reference_violation() -> No
                 content="프로젝트 전체 코드 품질이 우수합니다.",
                 confidence=EvidenceConfidence.HIGH,
                 evidence_refs=("ev_011",),
-                criterion_keys=("README_READINESS",),
+                criterion_keys=("TECH_STACK_EVIDENCE",),
             ),
             "P0_SCOPE_VIOLATION",
         ),
@@ -543,7 +544,7 @@ async def test_regenerates_after_grounding_or_content_policy_failure(
 
 
 @pytest.mark.asyncio
-async def test_regenerates_after_missing_gap_lacks_derived_evidence() -> None:
+async def test_regenerates_after_gap_uses_unavailable_criterion_context() -> None:
     context = make_context()
     missing_gap = GroundedAnalysisItem(
         item_type=AnalysisItemType.INTERPRETATION,
@@ -564,7 +565,7 @@ async def test_regenerates_after_missing_gap_lacks_derived_evidence() -> None:
         (make_analysis(context),),
     )
 
-    assert "MISSING_DERIVED_EVIDENCE" in provider.calls[1].user_prompt
+    assert "UNKNOWN_CRITERION_CONTEXT" in provider.calls[1].user_prompt
 
 
 @pytest.mark.asyncio
@@ -575,7 +576,7 @@ async def test_raises_second_policy_error_without_third_generation() -> None:
         content="근거가 연결된 요약입니다.",
         confidence=EvidenceConfidence.HIGH,
         evidence_refs=("ev_999",),
-        criterion_keys=("README_READINESS",),
+        criterion_keys=("TECH_STACK_EVIDENCE",),
     )
     invalid = make_synthesis((context,), overall_summary=invalid_item)
     provider = SequencedProvider([generation(invalid), generation(invalid)])

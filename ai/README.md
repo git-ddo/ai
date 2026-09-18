@@ -118,8 +118,9 @@ Spring Boot
 FastAPI
   request/의미 검증
   → Repository별 깊이 선택
-  → Criteria + Prompt Context
-  → Gemini Structured Output
+  → Criteria + Criterion별 Evidence Context
+  → Gemini Structured Draft (`criterion_context_refs`)
+  → Context 범위 검증 + 서비스 `criterion_keys` 주입
   → 참조/깊이/내용 정책 검증
         ↓
 Spring Boot
@@ -154,9 +155,12 @@ Repository Context의 기술·경로 allowlist를 최종 대조하고, P0/P1/P2 
 보수적인 고정 패턴 기반이며 모든 표현을 완전히 판별하지는 못한다.
 
 `RepositoryAnalysisService`는 정규화된 Repository Context에 맞는 누적 Criteria와 Prompt를
-선택하고 `LLMProvider`를 통해 `RepositoryAnalysis`를 생성한다. 참조 검증 후 내용 정책을
-검증하며 최초 정책 실패에 한해서만 위반 코드 기반 교정 Prompt로 전체 결과를 한 번
-재생성한다. Provider 네트워크 retry와 이 정책 재생성은 서로 다른 책임이다.
+선택하고 `LLMProvider`를 통해 `RepositoryAnalysisDraft`를 생성한다. Draft Schema에는
+`criterion_keys`가 없고 `criterion_context_refs`만 있다. `CriterionAssignmentService`가 선택된
+Context가 모든 Evidence·Claim 참조를 허용하는지 검사한 뒤 최종 `RepositoryAnalysis`에 key를
+주입한다. 알 수 없는 Context, 범위 밖 Evidence·Claim, 실제 인용에 쓰이지 않은 Context는 각각
+고정 정책 위반 코드로 거절한다. 최초 정책 실패에 한해서만 위반 코드 기반 교정 Prompt로 전체
+결과를 한 번 재생성한다. Provider 네트워크 retry와 이 정책 재생성은 서로 다른 책임이다.
 
 `PortfolioPolicyValidator`는 전체 요약·strengths·gaps·nextActions·jobAppeal에 한해 여러
 Repository 근거 참조를 허용한다. 대표 Repository의 reason과 참조는 해당 Repository로

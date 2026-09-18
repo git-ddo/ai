@@ -546,7 +546,7 @@ AnalysisDepth: P0, P1, P2
 | 영역 | 현재 상태 |
 | --- | --- |
 | Backend `origin/main` | BACKEND 중심 P0/P1/P2 수집, Mock·HTTP AI Client, 응답 검증과 Job 저장 |
-| AI 입력 계층 | P0/P1/P2 내부 Evidence·Criteria·System Prompt·정규화·Prompt Context와 입력 Validator 구현 |
+| AI 입력 계층 | P0/P1/P2 내부 Evidence·Criteria·정규화, Criterion Context, Draft Context 참조와 서비스 key 주입 구현 |
 | AI 분석 계층 | Repository·Portfolio·Interview·Statement 생성, 정책 재생성과 최종 `PortfolioAnalysis` 조립 구현 |
 | AI 전체 오케스트레이션 | Report Service, 600초 deadline과 generation metadata 집계 구현 |
 | AI Wire API | Request/Error v1.0·Response v1.1 DTO/Mapper, Error 처리와 `POST /internal/v1/portfolio-reports` 구현 |

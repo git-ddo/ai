@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from app.criteria.models import CriteriaSet
 from app.domain import (
@@ -13,6 +16,8 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    _resolve_criterion_contexts,
+    build_criterion_context_data,
     build_evidence_criterion_rules,
     build_repository_data,
     build_user_claim_rules,
@@ -21,6 +26,9 @@ from app.prompts.context import (
     serialize_untrusted_data,
 )
 from app.validators.report_validator import PolicyViolationCode
+
+if TYPE_CHECKING:
+    from app.services import CriterionEvidenceContext
 
 _DEPTH_RANK = {
     AnalysisDepth.P0: 0,
@@ -38,7 +46,7 @@ PortfolioStatement를 최대 {statement_count}개 생성한다.
 - confidence는 HIGH, MEDIUM, LOW, NOT_VERIFIABLE 중 하나를 사용한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - 각 문장은 evidence_refs 또는 claim_refs 중 최소 하나를 포함한다.
-- 각 문장은 입력에 존재하는 criterion_keys만 사용한다.
+- 각 문장은 실제 인용 범위를 허용하는 criterion_context_refs를 하나 이상 반환한다.
 {evidence_criterion_rules}
 - Repository별 completedEvidenceLevels까지만 사용하고 완료되지 않은 깊이로 판단하지 않는다.
 - 여러 Repository를 참조하는 문장은 가장 얕은 Repository 분석 깊이를 상한으로 사용한다.
@@ -81,6 +89,7 @@ def build_statement_prompt(
     criteria: CriteriaSet,
     *,
     statement_count: int = 6,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build a grounded prompt for reusable portfolio statements."""
 
@@ -103,6 +112,7 @@ def build_statement_prompt(
         synthesis,
         criteria,
         task,
+        criterion_contexts,
     )
 
 
@@ -114,6 +124,7 @@ def build_statement_correction_prompt(
     violation_codes: Sequence[PolicyViolationCode],
     *,
     statement_count: int = 6,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build a full statement regeneration prompt using stable policy codes only."""
 
@@ -144,6 +155,7 @@ def build_statement_correction_prompt(
         synthesis,
         criteria,
         task,
+        criterion_contexts,
     )
 
 
@@ -209,8 +221,21 @@ def _render_statement_prompt(
     synthesis: PortfolioSynthesis,
     criteria: CriteriaSet,
     task: str,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None,
 ) -> str:
-    repository_data = [build_repository_data(context, criteria) for context in contexts]
+    resolved_contexts = _resolve_criterion_contexts(
+        contexts,
+        criteria,
+        criterion_contexts,
+    )
+    repository_data = [
+        build_repository_data(
+            context,
+            criteria,
+            include_criterion_contexts=False,
+        )
+        for context in contexts
+    ]
     prior_analysis = {
         "repository_analyses": repository_analyses,
         "portfolio_synthesis": synthesis,
@@ -220,7 +245,12 @@ def _render_statement_prompt(
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data({"repositories": repository_data}),
+                serialize_untrusted_data(
+                    {
+                        "repositories": repository_data,
+                        "criterionContexts": build_criterion_context_data(resolved_contexts),
+                    }
+                ),
             ),
             render_section(
                 PRIOR_ANALYSIS_SECTION,

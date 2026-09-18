@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from app.criteria.models import CriteriaSet
 from app.domain import AnalysisDepth, NormalizedRepositoryContext, RepositoryAnalysis
@@ -16,6 +19,9 @@ from app.prompts.context import (
     serialize_untrusted_data,
 )
 from app.validators.report_validator import PolicyViolationCode
+
+if TYPE_CHECKING:
+    from app.services import CriterionEvidenceContext
 
 _INTERVIEW_TASK_TEMPLATE = """
 BACKEND × ENTRY × {analysis_depth} 범위에서 최대 {question_count}개의 프로젝트 기반
@@ -75,13 +81,20 @@ def build_interview_prompt(
     criteria: CriteriaSet,
     *,
     question_count: int = 5,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build the user prompt for depth-scoped grounded interview questions."""
 
     _validate_interview_inputs(context, repository_analysis, criteria, question_count)
 
     task = _build_interview_task(context, criteria, question_count)
-    return _render_interview_prompt(context, repository_analysis, criteria, task)
+    return _render_interview_prompt(
+        context,
+        repository_analysis,
+        criteria,
+        task,
+        criterion_contexts,
+    )
 
 
 def build_interview_correction_prompt(
@@ -91,6 +104,7 @@ def build_interview_correction_prompt(
     violation_codes: Sequence[PolicyViolationCode],
     *,
     question_count: int = 5,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build a full interview regeneration prompt using stable policy codes only."""
 
@@ -103,7 +117,13 @@ def build_interview_correction_prompt(
         base_task=_build_interview_task(context, criteria, question_count),
         violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
     )
-    return _render_interview_prompt(context, repository_analysis, criteria, task)
+    return _render_interview_prompt(
+        context,
+        repository_analysis,
+        criteria,
+        task,
+        criterion_contexts,
+    )
 
 
 def _validate_interview_inputs(
@@ -131,13 +151,16 @@ def _render_interview_prompt(
     repository_analysis: RepositoryAnalysis,
     criteria: CriteriaSet,
     task: str,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None,
 ) -> str:
     return "\n\n".join(
         (
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data(build_repository_data(context, criteria)),
+                serialize_untrusted_data(
+                    build_repository_data(context, criteria, criterion_contexts)
+                ),
             ),
             render_section(
                 PRIOR_ANALYSIS_SECTION,

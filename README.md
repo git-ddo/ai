@@ -78,7 +78,7 @@ Criterion별 호환 Evidence Context를 구성하고 최종 분석 항목의 `cr
 | Backend `origin/main` | P0/P1/P2 수집, Mock·HTTP AI Client, 응답 검증과 Job 저장 흐름 구현 |
 | AI 기반 | FastAPI, `/health`, Gemini/Fake Provider, P0/P1/P2 Criteria와 혼합 깊이 System Prompt 구현 |
 | AI 입력 처리 | 내부 Evidence·UserClaim 모델, 정규화, Prompt Context, 참조·깊이 Validator 구현 |
-| AI 분석 코어 | Repository 분석, Portfolio 종합, 면접 질문, 포트폴리오 문장과 정책 재생성 구현 |
+| AI 분석 코어 | Criterion Context 기반 생성 초안, 서비스 key 주입, Repository·Portfolio·면접·문장 정책 재생성 구현 |
 | AI 최종 내부 결과 | 검증 완료 결과를 결정적으로 조립하는 `PortfolioAnalysisAssembler` 구현 |
 | AI 서버 오케스트레이션 | Report Service, 전체 600초 deadline과 generation metadata 집계 구현 |
 | 실제 Gemini Smoke | 내부 P0/P1/P2 완주, Backend P1 Fixture와 실제 Assembler P2 Request 기반 HTTP 200 검증 |

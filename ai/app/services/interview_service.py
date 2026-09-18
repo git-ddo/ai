@@ -4,6 +4,7 @@ from app.core.exceptions import InterviewQuestionGenerationError, ReportPolicyEr
 from app.criteria import CriteriaLoader, CriteriaSet
 from app.domain import (
     InterviewQuestionBatch,
+    InterviewQuestionBatchDraft,
     NormalizedRepositoryContext,
     RepositoryAnalysis,
 )
@@ -13,6 +14,8 @@ from app.prompts import (
     build_interview_prompt,
     build_system_prompt,
 )
+from app.services.criterion_assignment_service import CriterionAssignmentService
+from app.services.criterion_context_service import CriterionContextService
 from app.validators import InterviewQuestionPolicyValidator
 
 
@@ -24,10 +27,16 @@ class InterviewQuestionService:
         llm_provider: LLMProvider,
         criteria_loader: CriteriaLoader | None = None,
         policy_validator: InterviewQuestionPolicyValidator | None = None,
+        criterion_context_service: CriterionContextService | None = None,
+        criterion_assignment_service: CriterionAssignmentService | None = None,
     ) -> None:
         self._llm_provider = llm_provider
         self._criteria_loader = criteria_loader or CriteriaLoader()
         self._policy_validator = policy_validator or InterviewQuestionPolicyValidator()
+        self._criterion_context_service = criterion_context_service or CriterionContextService()
+        self._criterion_assignment_service = (
+            criterion_assignment_service or CriterionAssignmentService()
+        )
 
     async def generate(
         self,
@@ -50,6 +59,7 @@ class InterviewQuestionService:
             raise InterviewQuestionGenerationError(
                 "Loaded criteria depth does not match the repository context."
             )
+        criterion_contexts = self._criterion_context_service.build((context,), criteria)
 
         system_prompt = build_system_prompt()
         initial_prompt = build_interview_prompt(
@@ -57,15 +67,20 @@ class InterviewQuestionService:
             repository_analysis,
             criteria,
             question_count=question_count,
+            criterion_contexts=criterion_contexts,
         )
         initial_generation = await self._llm_provider.generate_structured(
             system_prompt=system_prompt,
             user_prompt=initial_prompt,
-            response_model=InterviewQuestionBatch,
+            response_model=InterviewQuestionBatchDraft,
         )
 
         try:
-            self._validate_generation(initial_generation.value, context, contexts, criteria)
+            batch = self._criterion_assignment_service.assign_interview(
+                initial_generation.value,
+                criterion_contexts,
+            )
+            self._validate_generation(batch, context, contexts, criteria)
         except ReportPolicyError as policy_error:
             correction_prompt = build_interview_correction_prompt(
                 context,
@@ -73,22 +88,27 @@ class InterviewQuestionService:
                 criteria,
                 tuple(violation.code for violation in policy_error.violations),
                 question_count=question_count,
+                criterion_contexts=criterion_contexts,
             )
             corrected_generation = await self._llm_provider.generate_structured(
                 system_prompt=system_prompt,
                 user_prompt=correction_prompt,
-                response_model=InterviewQuestionBatch,
+                response_model=InterviewQuestionBatchDraft,
             )
-            self._validate_generation(corrected_generation.value, context, contexts, criteria)
+            corrected_batch = self._criterion_assignment_service.assign_interview(
+                corrected_generation.value,
+                criterion_contexts,
+            )
+            self._validate_generation(corrected_batch, context, contexts, criteria)
             return StructuredGeneration(
-                value=corrected_generation.value,
+                value=corrected_batch,
                 metadata=_combine_metadata(
                     initial_generation.metadata,
                     corrected_generation.metadata,
                 ),
             )
 
-        return initial_generation
+        return StructuredGeneration(value=batch, metadata=initial_generation.metadata)
 
     def _validate_generation(
         self,

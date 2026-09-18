@@ -168,11 +168,11 @@ async def test_technology_grounding_crosses_the_complete_fake_provider_boundary(
     assert response.used_evidence_levels == ["P0", "P1", "P2"]
     assert len(provider.calls) == 4
     for call in provider.calls:
-        assert "evidenceCriterionCompatibility" in call.user_prompt
+        assert "criterionContexts" in call.user_prompt
+        assert "evidenceCriterionCompatibility" not in call.user_prompt
         repository_data = call.user_prompt.split("[UNTRUSTED_REPOSITORY_DATA_BEGIN]\n", 1)[1].split(
             "\n[UNTRUSTED_REPOSITORY_DATA_END]", 1
         )[0]
         parsed_repository_data = json.loads(repository_data)
-        if "repositories" in parsed_repository_data:
-            parsed_repository_data = parsed_repository_data["repositories"][0]
-        assert "ev_003" in parsed_repository_data["evidenceCriterionCompatibility"]
+        criterion_contexts = parsed_repository_data["criterionContexts"]
+        assert any("ev_003" in context["eligible_evidence_refs"] for context in criterion_contexts)

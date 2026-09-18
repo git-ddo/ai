@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from app.criteria.models import CriteriaSet
 from app.domain import AnalysisDepth, NormalizedRepositoryContext, RepositoryAnalysis
@@ -8,6 +11,8 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    _resolve_criterion_contexts,
+    build_criterion_context_data,
     build_evidence_criterion_rules,
     build_repository_data,
     render_section,
@@ -15,6 +20,9 @@ from app.prompts.context import (
     serialize_untrusted_data,
 )
 from app.validators.report_validator import PolicyViolationCode
+
+if TYPE_CHECKING:
+    from app.services import CriterionEvidenceContext
 
 _PORTFOLIO_TASK_TEMPLATE = """
 BACKEND × ENTRY × 최대 {analysis_depth} 범위에서 Repository별 분석을 종합한
@@ -71,6 +79,8 @@ def build_portfolio_prompt(
     contexts: Sequence[NormalizedRepositoryContext],
     repository_analyses: Sequence[RepositoryAnalysis],
     criteria: CriteriaSet,
+    *,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build the user prompt for depth-aware portfolio synthesis."""
 
@@ -88,6 +98,7 @@ def build_portfolio_prompt(
         ordered_analyses,
         criteria,
         task,
+        criterion_contexts,
     )
 
 
@@ -96,6 +107,8 @@ def build_portfolio_correction_prompt(
     repository_analyses: Sequence[RepositoryAnalysis],
     criteria: CriteriaSet,
     violation_codes: Sequence[PolicyViolationCode],
+    *,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build a full-regeneration prompt using only stable policy codes."""
 
@@ -121,6 +134,7 @@ def build_portfolio_correction_prompt(
         ordered_analyses,
         criteria,
         task,
+        criterion_contexts,
     )
 
 
@@ -150,15 +164,33 @@ def _render_portfolio_prompt(
     ordered_analyses: Sequence[RepositoryAnalysis],
     criteria: CriteriaSet,
     task: str,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None,
 ) -> str:
-    repository_data = [build_repository_data(context, criteria) for context in ordered_contexts]
+    resolved_contexts = _resolve_criterion_contexts(
+        ordered_contexts,
+        criteria,
+        criterion_contexts,
+    )
+    repository_data = [
+        build_repository_data(
+            context,
+            criteria,
+            include_criterion_contexts=False,
+        )
+        for context in ordered_contexts
+    ]
 
     return "\n\n".join(
         (
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data({"repositories": repository_data}),
+                serialize_untrusted_data(
+                    {
+                        "repositories": repository_data,
+                        "criterionContexts": build_criterion_context_data(resolved_contexts),
+                    }
+                ),
             ),
             render_section(
                 PRIOR_ANALYSIS_SECTION,

@@ -28,6 +28,10 @@ ClaimId = Annotated[
     str,
     StringConstraints(strip_whitespace=True, pattern=r"^claim_[0-9]{3,}$"),
 ]
+CriterionContextId = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, pattern=r"^ctx_[0-9]{3,}$"),
+]
 RepositoryId = Annotated[
     str,
     StringConstraints(strict=True, strip_whitespace=True, pattern=r"^[1-9][0-9]*$"),
@@ -313,15 +317,15 @@ class NormalizedRepositoryContext(InternalDomainModel):
         return self
 
 
-class GroundedAnalysisItem(InternalDomainModel):
-    """One generated analysis item whose grounding policy is type dependent."""
+class GroundedAnalysisDraft(InternalDomainModel):
+    """Provider output grounded through service-owned Criterion Context references."""
 
     item_type: AnalysisItemType
     content: NonEmptyString
     confidence: EvidenceConfidence
     evidence_refs: tuple[EvidenceId, ...] = ()
     claim_refs: tuple[ClaimId, ...] = ()
-    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+    criterion_context_refs: tuple[CriterionContextId, ...] = Field(min_length=1)
     technology_names: tuple[NonEmptyString, ...] = ()
     file_paths: tuple[NonEmptyString, ...] = ()
     priority: RecommendationPriority | None = None
@@ -332,8 +336,8 @@ class GroundedAnalysisItem(InternalDomainModel):
             raise ValueError("evidence_refs must not contain duplicates")
         if len(self.claim_refs) != len(set(self.claim_refs)):
             raise ValueError("claim_refs must not contain duplicates")
-        if len(self.criterion_keys) != len(set(self.criterion_keys)):
-            raise ValueError("criterion_keys must not contain duplicates")
+        if len(self.criterion_context_refs) != len(set(self.criterion_context_refs)):
+            raise ValueError("criterion_context_refs must not contain duplicates")
         if len({name.casefold() for name in self.technology_names}) != len(self.technology_names):
             raise ValueError("technology_names must not contain duplicates")
         if len(self.file_paths) != len(set(self.file_paths)):
@@ -365,6 +369,23 @@ class GroundedAnalysisItem(InternalDomainModel):
         return self
 
 
+class GroundedAnalysisItem(GroundedAnalysisDraft):
+    """Validated analysis item with service-injected Criterion keys."""
+
+    criterion_context_refs: tuple[CriterionContextId, ...] = Field(
+        default=(),
+        max_length=0,
+        exclude=True,
+    )
+    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reject_duplicate_criterion_keys(self) -> Self:
+        if len(self.criterion_keys) != len(set(self.criterion_keys)):
+            raise ValueError("criterion_keys must not contain duplicates")
+        return self
+
+
 def _is_repository_relative_path(path: str) -> bool:
     if "\x00" in path or path.startswith(("/", "\\")) or _WINDOWS_ABSOLUTE_PATH.match(path):
         return False
@@ -393,14 +414,14 @@ def _validate_grounding_metadata(
         raise ValueError("file_paths must contain only safe repository-relative paths")
 
 
-class RepositoryAnalysis(InternalDomainModel):
-    """P0 coaching result generated for one repository."""
+class RepositoryAnalysisDraft(InternalDomainModel):
+    """Provider output for one repository before Criterion key injection."""
 
     repository_full_name: NonEmptyString
-    summary: GroundedAnalysisItem
-    observations: tuple[GroundedAnalysisItem, ...] = ()
-    strengths: tuple[GroundedAnalysisItem, ...] = ()
-    recommendations: tuple[GroundedAnalysisItem, ...] = ()
+    summary: GroundedAnalysisDraft
+    observations: tuple[GroundedAnalysisDraft, ...] = ()
+    strengths: tuple[GroundedAnalysisDraft, ...] = ()
+    recommendations: tuple[GroundedAnalysisDraft, ...] = ()
     limitations: tuple[NonEmptyString, ...] = ()
 
     @model_validator(mode="after")
@@ -416,6 +437,15 @@ class RepositoryAnalysis(InternalDomainModel):
         ):
             raise ValueError("recommendations must contain only RECOMMENDATION items")
         return self
+
+
+class RepositoryAnalysis(RepositoryAnalysisDraft):
+    """Validated repository analysis with service-injected Criterion keys."""
+
+    summary: GroundedAnalysisItem
+    observations: tuple[GroundedAnalysisItem, ...] = ()
+    strengths: tuple[GroundedAnalysisItem, ...] = ()
+    recommendations: tuple[GroundedAnalysisItem, ...] = ()
 
 
 class RepresentativeProject(InternalDomainModel):
@@ -434,8 +464,8 @@ class RepresentativeProject(InternalDomainModel):
         return self
 
 
-class InterviewQuestion(InternalDomainModel):
-    """One project-grounded interview question and answer direction."""
+class InterviewQuestionDraft(InternalDomainModel):
+    """Provider output for one interview question before Criterion key injection."""
 
     repository_full_name: NonEmptyString
     question: NonEmptyString
@@ -445,7 +475,7 @@ class InterviewQuestion(InternalDomainModel):
     confidence: EvidenceConfidence
     evidence_refs: tuple[EvidenceId, ...] = ()
     claim_refs: tuple[ClaimId, ...] = ()
-    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+    criterion_context_refs: tuple[CriterionContextId, ...] = Field(min_length=1)
     technology_names: tuple[NonEmptyString, ...] = ()
     file_paths: tuple[NonEmptyString, ...] = ()
 
@@ -457,7 +487,7 @@ class InterviewQuestion(InternalDomainModel):
         _validate_grounding_metadata(
             evidence_refs=self.evidence_refs,
             claim_refs=self.claim_refs,
-            criterion_keys=self.criterion_keys,
+            criterion_keys=self.criterion_context_refs,
             technology_names=self.technology_names,
             file_paths=self.file_paths,
         )
@@ -468,10 +498,27 @@ class InterviewQuestion(InternalDomainModel):
         return self
 
 
-class InterviewQuestionBatch(InternalDomainModel):
-    """Structured-output wrapper for questions about exactly one repository."""
+class InterviewQuestion(InterviewQuestionDraft):
+    """Validated interview question with service-injected Criterion keys."""
 
-    questions: tuple[InterviewQuestion, ...] = Field(
+    criterion_context_refs: tuple[CriterionContextId, ...] = Field(
+        default=(),
+        max_length=0,
+        exclude=True,
+    )
+    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reject_duplicate_criterion_keys(self) -> Self:
+        if len(self.criterion_keys) != len(set(self.criterion_keys)):
+            raise ValueError("criterion_keys must not contain duplicates")
+        return self
+
+
+class InterviewQuestionBatchDraft(InternalDomainModel):
+    """Provider output wrapper for questions about exactly one repository."""
+
+    questions: tuple[InterviewQuestionDraft, ...] = Field(
         min_length=1,
         max_length=10,
     )
@@ -489,15 +536,24 @@ class InterviewQuestionBatch(InternalDomainModel):
         return self
 
 
-class PortfolioStatement(InternalDomainModel):
-    """One reusable statement grounded by evidence or an explicit user claim."""
+class InterviewQuestionBatch(InterviewQuestionBatchDraft):
+    """Validated interview question batch."""
+
+    questions: tuple[InterviewQuestion, ...] = Field(
+        min_length=1,
+        max_length=10,
+    )
+
+
+class PortfolioStatementDraft(InternalDomainModel):
+    """Provider output for one statement before Criterion key injection."""
 
     statement_type: PortfolioStatementType
     content: NonEmptyString
     confidence: EvidenceConfidence
     evidence_refs: tuple[EvidenceId, ...] = ()
     claim_refs: tuple[ClaimId, ...] = ()
-    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+    criterion_context_refs: tuple[CriterionContextId, ...] = Field(min_length=1)
     technology_names: tuple[NonEmptyString, ...] = ()
     file_paths: tuple[NonEmptyString, ...] = ()
 
@@ -509,17 +565,34 @@ class PortfolioStatement(InternalDomainModel):
         _validate_grounding_metadata(
             evidence_refs=self.evidence_refs,
             claim_refs=self.claim_refs,
-            criterion_keys=self.criterion_keys,
+            criterion_keys=self.criterion_context_refs,
             technology_names=self.technology_names,
             file_paths=self.file_paths,
         )
         return self
 
 
-class PortfolioStatementBatch(InternalDomainModel):
-    """Structured-output wrapper for reusable portfolio statements."""
+class PortfolioStatement(PortfolioStatementDraft):
+    """Validated portfolio statement with service-injected Criterion keys."""
 
-    statements: tuple[PortfolioStatement, ...] = Field(
+    criterion_context_refs: tuple[CriterionContextId, ...] = Field(
+        default=(),
+        max_length=0,
+        exclude=True,
+    )
+    criterion_keys: tuple[NonEmptyString, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reject_duplicate_criterion_keys(self) -> Self:
+        if len(self.criterion_keys) != len(set(self.criterion_keys)):
+            raise ValueError("criterion_keys must not contain duplicates")
+        return self
+
+
+class PortfolioStatementBatchDraft(InternalDomainModel):
+    """Provider output wrapper for reusable portfolio statements."""
+
+    statements: tuple[PortfolioStatementDraft, ...] = Field(
         min_length=1,
         max_length=15,
     )
@@ -535,18 +608,27 @@ class PortfolioStatementBatch(InternalDomainModel):
         return self
 
 
-class PortfolioSynthesis(InternalDomainModel):
-    """Structured output generated by synthesizing repository analyses."""
+class PortfolioStatementBatch(PortfolioStatementBatchDraft):
+    """Validated reusable portfolio statement batch."""
 
-    overall_summary: GroundedAnalysisItem
+    statements: tuple[PortfolioStatement, ...] = Field(
+        min_length=1,
+        max_length=15,
+    )
+
+
+class PortfolioSynthesisDraft(InternalDomainModel):
+    """Provider output for portfolio synthesis before Criterion key injection."""
+
+    overall_summary: GroundedAnalysisDraft
     representative_projects: tuple[RepresentativeProject, ...] = Field(
         min_length=1,
         max_length=5,
     )
-    strengths: tuple[GroundedAnalysisItem, ...] = ()
-    gaps: tuple[GroundedAnalysisItem, ...] = ()
-    next_actions: tuple[GroundedAnalysisItem, ...] = ()
-    job_appeal: GroundedAnalysisItem
+    strengths: tuple[GroundedAnalysisDraft, ...] = ()
+    gaps: tuple[GroundedAnalysisDraft, ...] = ()
+    next_actions: tuple[GroundedAnalysisDraft, ...] = ()
+    job_appeal: GroundedAnalysisDraft
     limitations: tuple[NonEmptyString, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -580,6 +662,16 @@ class PortfolioSynthesis(InternalDomainModel):
             raise ValueError("limitations must not contain duplicates")
 
         return self
+
+
+class PortfolioSynthesis(PortfolioSynthesisDraft):
+    """Validated portfolio synthesis with service-injected Criterion keys."""
+
+    overall_summary: GroundedAnalysisItem
+    strengths: tuple[GroundedAnalysisItem, ...] = ()
+    gaps: tuple[GroundedAnalysisItem, ...] = ()
+    next_actions: tuple[GroundedAnalysisItem, ...] = ()
+    job_appeal: GroundedAnalysisItem
 
 
 class PortfolioAnalysis(InternalDomainModel):

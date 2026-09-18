@@ -21,6 +21,7 @@ from app.domain import (
     InternalUserClaim,
     NormalizedRepositoryContext,
     RepositoryAnalysis,
+    RepositoryAnalysisDraft,
     SnapshotHashAlgorithm,
 )
 from app.llm import GenerationMetadata, StructuredGeneration
@@ -236,7 +237,7 @@ async def test_analyzes_one_repository_at_each_supported_depth(depth: AnalysisDe
     assert result.metadata == GenerationMetadata(duration_ms=12, attempt_count=2)
     assert provider.call_count == 1
     call = provider.calls[0]
-    assert call.response_model is RepositoryAnalysis
+    assert call.response_model is RepositoryAnalysisDraft
     assert call.system_prompt != call.user_prompt
     assert "공개 GitHub" in call.system_prompt
     assert f"BACKEND × ENTRY × {depth.value}" in call.user_prompt

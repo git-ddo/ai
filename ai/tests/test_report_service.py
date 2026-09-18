@@ -24,13 +24,17 @@ from app.domain import (
     InternalRepositoryInput,
     InterviewQuestion,
     InterviewQuestionBatch,
+    InterviewQuestionBatchDraft,
     NormalizedRepositoryContext,
     PortfolioAnalysis,
     PortfolioStatement,
     PortfolioStatementBatch,
+    PortfolioStatementBatchDraft,
     PortfolioStatementType,
     PortfolioSynthesis,
+    PortfolioSynthesisDraft,
     RepositoryAnalysis,
+    RepositoryAnalysisDraft,
     RepresentativeProject,
     SnapshotHashAlgorithm,
 )
@@ -358,7 +362,7 @@ def make_synthesis(
             content="공개 근거에서 포트폴리오 설명 요소가 관찰됩니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=(evidence_id,),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
         representative_projects=(
             RepresentativeProject(
@@ -373,7 +377,7 @@ def make_synthesis(
             content="공개 근거를 백엔드 직무 설명에 활용할 수 있습니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=(evidence_id,),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
         limitations=("공개 근거 범위만 분석했습니다.",),
     )
@@ -497,10 +501,10 @@ async def test_runs_real_services_as_one_internal_smoke_pipeline() -> None:
     assert isinstance(result, InternalPortfolioReport)
     assert isinstance(result.analysis, PortfolioAnalysis)
     assert [call.response_model for call in provider.calls] == [
-        RepositoryAnalysis,
-        PortfolioSynthesis,
-        InterviewQuestionBatch,
-        PortfolioStatementBatch,
+        RepositoryAnalysisDraft,
+        PortfolioSynthesisDraft,
+        InterviewQuestionBatchDraft,
+        PortfolioStatementBatchDraft,
     ]
     assert [record.stage for record in result.generation_records] == [
         InternalGenerationStage.REPOSITORY,
