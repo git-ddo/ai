@@ -1,6 +1,7 @@
 from app.domain.enums import (
     AnalysisDepth,
     AnalysisItemType,
+    CodeObservationType,
     EvidenceConfidence,
     EvidenceValueType,
     InternalEvidenceType,
@@ -31,6 +32,7 @@ from app.domain.models import (
 __all__ = [
     "AnalysisDepth",
     "AnalysisItemType",
+    "CodeObservationType",
     "EvidenceConfidence",
     "EvidenceValueType",
     "GroundedAnalysisItem",

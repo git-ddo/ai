@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 from app.domain.enums import (
     AnalysisDepth,
     AnalysisItemType,
+    CodeObservationType,
     EvidenceConfidence,
     EvidenceValueType,
     InternalEvidenceType,
@@ -72,6 +73,7 @@ class InternalEvidence(InternalDomainModel):
     pull_request_number: PositivePullRequestNumber | None = None
     source_evidence_refs: tuple[EvidenceId, ...] = ()
     derived_from_level: AnalysisDepth | None = None
+    code_observation_types: tuple[CodeObservationType, ...] = ()
 
     @model_validator(mode="after")
     def validate_evidence_semantics(self) -> Self:
@@ -126,6 +128,17 @@ class InternalEvidence(InternalDomainModel):
                 raise ValueError("BACKEND_DERIVED derived_from_level must match analysis_depth")
         elif self.derived_from_level is not None:
             raise ValueError("derived_from_level is only allowed for BACKEND_DERIVED evidence")
+
+        if len(self.code_observation_types) != len(set(self.code_observation_types)):
+            raise ValueError("code_observation_types must not contain duplicates")
+        supports_code_observations = self.evidence_type is InternalEvidenceType.CODE_EVIDENCE or (
+            self.evidence_type is InternalEvidenceType.BACKEND_DERIVED
+            and self.analysis_depth is AnalysisDepth.P2
+        )
+        if self.code_observation_types and not supports_code_observations:
+            raise ValueError(
+                "code_observation_types are only allowed for P2 code or derived evidence"
+            )
 
         return self
 
