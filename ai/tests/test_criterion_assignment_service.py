@@ -8,6 +8,7 @@ from app.domain import (
     AnalysisDepth,
     AnalysisItemType,
     EvidenceConfidence,
+    EvidenceGroundedAnalysisDraft,
     GroundedAnalysisDraft,
     InterviewQuestionBatchDraft,
     InterviewQuestionDraft,
@@ -15,6 +16,8 @@ from app.domain import (
     PortfolioStatementDraft,
     PortfolioStatementType,
     PortfolioSynthesisDraft,
+    RecommendationAnalysisDraft,
+    RecommendationPriority,
     RepositoryAnalysisDraft,
     RepresentativeProject,
 )
@@ -38,7 +41,6 @@ def _analysis_draft(
     return RepositoryAnalysisDraft(
         repository_full_name=repository_name,
         summary=GroundedAnalysisDraft(
-            item_type=AnalysisItemType.INTERPRETATION,
             content="공개 근거 범위에서 기술 구성을 설명할 수 있습니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=(evidence_ref,),
@@ -56,11 +58,12 @@ def _analysis_draft(
         PortfolioStatementBatchDraft,
     ),
 )
-def test_provider_schemas_expose_context_refs_without_criterion_keys(model: type) -> None:
+def test_provider_schemas_expose_only_provider_owned_analysis_fields(model: type) -> None:
     schema = json.dumps(model.model_json_schema(), sort_keys=True)
 
     assert "criterion_context_refs" in schema
     assert "criterion_keys" not in schema
+    assert "item_type" not in schema
 
 
 def test_assigns_context_owned_key_to_repository_draft() -> None:
@@ -76,6 +79,7 @@ def test_assigns_context_owned_key_to_repository_draft() -> None:
     analysis = CriterionAssignmentService().assign_repository(draft, contexts)
 
     assert analysis.summary.criterion_keys == ("TECH_STACK_EVIDENCE",)
+    assert analysis.summary.item_type is AnalysisItemType.INTERPRETATION
     assert "criterion_context_refs" not in analysis.summary.model_dump()
 
 
@@ -131,19 +135,33 @@ def test_assigns_keys_for_all_provider_output_shapes() -> None:
     contexts = CriterionContextService().build((repository,), criteria)
     context_ref = context_ids["TECH_STACK_EVIDENCE"]
     evidence_ref = repository.evidence[0].evidence_id
-    grounded = GroundedAnalysisDraft(
-        item_type=AnalysisItemType.INTERPRETATION,
-        content="공개 기술 근거를 설명할 수 있습니다.",
-        confidence=EvidenceConfidence.HIGH,
-        evidence_refs=(evidence_ref,),
-        criterion_context_refs=(context_ref,),
+    draft_values = {
+        "content": "공개 기술 근거를 설명할 수 있습니다.",
+        "confidence": EvidenceConfidence.HIGH,
+        "evidence_refs": (evidence_ref,),
+        "criterion_context_refs": (context_ref,),
+    }
+    grounded = GroundedAnalysisDraft(**draft_values)
+    evidence_grounded = EvidenceGroundedAnalysisDraft(**draft_values)
+    recommendation = RecommendationAnalysisDraft(
+        **draft_values,
+        priority=RecommendationPriority.HIGH,
     )
-    job_appeal = grounded.model_copy(update={"item_type": AnalysisItemType.JOB_APPEAL})
     assignment = CriterionAssignmentService()
 
+    repository_analysis = assignment.assign_repository(
+        RepositoryAnalysisDraft(
+            repository_full_name=repository.repository_full_name,
+            summary=grounded,
+            observations=(evidence_grounded,),
+            strengths=(grounded,),
+            recommendations=(recommendation,),
+        ),
+        contexts,
+    )
     synthesis = assignment.assign_portfolio(
         PortfolioSynthesisDraft(
-            overall_summary=grounded,
+            overall_summary=evidence_grounded,
             representative_projects=(
                 RepresentativeProject(
                     repository_full_name=repository.repository_full_name,
@@ -152,7 +170,10 @@ def test_assigns_keys_for_all_provider_output_shapes() -> None:
                     evidence_refs=(evidence_ref,),
                 ),
             ),
-            job_appeal=job_appeal,
+            strengths=(evidence_grounded,),
+            gaps=(evidence_grounded,),
+            next_actions=(recommendation,),
+            job_appeal=evidence_grounded,
             limitations=("공개 근거 범위만 분석했습니다.",),
         ),
         contexts,
@@ -188,6 +209,15 @@ def test_assigns_keys_for_all_provider_output_shapes() -> None:
         contexts,
     )
 
+    assert repository_analysis.summary.item_type is AnalysisItemType.INTERPRETATION
+    assert repository_analysis.observations[0].item_type is AnalysisItemType.OBSERVATION
+    assert repository_analysis.strengths[0].item_type is AnalysisItemType.INTERPRETATION
+    assert repository_analysis.recommendations[0].item_type is AnalysisItemType.RECOMMENDATION
+    assert synthesis.overall_summary.item_type is AnalysisItemType.INTERPRETATION
+    assert synthesis.strengths[0].item_type is AnalysisItemType.INTERPRETATION
+    assert synthesis.gaps[0].item_type is AnalysisItemType.INTERPRETATION
+    assert synthesis.next_actions[0].item_type is AnalysisItemType.RECOMMENDATION
+    assert synthesis.job_appeal.item_type is AnalysisItemType.JOB_APPEAL
     assert synthesis.overall_summary.criterion_keys == ("TECH_STACK_EVIDENCE",)
     assert interviews.questions[0].criterion_keys == ("TECH_STACK_EVIDENCE",)
     assert statements.statements[0].criterion_keys == ("TECH_STACK_EVIDENCE",)

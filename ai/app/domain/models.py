@@ -394,11 +394,15 @@ class GroundedAnalysisItem(InternalDomainModel):
         if not self.evidence_refs and not self.claim_refs:
             raise ValueError("analysis item requires an evidence or claim ref")
 
-        if self.item_type in {
-            AnalysisItemType.OBSERVATION,
-            AnalysisItemType.RECOMMENDATION,
-            AnalysisItemType.JOB_APPEAL,
-        } and not self.evidence_refs:
+        if (
+            self.item_type
+            in {
+                AnalysisItemType.OBSERVATION,
+                AnalysisItemType.RECOMMENDATION,
+                AnalysisItemType.JOB_APPEAL,
+            }
+            and not self.evidence_refs
+        ):
             raise ValueError(f"{self.item_type} requires at least one evidence ref")
 
         if self.item_type is AnalysisItemType.RECOMMENDATION:

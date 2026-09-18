@@ -287,7 +287,7 @@ def test_untrusted_serialization_escapes_every_reserved_marker(marker: str) -> N
     assert json.loads(serialized) == {"value": marker}
 
 
-def test_downstream_prior_analysis_never_exposes_criterion_keys(
+def test_downstream_prior_analysis_never_exposes_service_owned_fields(
     criteria: CriteriaSet,
 ) -> None:
     context = make_context()
@@ -324,6 +324,7 @@ def test_downstream_prior_analysis_never_exposes_criterion_keys(
     for prompt in prompts:
         prior_data = json.loads(extract_section(prompt, PRIOR_ANALYSIS_SECTION))
         assert not contains_mapping_key(prior_data, "criterion_keys")
+        assert not contains_mapping_key(prior_data, "item_type")
 
 
 def test_untrusted_serialization_preserves_ordinary_brackets() -> None:
@@ -592,6 +593,12 @@ def test_repository_task_contains_p0_grounding_and_forbidden_rules(
     ):
         assert required in task
 
+    assert "item_type은 생성하거나 반환하지 않는다" in task
+    assert "summary와" in task
+    assert "strengths에는 INTERPRETATION" in task
+    assert "observations에는 OBSERVATION" in task
+    assert "recommendations에는 RECOMMENDATION" in task
+
 
 def test_repository_data_separates_p0_p1_p2_evidence_and_preserves_metadata() -> None:
     criteria_p2 = CriteriaLoader().load("BACKEND", "P2")
@@ -806,9 +813,10 @@ def test_portfolio_task_contains_grounding_rules(criteria: CriteriaSet) -> None:
     ):
         assert field_name in task
 
-    assert "overall_summary, strengths, gaps의 item_type은 INTERPRETATION" in task
-    assert "next_actions의 item_type은 RECOMMENDATION" in task
-    assert "job_appeal의 item_type은 JOB_APPEAL" in task
+    assert "item_type은 생성하거나 반환하지 않는다" in task
+    assert "overall_summary, strengths, gaps에는 INTERPRETATION" in task
+    assert "next_actions에는 RECOMMENDATION" in task
+    assert "job_appeal에는 JOB_APPEAL" in task
 
     assert "PortfolioAnalysis Structured Output Schema" not in task
 

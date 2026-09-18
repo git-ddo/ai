@@ -43,6 +43,7 @@ from app.llm.provider import GenerationCall
 from app.services import PortfolioAnalysisAssembler, PortfolioReportService
 from app.services.normalization_service import NormalizationError, NormalizationService
 from app.validators import AnalysisDepthValidator, EvidenceReferenceValidator
+from tests.provider_drafts import project_provider_result
 
 _CRITERION_BY_DEPTH = {
     AnalysisDepth.P0: "TECH_STACK_EVIDENCE",
@@ -80,14 +81,15 @@ class SequencedProvider:
         result = self._results.pop(0)
         if isinstance(result, BaseException):
             raise result
-        if not isinstance(result, response_model):
+        provider_result = project_provider_result(result, response_model, user_prompt)
+        if not isinstance(provider_result, response_model):
             raise AssertionError("Provider result does not match requested response model")
         metadata = (
             self._metadata.pop(0)
             if self._metadata
             else GenerationMetadata(duration_ms=0, attempt_count=1)
         )
-        return StructuredGeneration(value=result, metadata=metadata)
+        return StructuredGeneration(value=provider_result, metadata=metadata)
 
     async def aclose(self) -> None:
         self.closed = True

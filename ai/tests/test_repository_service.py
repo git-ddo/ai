@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 import pytest
+from pydantic import BaseModel
 
 from app.core.exceptions import (
     LLMProviderError,
@@ -28,6 +29,7 @@ from app.llm import GenerationMetadata, StructuredGeneration
 from app.llm.provider import GenerationCall
 from app.prompts import PromptContextError
 from app.services import RepositoryAnalysisService
+from tests.provider_drafts import project_provider_result
 
 
 class SequencedProvider:
@@ -46,8 +48,8 @@ class SequencedProvider:
         self,
         system_prompt: str,
         user_prompt: str,
-        response_model: type[RepositoryAnalysis],
-    ) -> StructuredGeneration[RepositoryAnalysis]:
+        response_model: type[BaseModel],
+    ) -> StructuredGeneration[BaseModel]:
         self.calls.append(
             GenerationCall(
                 system_prompt=system_prompt,
@@ -60,9 +62,10 @@ class SequencedProvider:
         result = self._results.pop(0)
         if isinstance(result, LLMProviderError):
             raise result
-        if not isinstance(result.value, response_model):
+        provider_value = project_provider_result(result.value, response_model, user_prompt)
+        if not isinstance(provider_value, response_model):
             raise AssertionError("Test result does not match the requested response model")
-        return result
+        return StructuredGeneration(value=provider_value, metadata=result.metadata)
 
     async def aclose(self) -> None:
         return None

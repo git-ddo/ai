@@ -24,6 +24,7 @@ from app.mappers import RequestWireMapper, ResponseWireMapper
 from app.schemas.request import PortfolioReportRequest
 from app.services import NormalizationService, PortfolioReportService
 from app.validators import AnalysisDepthValidator, EvidenceReferenceValidator
+from tests.provider_drafts import project_provider_result
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "technology-grounded-p2-request.json"
 MIXED_EVIDENCE_REFS = ("ev_003", "ev_005", "ev_006")
@@ -54,9 +55,10 @@ class SequencedFakeProvider:
             )
         )
         output = self._outputs.pop(0)
-        assert isinstance(output, response_model)
+        provider_output = project_provider_result(output, response_model, user_prompt)
+        assert isinstance(provider_output, response_model)
         return StructuredGeneration(
-            value=output,
+            value=provider_output,
             metadata=GenerationMetadata(duration_ms=1, attempt_count=1),
         )
 
