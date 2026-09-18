@@ -236,8 +236,7 @@ class GeminiProvider:
             )
         )
         logger.warning(
-            "Gemini structured response validation failed response_model=%s "
-            "validation_errors=%s",
+            "Gemini structured response validation failed response_model=%s validation_errors=%s",
             response_model.__name__,
             validation_errors,
         )

@@ -179,9 +179,7 @@ async def test_rejects_empty_invalid_or_mismatched_structured_output(
         types.GenerateContentResponse.model_construct(
             parsed={"summary": {"sensitive_generated_value": "must not be logged"}}
         ),
-        response_with_text(
-            '{"summary":{"sensitive_generated_value":"must not be logged"}}'
-        ),
+        response_with_text('{"summary":{"sensitive_generated_value":"must not be logged"}}'),
     ],
 )
 async def test_logs_only_structured_validation_location_and_error_code(

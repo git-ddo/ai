@@ -272,9 +272,7 @@ def assert_single_structural_section(prompt: str, section: str) -> None:
 
 def contains_mapping_key(value: object, target: str) -> bool:
     if isinstance(value, dict):
-        return target in value or any(
-            contains_mapping_key(item, target) for item in value.values()
-        )
+        return target in value or any(contains_mapping_key(item, target) for item in value.values())
     if isinstance(value, list):
         return any(contains_mapping_key(item, target) for item in value)
     return False
