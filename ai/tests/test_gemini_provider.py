@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Any
 
 import httpx
@@ -169,6 +170,35 @@ async def test_rejects_empty_invalid_or_mismatched_structured_output(
     assert raised.value.attempt_count == 1
     assert len(models.calls) == 1
     assert "not-json" not in str(raised.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        types.GenerateContentResponse.model_construct(
+            parsed={"summary": {"sensitive_generated_value": "must not be logged"}}
+        ),
+        response_with_text(
+            '{"summary":{"sensitive_generated_value":"must not be logged"}}'
+        ),
+    ],
+)
+async def test_logs_only_structured_validation_location_and_error_code(
+    response: types.GenerateContentResponse,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    models = StubModels([response])
+    provider = GeminiProvider(make_settings(), client=StubAsyncClient(models))
+    caplog.set_level(logging.WARNING, logger="app.llm.gemini_provider")
+
+    with pytest.raises(LLMStructuredOutputError):
+        await provider.generate_structured("system", "user", ExampleResponse)
+
+    assert "response_model=ExampleResponse" in caplog.text
+    assert "validation_errors=(('summary', 'string_type'),)" in caplog.text
+    assert "sensitive_generated_value" not in caplog.text
+    assert "must not be logged" not in caplog.text
 
 
 @pytest.mark.asyncio
