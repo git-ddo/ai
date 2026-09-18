@@ -264,10 +264,15 @@ Evidence–Criteria 호환 조건은 두 가지를 모두 만족해야 한다.
 1. `Evidence.analysisDepth == Criterion.analysisDepth`
 2. `Evidence.evidenceType in Criterion.allowedEvidenceTypes`
 
-Prompt Context는 이 결과를 `evidenceCriterionCompatibility: {evidenceId: [criterionKey...]}`로
-제공한다. 생성 항목이 여러 깊이·유형의 Evidence를 참조하면 각 Evidence에 호환되는 Criteria
-key를 하나 이상 포함해야 한다. 호환 Criteria가 없는 Evidence는 인용하지 않으며 최대 깊이만으로
-Criteria를 고르지 않는다. 기존 정책 Validator도 같은 조건을 계속 강제한다.
+호환성은 결정적 계약 규칙이므로 Prompt 준수에 맡기지 않는다. AI 서비스는 Criterion별 호환
+Evidence Context를 구성하고 최종 분석 항목에 Criteria key를 주입한다. LLM은 Criteria key를
+직접 생성하지 않고 주어진 Criterion과 Evidence 범위 안에서 의미적 관련성과 분석 내용을
+판단한다. 호환 Criteria가 없는 Evidence는 해당 Criterion Context에 포함하지 않는다.
+
+P2 `CODE_EVIDENCE`는 같은 깊이·유형 조건을 만족하는 Criterion이 복수일 수 있다. 따라서
+`analysisDepth + evidenceType`만으로 단일 Criterion을 선택하지 않고 `factKey`와 구조화된 코드
+관찰 유형으로 후보군을 좁힌다. Validator는 서비스가 수행한 매핑의 최종 계약 위반을 탐지하며,
+불일치가 발생해도 Evidence 참조나 Criterion을 임의로 변경하지 않는다.
 
 현재 request의 UserClaim 필드는 다음과 같다.
 

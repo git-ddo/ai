@@ -65,10 +65,11 @@ Schema가 표현하는 enum과 실제 분석 구현 범위는 다르다. 현재 
 `sourceEvidenceRefs`로 연결해야 한다. AI는 이 계약을 검증한 뒤 alias 정규화·중복 제거를 거쳐
 `technology_names` allowlist를 만든다.
 
-생성 항목의 Evidence와 Criteria는 `analysisDepth`가 정확히 같고, Evidence의 `evidenceType`이
-Criterion의 `allowedEvidenceTypes`에 포함될 때만 호환된다. Prompt Context의
-`evidenceCriterionCompatibility`가 Evidence별 허용 Criteria key를 명시하며, 혼합 깊이 항목은
-참조한 각 Evidence에 대응하는 Criteria를 모두 포함해야 한다.
+Evidence–Criterion 호환성은 결정 가능한 계약 규칙이므로 AI 서비스 코드가 보장한다. 서비스는
+Criterion별 호환 Evidence Context를 구성하고 최종 분석 항목의 `criterionKey`를 주입하며, LLM은
+키를 직접 생성하지 않고 주어진 Criterion과 Evidence 범위 안에서 분석 내용을 생성한다. P2의
+복수 후보는 `factKey`와 구조화된 코드 관찰 유형으로 좁힌다. Validator는 정상 매핑 수단이 아니라
+최종 계약 위반을 탐지하는 방어선이다.
 
 ## 현재 개발 상태
 
