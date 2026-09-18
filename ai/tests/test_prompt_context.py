@@ -270,6 +270,16 @@ def assert_single_structural_section(prompt: str, section: str) -> None:
     assert prompt.count(f"[{section}_END]") == 1
 
 
+def contains_mapping_key(value: object, target: str) -> bool:
+    if isinstance(value, dict):
+        return target in value or any(
+            contains_mapping_key(item, target) for item in value.values()
+        )
+    if isinstance(value, list):
+        return any(contains_mapping_key(item, target) for item in value)
+    return False
+
+
 @pytest.mark.parametrize("marker", RESERVED_SECTION_MARKERS)
 def test_untrusted_serialization_escapes_every_reserved_marker(marker: str) -> None:
     serialized = serialize_untrusted_data({"value": marker})
@@ -277,6 +287,45 @@ def test_untrusted_serialization_escapes_every_reserved_marker(marker: str) -> N
     assert marker not in serialized
     assert escape_marker(marker) in serialized
     assert json.loads(serialized) == {"value": marker}
+
+
+def test_downstream_prior_analysis_never_exposes_criterion_keys(
+    criteria: CriteriaSet,
+) -> None:
+    context = make_context()
+    analysis = make_analysis()
+    synthesis = make_synthesis((context,))
+    violation_codes = (PolicyViolationCode.UNKNOWN_EVIDENCE_REF,)
+    prompts = (
+        build_portfolio_prompt((context,), (analysis,), criteria),
+        build_portfolio_correction_prompt(
+            (context,),
+            (analysis,),
+            criteria,
+            violation_codes,
+        ),
+        build_interview_prompt(context, analysis, criteria),
+        build_interview_correction_prompt(
+            context,
+            analysis,
+            criteria,
+            violation_codes,
+        ),
+        build_statement_prompt((context,), (analysis,), synthesis, criteria),
+        build_statement_correction_prompt(
+            (context,),
+            (analysis,),
+            synthesis,
+            criteria,
+            violation_codes,
+        ),
+    )
+
+    assert analysis.summary.criterion_keys
+    assert synthesis.overall_summary.criterion_keys
+    for prompt in prompts:
+        prior_data = json.loads(extract_section(prompt, PRIOR_ANALYSIS_SECTION))
+        assert not contains_mapping_key(prior_data, "criterion_keys")
 
 
 def test_untrusted_serialization_preserves_ordinary_brackets() -> None:
