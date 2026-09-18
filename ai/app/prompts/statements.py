@@ -25,6 +25,10 @@ from app.prompts.context import (
     serialize_criteria,
     serialize_untrusted_data,
 )
+from app.prompts.prior_analysis import (
+    project_portfolio_synthesis,
+    project_repository_analyses,
+)
 from app.validators.report_validator import PolicyViolationCode
 
 if TYPE_CHECKING:
@@ -237,8 +241,8 @@ def _render_statement_prompt(
         for context in contexts
     ]
     prior_analysis = {
-        "repository_analyses": repository_analyses,
-        "portfolio_synthesis": synthesis,
+        "repository_analyses": project_repository_analyses(repository_analyses),
+        "portfolio_synthesis": project_portfolio_synthesis(synthesis),
     }
     return "\n\n".join(
         (

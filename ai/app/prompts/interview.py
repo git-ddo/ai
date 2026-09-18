@@ -18,6 +18,7 @@ from app.prompts.context import (
     serialize_criteria,
     serialize_untrusted_data,
 )
+from app.prompts.prior_analysis import project_repository_analysis
 from app.validators.report_validator import PolicyViolationCode
 
 if TYPE_CHECKING:
@@ -164,7 +165,7 @@ def _render_interview_prompt(
             ),
             render_section(
                 PRIOR_ANALYSIS_SECTION,
-                serialize_untrusted_data(repository_analysis),
+                serialize_untrusted_data(project_repository_analysis(repository_analysis)),
             ),
             render_section(TASK_SECTION, task),
         )
