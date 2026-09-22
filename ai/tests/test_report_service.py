@@ -24,13 +24,17 @@ from app.domain import (
     InternalRepositoryInput,
     InterviewQuestion,
     InterviewQuestionBatch,
+    InterviewQuestionBatchDraft,
     NormalizedRepositoryContext,
     PortfolioAnalysis,
     PortfolioStatement,
     PortfolioStatementBatch,
+    PortfolioStatementBatchDraft,
     PortfolioStatementType,
     PortfolioSynthesis,
+    PortfolioSynthesisDraft,
     RepositoryAnalysis,
+    RepositoryAnalysisDraft,
     RepresentativeProject,
     SnapshotHashAlgorithm,
 )
@@ -39,6 +43,7 @@ from app.llm.provider import GenerationCall
 from app.services import PortfolioAnalysisAssembler, PortfolioReportService
 from app.services.normalization_service import NormalizationError, NormalizationService
 from app.validators import AnalysisDepthValidator, EvidenceReferenceValidator
+from tests.provider_drafts import project_provider_result
 
 _CRITERION_BY_DEPTH = {
     AnalysisDepth.P0: "TECH_STACK_EVIDENCE",
@@ -76,14 +81,15 @@ class SequencedProvider:
         result = self._results.pop(0)
         if isinstance(result, BaseException):
             raise result
-        if not isinstance(result, response_model):
+        provider_result = project_provider_result(result, response_model, user_prompt)
+        if not isinstance(provider_result, response_model):
             raise AssertionError("Provider result does not match requested response model")
         metadata = (
             self._metadata.pop(0)
             if self._metadata
             else GenerationMetadata(duration_ms=0, attempt_count=1)
         )
-        return StructuredGeneration(value=result, metadata=metadata)
+        return StructuredGeneration(value=provider_result, metadata=metadata)
 
     async def aclose(self) -> None:
         self.closed = True
@@ -358,7 +364,7 @@ def make_synthesis(
             content="공개 근거에서 포트폴리오 설명 요소가 관찰됩니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=(evidence_id,),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
         representative_projects=(
             RepresentativeProject(
@@ -373,7 +379,7 @@ def make_synthesis(
             content="공개 근거를 백엔드 직무 설명에 활용할 수 있습니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=(evidence_id,),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
         limitations=("공개 근거 범위만 분석했습니다.",),
     )
@@ -497,10 +503,10 @@ async def test_runs_real_services_as_one_internal_smoke_pipeline() -> None:
     assert isinstance(result, InternalPortfolioReport)
     assert isinstance(result.analysis, PortfolioAnalysis)
     assert [call.response_model for call in provider.calls] == [
-        RepositoryAnalysis,
-        PortfolioSynthesis,
-        InterviewQuestionBatch,
-        PortfolioStatementBatch,
+        RepositoryAnalysisDraft,
+        PortfolioSynthesisDraft,
+        InterviewQuestionBatchDraft,
+        PortfolioStatementBatchDraft,
     ]
     assert [record.stage for record in result.generation_records] == [
         InternalGenerationStage.REPOSITORY,

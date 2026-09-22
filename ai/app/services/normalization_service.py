@@ -3,13 +3,30 @@ from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 
 from app.domain import (
+    AnalysisDepth,
+    CodeObservationType,
     InternalEvidence,
+    InternalEvidenceType,
     InternalRepositoryInput,
     NormalizedRepositoryContext,
 )
 
 _TECHNOLOGY_LOOKUP_SEPARATOR = re.compile(r"[\s_-]+")
 _WINDOWS_ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:/")
+_TEST_PATH = re.compile(r"(^|/)(?:test|tests|__tests__)(?:/|$)|(?:test|tests)\.[^/]+$", re.I)
+_TEST_CONTENT = re.compile(
+    r"\b(?:assert|assertthat|expect|should|test|pytest|junit|mockmvc)\b|@test\b",
+    re.I,
+)
+_INPUT_VALIDATION_CONTENT = re.compile(
+    r"\b(?:validate|validation|validator|requirenonnull|isblank|isnull|notnull|constraint)\b"
+    r"|@valid\b|==\s*null|!=\s*null|\bis\s+(?:not\s+)?none\b",
+    re.I,
+)
+_ERROR_HANDLING_CONTENT = re.compile(
+    r"\b(?:try|catch|except|throw|throws|raise|error|exception|fallback)\b",
+    re.I,
+)
 
 DEFAULT_TECHNOLOGY_ALIASES: Mapping[str, str] = MappingProxyType(
     {
@@ -86,6 +103,10 @@ class NormalizationService:
         )
 
         try:
+            code_observation_types = self._classify_code_observations(
+                evidence,
+                normalized_path=normalized_path,
+            )
             return InternalEvidence(
                 evidence_id=evidence.evidence_id,
                 repository_full_name=evidence.repository_full_name,
@@ -103,6 +124,7 @@ class NormalizationService:
                 pull_request_number=evidence.pull_request_number,
                 source_evidence_refs=evidence.source_evidence_refs,
                 derived_from_level=evidence.derived_from_level,
+                code_observation_types=code_observation_types,
             )
         except ValueError as exc:
             raise NormalizationError("Evidence normalization failed.") from exc
@@ -159,6 +181,37 @@ class NormalizationService:
             seen.add(identity)
             result.append(name)
         return tuple(result)
+
+    @staticmethod
+    def _classify_code_observations(
+        evidence: InternalEvidence,
+        *,
+        normalized_path: str | None,
+    ) -> tuple[CodeObservationType, ...]:
+        supports_code_observations = (
+            evidence.evidence_type is InternalEvidenceType.CODE_EVIDENCE
+            or (
+                evidence.evidence_type is InternalEvidenceType.BACKEND_DERIVED
+                and evidence.analysis_depth is AnalysisDepth.P2
+            )
+        )
+        if not supports_code_observations:
+            return ()
+
+        searchable = " ".join((evidence.key, evidence.summary))
+        observations: set[CodeObservationType] = {
+            CodeObservationType.SNIPPET_SCOPE,
+            CodeObservationType.RESPONSIBILITY,
+        }
+        if (normalized_path is not None and _TEST_PATH.search(normalized_path)) or (
+            _TEST_CONTENT.search(searchable)
+        ):
+            observations.add(CodeObservationType.TEST_CASE)
+        if _INPUT_VALIDATION_CONTENT.search(searchable):
+            observations.add(CodeObservationType.INPUT_VALIDATION)
+        if _ERROR_HANDLING_CONTENT.search(searchable):
+            observations.add(CodeObservationType.ERROR_HANDLING)
+        return tuple(item for item in CodeObservationType if item in observations)
 
     @classmethod
     def _prepare_technology_aliases(

@@ -19,6 +19,7 @@ from app.domain import (
     InternalEvidenceType,
     InterviewQuestion,
     InterviewQuestionBatch,
+    InterviewQuestionBatchDraft,
     NormalizedRepositoryContext,
     RepositoryAnalysis,
     SnapshotHashAlgorithm,
@@ -287,7 +288,7 @@ async def test_generates_interview_questions_at_each_supported_depth(
     assert validator.content_calls == 1
     assert validator.events == ["references", "content"]
     call = provider.calls[0]
-    assert call.response_model is InterviewQuestionBatch
+    assert call.response_model is InterviewQuestionBatchDraft
     assert "공개 GitHub" in call.system_prompt
     assert "최대 7개" in call.user_prompt
     assert f"BACKEND × ENTRY × {depth.value}" in call.user_prompt
@@ -570,4 +571,4 @@ async def test_generation_does_not_mutate_or_reorder_inputs_or_batch() -> None:
 
     assert tuple(item.model_dump(mode="python") for item in contexts) == contexts_before
     assert analysis.model_dump(mode="python") == analysis_before
-    assert result.value is batch
+    assert result.value == batch

@@ -197,6 +197,7 @@ class GeminiProvider:
             try:
                 return response_model.model_validate(parsed)
             except ValidationError as exc:
+                GeminiProvider._log_validation_error(response_model, exc)
                 raise LLMStructuredOutputError(
                     "Gemini returned an invalid structured response.",
                     attempt_count=attempt_count,
@@ -212,10 +213,33 @@ class GeminiProvider:
         try:
             return response_model.model_validate_json(text)
         except ValidationError as exc:
+            GeminiProvider._log_validation_error(response_model, exc)
             raise LLMStructuredOutputError(
                 "Gemini returned an invalid structured response.",
                 attempt_count=attempt_count,
             ) from exc
+
+    @staticmethod
+    def _log_validation_error(
+        response_model: type[T],
+        error: ValidationError,
+    ) -> None:
+        validation_errors = tuple(
+            (
+                ".".join(str(part) for part in item["loc"]),
+                item["type"],
+            )
+            for item in error.errors(
+                include_url=False,
+                include_context=False,
+                include_input=False,
+            )
+        )
+        logger.warning(
+            "Gemini structured response validation failed response_model=%s validation_errors=%s",
+            response_model.__name__,
+            validation_errors,
+        )
 
     @staticmethod
     def _translate_api_error(

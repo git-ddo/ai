@@ -2,6 +2,7 @@ import pytest
 
 from app.domain import (
     AnalysisDepth,
+    CodeObservationType,
     EvidenceValueType,
     InternalEvidence,
     InternalEvidenceType,
@@ -417,6 +418,38 @@ def test_normalizes_p2_path_and_preserves_code_metadata_and_snippet() -> None:
     assert normalized_code.pull_request_number == 21
     assert normalized_code.source_evidence_refs == ("ev_002",)
     assert normalized_code.summary == snippet
+    assert normalized_code.code_observation_types == (
+        CodeObservationType.SNIPPET_SCOPE,
+        CodeObservationType.INPUT_VALIDATION,
+        CodeObservationType.ERROR_HANDLING,
+        CodeObservationType.RESPONSIBILITY,
+    )
+
+
+def test_classifies_test_code_observation_from_path_and_content() -> None:
+    code_evidence = make_evidence(
+        "ev_003",
+        evidence_type=InternalEvidenceType.CODE_EVIDENCE,
+        analysis_depth=AnalysisDepth.P2,
+        key="CODE_SNIPPET",
+        summary="@Test void rejectsBlankInput() { assertThrows(...); }",
+        path="src/test/java/AppTests.java",
+        start_line=10,
+        end_line=12,
+        commit_sha="commit-p2",
+        source_evidence_refs=("ev_002",),
+    )
+    repository = make_repository(
+        analysis_depth=AnalysisDepth.P2,
+        completed_evidence_levels=(AnalysisDepth.P0, AnalysisDepth.P1, AnalysisDepth.P2),
+        snapshot_hash_algorithm=SnapshotHashAlgorithm.SHA1,
+        snapshot_sha="snapshot-p2",
+        evidence=(make_evidence("ev_001"), code_evidence),
+    )
+
+    normalized = NormalizationService().normalize(repository).evidence[1]
+
+    assert CodeObservationType.TEST_CASE in normalized.code_observation_types
 
 
 def test_rejects_unsafe_p2_primary_path() -> None:

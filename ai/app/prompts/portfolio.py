@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from app.criteria.models import CriteriaSet
 from app.domain import AnalysisDepth, NormalizedRepositoryContext, RepositoryAnalysis
@@ -8,13 +11,19 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    _resolve_criterion_contexts,
+    build_criterion_context_data,
     build_evidence_criterion_rules,
     build_repository_data,
     render_section,
     serialize_criteria,
     serialize_untrusted_data,
 )
+from app.prompts.prior_analysis import project_repository_analyses
 from app.validators.report_validator import PolicyViolationCode
+
+if TYPE_CHECKING:
+    from app.services import CriterionEvidenceContext
 
 _PORTFOLIO_TASK_TEMPLATE = """
 BACKEND × ENTRY × 최대 {analysis_depth} 범위에서 Repository별 분석을 종합한
@@ -26,9 +35,9 @@ PortfolioSynthesis를 생성한다.
 - 모든 사용자 표시용 자연어 필드는 한국어로 생성한다.
 - overall_summary, representative_projects, strengths, gaps, next_actions, job_appeal,
   limitations만 생성한다.
-- overall_summary, strengths, gaps의 item_type은 INTERPRETATION으로 생성한다.
-- next_actions의 item_type은 RECOMMENDATION으로 생성한다.
-- job_appeal의 item_type은 JOB_APPEAL로 생성한다.
+- item_type은 생성하거나 반환하지 않는다. 서비스가 결과 필드 위치에 따라
+  overall_summary, strengths, gaps에는 INTERPRETATION, next_actions에는 RECOMMENDATION,
+  job_appeal에는 JOB_APPEAL을 주입한다.
 - job_appeal은 단일 객체로 생성한다.
 - 대표 프로젝트는 제공된 Repository 중에서만 선택하고, 해당 Repository의
   공개 Evidence만 참조한다.
@@ -71,6 +80,8 @@ def build_portfolio_prompt(
     contexts: Sequence[NormalizedRepositoryContext],
     repository_analyses: Sequence[RepositoryAnalysis],
     criteria: CriteriaSet,
+    *,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build the user prompt for depth-aware portfolio synthesis."""
 
@@ -88,6 +99,7 @@ def build_portfolio_prompt(
         ordered_analyses,
         criteria,
         task,
+        criterion_contexts,
     )
 
 
@@ -96,6 +108,8 @@ def build_portfolio_correction_prompt(
     repository_analyses: Sequence[RepositoryAnalysis],
     criteria: CriteriaSet,
     violation_codes: Sequence[PolicyViolationCode],
+    *,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
 ) -> str:
     """Build a full-regeneration prompt using only stable policy codes."""
 
@@ -121,6 +135,7 @@ def build_portfolio_correction_prompt(
         ordered_analyses,
         criteria,
         task,
+        criterion_contexts,
     )
 
 
@@ -150,19 +165,37 @@ def _render_portfolio_prompt(
     ordered_analyses: Sequence[RepositoryAnalysis],
     criteria: CriteriaSet,
     task: str,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None,
 ) -> str:
-    repository_data = [build_repository_data(context, criteria) for context in ordered_contexts]
+    resolved_contexts = _resolve_criterion_contexts(
+        ordered_contexts,
+        criteria,
+        criterion_contexts,
+    )
+    repository_data = [
+        build_repository_data(
+            context,
+            criteria,
+            include_criterion_contexts=False,
+        )
+        for context in ordered_contexts
+    ]
 
     return "\n\n".join(
         (
             render_section(CRITERIA_SECTION, serialize_criteria(criteria)),
             render_section(
                 REPOSITORY_DATA_SECTION,
-                serialize_untrusted_data({"repositories": repository_data}),
+                serialize_untrusted_data(
+                    {
+                        "repositories": repository_data,
+                        "criterionContexts": build_criterion_context_data(resolved_contexts),
+                    }
+                ),
             ),
             render_section(
                 PRIOR_ANALYSIS_SECTION,
-                serialize_untrusted_data(ordered_analyses),
+                serialize_untrusted_data(project_repository_analyses(ordered_analyses)),
             ),
             render_section(TASK_SECTION, task),
         )

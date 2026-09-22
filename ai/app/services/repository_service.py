@@ -2,13 +2,19 @@ from collections.abc import Sequence
 
 from app.core.exceptions import ReportPolicyError, RepositoryAnalysisError
 from app.criteria import CriteriaLoader, CriteriaSet
-from app.domain import NormalizedRepositoryContext, RepositoryAnalysis
+from app.domain import (
+    NormalizedRepositoryContext,
+    RepositoryAnalysis,
+    RepositoryAnalysisDraft,
+)
 from app.llm import GenerationMetadata, LLMProvider, StructuredGeneration
 from app.prompts import (
     build_repository_correction_prompt,
     build_repository_prompt,
     build_system_prompt,
 )
+from app.services.criterion_assignment_service import CriterionAssignmentService
+from app.services.criterion_context_service import CriterionContextService
 from app.validators import RepositoryPolicyValidator
 
 
@@ -20,10 +26,16 @@ class RepositoryAnalysisService:
         llm_provider: LLMProvider,
         criteria_loader: CriteriaLoader | None = None,
         policy_validator: RepositoryPolicyValidator | None = None,
+        criterion_context_service: CriterionContextService | None = None,
+        criterion_assignment_service: CriterionAssignmentService | None = None,
     ) -> None:
         self._llm_provider = llm_provider
         self._criteria_loader = criteria_loader or CriteriaLoader()
         self._policy_validator = policy_validator or RepositoryPolicyValidator()
+        self._criterion_context_service = criterion_context_service or CriterionContextService()
+        self._criterion_assignment_service = (
+            criterion_assignment_service or CriterionAssignmentService()
+        )
 
     async def analyze(
         self,
@@ -38,38 +50,52 @@ class RepositoryAnalysisService:
             raise RepositoryAnalysisError(
                 "Loaded criteria depth does not match the repository context."
             )
+        criterion_contexts = self._criterion_context_service.build((context,), criteria)
 
         system_prompt = build_system_prompt()
-        initial_prompt = build_repository_prompt(context, criteria)
+        initial_prompt = build_repository_prompt(
+            context,
+            criteria,
+            criterion_contexts=criterion_contexts,
+        )
         initial_generation = await self._llm_provider.generate_structured(
             system_prompt=system_prompt,
             user_prompt=initial_prompt,
-            response_model=RepositoryAnalysis,
+            response_model=RepositoryAnalysisDraft,
         )
 
         try:
-            self._validate_generation(initial_generation.value, context, contexts, criteria)
+            analysis = self._criterion_assignment_service.assign_repository(
+                initial_generation.value,
+                criterion_contexts,
+            )
+            self._validate_generation(analysis, context, contexts, criteria)
         except ReportPolicyError as policy_error:
             correction_prompt = build_repository_correction_prompt(
                 context,
                 criteria,
                 tuple(violation.code for violation in policy_error.violations),
+                criterion_contexts=criterion_contexts,
             )
             corrected_generation = await self._llm_provider.generate_structured(
                 system_prompt=system_prompt,
                 user_prompt=correction_prompt,
-                response_model=RepositoryAnalysis,
+                response_model=RepositoryAnalysisDraft,
             )
-            self._validate_generation(corrected_generation.value, context, contexts, criteria)
+            corrected_analysis = self._criterion_assignment_service.assign_repository(
+                corrected_generation.value,
+                criterion_contexts,
+            )
+            self._validate_generation(corrected_analysis, context, contexts, criteria)
             return StructuredGeneration(
-                value=corrected_generation.value,
+                value=corrected_analysis,
                 metadata=_combine_metadata(
                     initial_generation.metadata,
                     corrected_generation.metadata,
                 ),
             )
 
-        return initial_generation
+        return StructuredGeneration(value=analysis, metadata=initial_generation.metadata)
 
     def _validate_generation(
         self,

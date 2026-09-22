@@ -88,7 +88,7 @@ Response schemaVersion: "1.1"
 - [x] GeminiProvider lifespan 생성·종료
 - [ ] Spring Boot Mock 및 실제 Gemini E2E
 
-현재 AI 검증 기준은 전체 `pytest` 1201개와 Ruff·mypy 통과이다. Wire API는 주입 Runtime으로
+현재 AI 검증 기준은 전체 `pytest` 1232개와 Ruff·mypy 통과이다. Wire API는 주입 Runtime으로
 P0/P1/P2를 검증했고, Backend P1 Example과 실제 Backend Assembler P2 Request를 사용한 실제
 Gemini HTTP 호출도 HTTP 200으로 완료했다. P2 응답은 AI v1.1 DTO와 Backend 응답 Validator를
 모두 통과했다. Spring Boot 전체 E2E는 아직 수행하지 않았다.
@@ -184,7 +184,7 @@ Mapper는 이 구조화된 Evidence만 `InternalEvidence.technology_names`로 �
 원문의 문자열은 자동 승격하지 않는다. Normalization은 이후 alias 정규화·중복 제거·Repository
 집계를 담당한다.
 
-Prompt Context의 `evidenceCriterionCompatibility`는 다음 교집합을 Evidence별로 미리 계산한다.
+서비스는 다음 교집합을 Evidence별로 미리 계산한다.
 
 ```text
 compatible(evidence, criterion)
@@ -192,9 +192,16 @@ compatible(evidence, criterion)
   and evidence.evidenceType in criterion.allowedEvidenceTypes
 ```
 
-Repository, Portfolio, Interview, Statement의 일반·교정 Prompt는 각 `evidence_ref`마다 호환되는
-`criterion_key`를 최소 하나 요구한다. 혼합 깊이 참조는 깊이별 Criteria를 함께 사용하며, 호환
-Criteria가 없으면 해당 Evidence를 인용하지 않는다.
+이 호환성은 Prompt 지시가 아니라 서비스 코드가 보장하는 계약이다. 서비스는 Criterion별 호환
+Evidence Context를 구성한다. Gemini Structured Draft는 `criterion_context_refs`만 반환하고
+`criterion_key`를 직접 생성하지 않는다. 서비스는 선택된 Context가 인용된 모든 Evidence·Claim을
+허용하는지 검사한 뒤 최종 분석 항목에 key를 주입한다. 관련성이 없으면 해당 Criterion의 분석
+항목을 만들지 않을 수 있다.
+
+P2 `CODE_EVIDENCE`는 복수 Criterion과 호환될 수 있으므로 깊이와 Evidence 타입만으로 하나를
+선택하지 않는다. 수집·정규화 단계에서 `factKey`와 코드 관찰 유형을 구조화해 후보군을 좁힌다.
+Validator는 서비스 매핑을 대신하지 않고 최종 계약 위반만 탐지한다. 불일치를 발견해도 참조나
+Criterion을 자동 수정하지 않으며 제한된 교정 후에도 해결되지 않으면 실패한다.
 
 AI 경계 구현과 Fake Provider 회귀는 완료했지만, 2026-09-14 기준 Backend `origin/main`
 `eda39f8`에는 `TECHNOLOGY_DETECTED` 생성이 없다. 새 계약의 실제 Gemini P2 Smoke는 Backend

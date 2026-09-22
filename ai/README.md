@@ -118,8 +118,9 @@ Spring Boot
 FastAPI
   request/의미 검증
   → Repository별 깊이 선택
-  → Criteria + Prompt Context
-  → Gemini Structured Output
+  → Criteria + Criterion별 Evidence Context
+  → Gemini Structured Draft (`criterion_context_refs`)
+  → Context 범위 검증 + 서비스 `criterion_keys` 주입
   → 참조/깊이/내용 정책 검증
         ↓
 Spring Boot
@@ -145,16 +146,21 @@ Repository A의 Evidence를 Repository B 결과에 사용하지 않는다. P2 �
 source/related 참조, 교차 Repository 참조, 순환과 P2의 P1 source를 검사한다. 출력
 `RepositoryPolicyValidator`는 Gemini가 생성한 결과의 참조를 별도로 검사한다.
 
-각 `GroundedAnalysisItem`은 적용한 `criterion_keys`와 문장에서 사용한 `technology_names`,
-`file_paths`를 구조화된 grounding 메타데이터로 반환한다. 내용 정책 Validator는 이를 누적
-Criteria와 Repository Context의 기술·경로 allowlist에 대조하고, P0/P1/P2 범위 초과 단정,
-UserClaim의 사실 승격, `NOT_OBSERVED` 오용과 근거 없는 누락 Recommendation을 거절한다.
-자연어 정책 검출은 보수적인 고정 패턴 기반이며 모든 표현을 완전히 판별하지는 못한다.
+서비스는 Evidence별 호환 Criteria 후보를 계산해 Criterion별 Context를 구성하고, 검증된 내부
+`GroundedAnalysisItem`에 `criterion_keys`를 주입한다. LLM은 `criterion_keys`를 직접 생성하지
+않고 주어진 Criterion과 Evidence 범위에서 분석 내용을 생성한다. P2의 복수 후보는 `factKey`와
+구조화된 코드 관찰 유형으로 좁힌다. 내용 정책 Validator는 서비스가 주입한 Criteria와
+Repository Context의 기술·경로 allowlist를 최종 대조하고, P0/P1/P2 범위 초과 단정, UserClaim의
+사실 승격, `NOT_OBSERVED` 오용과 근거 없는 누락 Recommendation을 거절한다. 자연어 정책 검출은
+보수적인 고정 패턴 기반이며 모든 표현을 완전히 판별하지는 못한다.
 
 `RepositoryAnalysisService`는 정규화된 Repository Context에 맞는 누적 Criteria와 Prompt를
-선택하고 `LLMProvider`를 통해 `RepositoryAnalysis`를 생성한다. 참조 검증 후 내용 정책을
-검증하며 최초 정책 실패에 한해서만 위반 코드 기반 교정 Prompt로 전체 결과를 한 번
-재생성한다. Provider 네트워크 retry와 이 정책 재생성은 서로 다른 책임이다.
+선택하고 `LLMProvider`를 통해 `RepositoryAnalysisDraft`를 생성한다. Draft Schema에는
+`criterion_keys`가 없고 `criterion_context_refs`만 있다. `CriterionAssignmentService`가 선택된
+Context가 모든 Evidence·Claim 참조를 허용하는지 검사한 뒤 최종 `RepositoryAnalysis`에 key를
+주입한다. 알 수 없는 Context, 범위 밖 Evidence·Claim, 실제 인용에 쓰이지 않은 Context는 각각
+고정 정책 위반 코드로 거절한다. 최초 정책 실패에 한해서만 위반 코드 기반 교정 Prompt로 전체
+결과를 한 번 재생성한다. Provider 네트워크 retry와 이 정책 재생성은 서로 다른 책임이다.
 
 `PortfolioPolicyValidator`는 전체 요약·strengths·gaps·nextActions·jobAppeal에 한해 여러
 Repository 근거 참조를 허용한다. 대표 Repository의 reason과 참조는 해당 Repository로

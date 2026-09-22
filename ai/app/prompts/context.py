@@ -1,10 +1,16 @@
+from __future__ import annotations
+
 import json
 from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from app.criteria.models import CriteriaSet
 from app.domain import NormalizedRepositoryContext
+
+if TYPE_CHECKING:
+    from app.services.criterion_context_service import CriterionEvidenceContext
 
 CRITERIA_SECTION = "CRITERIA"
 REPOSITORY_DATA_SECTION = "UNTRUSTED_REPOSITORY_DATA"
@@ -42,9 +48,10 @@ def build_user_claim_rules(criteria: CriteriaSet) -> str:
 
     allowed_keys = ", ".join(claim_criteria)
     return (
-        "- UserClaim은 allow_user_claims=true인 Criteria에만 사용할 수 있다. "
-        f"현재 허용 Criteria는 {allowed_keys}이다. UserClaim을 참조하는 항목은 허용 Criteria "
-        "key와 claim_refs를 함께 포함하고 검증된 GitHub 사실처럼 표현하지 않는다."
+        "- UserClaim은 allow_user_claims=true인 Criterion Context에서만 사용할 수 있다. "
+        f"현재 이에 해당하는 Criteria는 {allowed_keys}이다. UserClaim을 참조하는 항목은 "
+        "claim_refs를 허용하는 criterion_context_refs와 함께 반환하고 검증된 GitHub "
+        "사실처럼 표현하지 않는다."
     )
 
 
@@ -70,36 +77,19 @@ def render_section(name: str, content: str) -> str:
     return f"[{name}_BEGIN]\n{content}\n[{name}_END]"
 
 
-def build_evidence_criterion_compatibility(
-    context: NormalizedRepositoryContext,
-    criteria: CriteriaSet,
-) -> dict[str, tuple[str, ...]]:
-    """Map every Evidence id to exactly depth-and-type-compatible Criteria keys."""
-
-    return {
-        evidence.evidence_id: tuple(
-            criterion.key
-            for criterion in criteria.criteria
-            if criterion.analysis_depth is evidence.analysis_depth
-            and evidence.evidence_type in criterion.allowed_evidence_types
-        )
-        for evidence in context.evidence
-    }
-
-
 def build_evidence_criterion_rules() -> str:
-    """Describe the same compatibility rule enforced by report validation."""
+    """Describe the service-owned Criterion Context contract used for generation."""
 
     return "\n".join(
         (
-            "- 각 evidence_ref는 evidenceCriterionCompatibility에서 실제 적용한 "
-            "criterion_key를 하나 이상 가져야 한다.",
-            "- Evidence와 Criterion은 analysisDepth가 정확히 같고 Evidence의 "
-            "evidenceType이 Criterion의 allowedEvidenceTypes에 포함될 때만 호환된다.",
-            "- 여러 깊이 또는 유형의 Evidence를 함께 참조하면 각 Evidence마다 호환되는 "
-            "Criterion key를 criterion_keys에 포함한다.",
-            "- 호환되는 Criterion이 없는 Evidence는 인용하지 않는다.",
-            "- 최대 분석 깊이만 보고 Criterion을 선택하지 않는다.",
+            "- 각 생성 항목은 인용한 모든 evidence_refs와 claim_refs를 허용하는 "
+            "criterionContexts의 context_id를 criterion_context_refs에 반환한다.",
+            "- criterionKey를 생성하거나 수정하지 않는다. 서비스가 검증된 "
+            "criterion_context_refs로부터 criterionKey를 주입한다.",
+            "- 선택한 각 Criterion Context는 생성 항목이 실제 인용한 Evidence 또는 "
+            "UserClaim을 하나 이상 포함해야 한다.",
+            "- 허용된 Criterion Context가 없는 Evidence 또는 UserClaim은 인용하지 않는다.",
+            "- analysisDepth와 evidenceType만으로 Criterion을 임의 선택하지 않는다.",
         )
     )
 
@@ -107,6 +97,9 @@ def build_evidence_criterion_rules() -> str:
 def build_repository_data(
     context: NormalizedRepositoryContext,
     criteria: CriteriaSet,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
+    *,
+    include_criterion_contexts: bool = True,
 ) -> dict[str, object]:
     """Keep repository metadata, depth-scoped evidence, and user claims separate."""
 
@@ -117,7 +110,7 @@ def build_repository_data(
         for depth in context.completed_evidence_levels
     }
 
-    return {
+    data: dict[str, object] = {
         "repository": {
             "repository_id": context.repository_id,
             "repository_full_name": context.repository_full_name,
@@ -129,12 +122,54 @@ def build_repository_data(
             "technology_names": context.technology_names,
         },
         "evidence_by_depth": evidence_by_depth,
-        "evidenceCriterionCompatibility": build_evidence_criterion_compatibility(
-            context,
-            criteria,
-        ),
         "user_claims": context.user_claims,
     }
+    if include_criterion_contexts:
+        resolved_contexts = _resolve_criterion_contexts(
+            (context,),
+            criteria,
+            criterion_contexts,
+        )
+        data["criterionContexts"] = build_criterion_context_data(resolved_contexts)
+    return data
+
+
+def build_criterion_context_data(
+    contexts: Sequence[CriterionEvidenceContext],
+) -> tuple[dict[str, object], ...]:
+    """Serialize service-owned Criterion Contexts without changing their scope."""
+
+    return tuple(
+        {
+            "context_id": item.context_id,
+            "criterion_key": item.criterion_key,
+            "analysis_depth": item.analysis_depth,
+            "title": item.title,
+            "description": item.description,
+            "eligible_evidence_refs": item.eligible_evidence_refs,
+            "eligible_claim_refs": item.eligible_claim_refs,
+        }
+        for item in contexts
+    )
+
+
+def _resolve_criterion_contexts(
+    repositories: Sequence[NormalizedRepositoryContext],
+    criteria: CriteriaSet,
+    criterion_contexts: Sequence[CriterionEvidenceContext] | None,
+) -> tuple[CriterionEvidenceContext, ...]:
+    if criterion_contexts is None:
+        from app.services.criterion_context_service import CriterionContextService
+
+        return CriterionContextService().build(repositories, criteria)
+
+    contexts = tuple(criterion_contexts)
+    if not contexts:
+        raise PromptContextError("Prompt requires at least one Criterion Context.")
+    allowed_keys = {criterion.key for criterion in criteria.criteria}
+    if any(context.criterion_key not in allowed_keys for context in contexts):
+        raise PromptContextError("Criterion Context contains a key outside the Criteria set.")
+    return contexts
 
 
 def _serialize_json(value: object) -> str:

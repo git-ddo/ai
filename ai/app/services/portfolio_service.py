@@ -6,6 +6,7 @@ from app.domain import (
     AnalysisDepth,
     NormalizedRepositoryContext,
     PortfolioSynthesis,
+    PortfolioSynthesisDraft,
     RepositoryAnalysis,
 )
 from app.llm import GenerationMetadata, LLMProvider, StructuredGeneration
@@ -14,6 +15,8 @@ from app.prompts import (
     build_portfolio_prompt,
     build_system_prompt,
 )
+from app.services.criterion_assignment_service import CriterionAssignmentService
+from app.services.criterion_context_service import CriterionContextService
 from app.validators import PortfolioPolicyValidator
 
 _DEPTH_RANK = {
@@ -31,10 +34,16 @@ class PortfolioSynthesisService:
         llm_provider: LLMProvider,
         criteria_loader: CriteriaLoader | None = None,
         policy_validator: PortfolioPolicyValidator | None = None,
+        criterion_context_service: CriterionContextService | None = None,
+        criterion_assignment_service: CriterionAssignmentService | None = None,
     ) -> None:
         self._llm_provider = llm_provider
         self._criteria_loader = criteria_loader or CriteriaLoader()
         self._policy_validator = policy_validator or PortfolioPolicyValidator()
+        self._criterion_context_service = criterion_context_service or CriterionContextService()
+        self._criterion_assignment_service = (
+            criterion_assignment_service or CriterionAssignmentService()
+        )
 
     async def synthesize(
         self,
@@ -54,22 +63,28 @@ class PortfolioSynthesisService:
             raise PortfolioSynthesisError(
                 "Loaded criteria depth does not match the portfolio maximum depth."
             )
+        criterion_contexts = self._criterion_context_service.build(context_items, criteria)
 
         system_prompt = build_system_prompt()
         initial_prompt = build_portfolio_prompt(
             context_items,
             analysis_items,
             criteria,
+            criterion_contexts=criterion_contexts,
         )
         initial_generation = await self._llm_provider.generate_structured(
             system_prompt=system_prompt,
             user_prompt=initial_prompt,
-            response_model=PortfolioSynthesis,
+            response_model=PortfolioSynthesisDraft,
         )
 
         try:
-            self._validate_generation(
+            synthesis = self._criterion_assignment_service.assign_portfolio(
                 initial_generation.value,
+                criterion_contexts,
+            )
+            self._validate_generation(
+                synthesis,
                 context_items,
                 criteria,
             )
@@ -79,26 +94,31 @@ class PortfolioSynthesisService:
                 analysis_items,
                 criteria,
                 tuple(violation.code for violation in policy_error.violations),
+                criterion_contexts=criterion_contexts,
             )
             corrected_generation = await self._llm_provider.generate_structured(
                 system_prompt=system_prompt,
                 user_prompt=correction_prompt,
-                response_model=PortfolioSynthesis,
+                response_model=PortfolioSynthesisDraft,
+            )
+            corrected_synthesis = self._criterion_assignment_service.assign_portfolio(
+                corrected_generation.value,
+                criterion_contexts,
             )
             self._validate_generation(
-                corrected_generation.value,
+                corrected_synthesis,
                 context_items,
                 criteria,
             )
             return StructuredGeneration(
-                value=corrected_generation.value,
+                value=corrected_synthesis,
                 metadata=_combine_metadata(
                     initial_generation.metadata,
                     corrected_generation.metadata,
                 ),
             )
 
-        return initial_generation
+        return StructuredGeneration(value=synthesis, metadata=initial_generation.metadata)
 
     def _validate_generation(
         self,

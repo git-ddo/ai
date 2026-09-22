@@ -20,6 +20,7 @@ from app.domain import (
     NormalizedRepositoryContext,
     PortfolioStatement,
     PortfolioStatementBatch,
+    PortfolioStatementBatchDraft,
     PortfolioStatementType,
     PortfolioSynthesis,
     RepositoryAnalysis,
@@ -208,7 +209,7 @@ def make_synthesis(
             content="공개 근거에서 포트폴리오 설명 요소가 관찰됩니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=(first_evidence,),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
         representative_projects=(
             RepresentativeProject(
@@ -223,7 +224,7 @@ def make_synthesis(
             content="공개 Evidence를 직무 관련 설명에 활용할 수 있습니다.",
             confidence=EvidenceConfidence.HIGH,
             evidence_refs=(first_evidence,),
-            criterion_keys=("README_READINESS",),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
         ),
         limitations=("공개 근거 범위만 분석했습니다.",),
     )
@@ -297,13 +298,13 @@ async def test_generates_statements_at_each_supported_depth(depth: AnalysisDepth
         policy_validator=validator,
     ).generate((context,), (analysis,), synthesis, statement_count=9)
 
-    assert result.value is expected
+    assert result.value == expected
     assert result.metadata == GenerationMetadata(duration_ms=0, attempt_count=1)
     assert provider.call_count == 1
     assert loader.calls == [("BACKEND", depth.value)]
     assert validator.events == ["references", "content"]
     call = provider.calls[0]
-    assert call.response_model is PortfolioStatementBatch
+    assert call.response_model is PortfolioStatementBatchDraft
     assert "공개 GitHub" in call.system_prompt
     assert "최대 9개" in call.user_prompt
     assert f"최대 {depth.value}" in call.user_prompt
@@ -323,7 +324,7 @@ async def test_accepts_one_to_five_repositories(repository_count: int) -> None:
         make_synthesis(contexts),
     )
 
-    assert result.value is expected
+    assert result.value == expected
 
 
 @pytest.mark.asyncio
@@ -505,7 +506,7 @@ async def test_regenerates_once_after_policy_failure_and_combines_metadata() -> 
         make_synthesis((context,)),
     )
 
-    assert result.value is corrected
+    assert result.value == corrected
     assert result.metadata == GenerationMetadata(duration_ms=30, attempt_count=5)
     assert provider.call_count == 2
     correction_prompt = provider.calls[1].user_prompt
@@ -639,4 +640,4 @@ async def test_generation_does_not_mutate_or_reorder_inputs_or_batch() -> None:
     assert tuple(item.model_dump(mode="python") for item in contexts) == contexts_before
     assert tuple(item.model_dump(mode="python") for item in analyses) == analyses_before
     assert synthesis.model_dump(mode="python") == synthesis_before
-    assert result.value is batch
+    assert result.value == batch
