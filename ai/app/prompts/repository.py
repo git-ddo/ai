@@ -10,6 +10,7 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    build_criterion_context_repair_guidance,
     build_evidence_criterion_rules,
     build_repository_data,
     build_user_claim_rules,
@@ -20,7 +21,7 @@ from app.prompts.context import (
 from app.validators.report_validator import PolicyViolationCode
 
 if TYPE_CHECKING:
-    from app.services import CriterionEvidenceContext
+    from app.services import CriterionContextRepairHint, CriterionEvidenceContext
 
 _REPOSITORY_TASK_TEMPLATE = """
 BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의 RepositoryAnalysis를 생성한다.
@@ -77,6 +78,7 @@ _CORRECTION_TASK_TEMPLATE = """
 
 이전 생성 결과가 다음 정책 위반 코드로 거절되었다.
 {violation_codes}
+{criterion_context_repair_guidance}
 
 - 이전 결과를 수정하거나 일부 항목을 삭제하지 않는다.
 - 입력 Evidence와 UserClaim만 사용해 RepositoryAnalysis 전체를 처음부터 다시 생성한다.
@@ -120,8 +122,9 @@ def build_repository_correction_prompt(
     violation_codes: Sequence[PolicyViolationCode],
     *,
     criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
+    criterion_repair_hints: Sequence[CriterionContextRepairHint] = (),
 ) -> str:
-    """Build a full-regeneration prompt using only stable policy codes."""
+    """Build a full-regeneration prompt with safe Criterion mismatch IDs."""
 
     if context.analysis_depth is not criteria.analysis_depth:
         raise PromptContextError(
@@ -135,6 +138,9 @@ def build_repository_correction_prompt(
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=_build_repository_task(context, criteria),
         violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
+        criterion_context_repair_guidance=build_criterion_context_repair_guidance(
+            criterion_repair_hints
+        ),
     )
     return "\n\n".join(
         (

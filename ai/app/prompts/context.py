@@ -10,6 +10,7 @@ from app.criteria.models import CriteriaSet
 from app.domain import NormalizedRepositoryContext
 
 if TYPE_CHECKING:
+    from app.services.criterion_assignment_service import CriterionContextRepairHint
     from app.services.criterion_context_service import CriterionEvidenceContext
 
 CRITERIA_SECTION = "CRITERIA"
@@ -84,12 +85,53 @@ def build_evidence_criterion_rules() -> str:
         (
             "- 각 생성 항목은 인용한 모든 evidence_refs와 claim_refs를 허용하는 "
             "criterionContexts의 context_id를 criterion_context_refs에 반환한다.",
+            "- 한 생성 항목이 복수 Criterion의 의미를 함께 다루면 인용한 모든 참조를 "
+            "포괄하는 Criterion Context ID의 합집합을 criterion_context_refs에 반환한다.",
+            "- 필요한 Criterion Context 합집합을 확실히 선택할 수 없으면 서로 다른 "
+            "Criterion의 내용을 하나의 항목에 섞지 않고 Criterion별 항목으로 분리한다.",
             "- criterionKey를 생성하거나 수정하지 않는다. 서비스가 검증된 "
             "criterion_context_refs로부터 criterionKey를 주입한다.",
             "- 선택한 각 Criterion Context는 생성 항목이 실제 인용한 Evidence 또는 "
             "UserClaim을 하나 이상 포함해야 한다.",
             "- 허용된 Criterion Context가 없는 Evidence 또는 UserClaim은 인용하지 않는다.",
             "- analysisDepth와 evidenceType만으로 Criterion을 임의 선택하지 않는다.",
+        )
+    )
+
+
+def build_criterion_context_repair_guidance(
+    hints: Sequence[CriterionContextRepairHint],
+) -> str:
+    """Serialize safe Criterion mismatch IDs for a correction prompt."""
+
+    hint_items = tuple(hints)
+    if not hint_items:
+        return ""
+
+    serialized = serialize_untrusted_data(
+        {
+            "criterion_context_repairs": tuple(
+                {
+                    "field_path": hint.field_path,
+                    "selected_context_refs": hint.selected_context_refs,
+                    "outside_evidence_refs": hint.outside_evidence_refs,
+                    "eligible_context_refs_by_evidence": {
+                        evidence_ref: context_refs
+                        for evidence_ref, context_refs in hint.eligible_context_refs_by_evidence
+                    },
+                }
+                for hint in hint_items
+            )
+        }
+    )
+    return "\n".join(
+        (
+            "다음은 생성 문장을 포함하지 않는 구조화된 Criterion Context 교정 정보이다.",
+            serialized,
+            "- field_path의 항목을 다시 생성할 때 outside_evidence_refs를 유지한다면 "
+            "eligible_context_refs_by_evidence에 표시된 Context를 빠짐없이 선택한다.",
+            "- 하나의 항목에 필요한 Context 합집합을 선택하기 어렵다면 Criterion별 항목으로 "
+            "분리한다.",
         )
     )
 

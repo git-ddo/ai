@@ -13,6 +13,7 @@ from app.prompts.context import (
     PromptContextError,
     _resolve_criterion_contexts,
     build_criterion_context_data,
+    build_criterion_context_repair_guidance,
     build_evidence_criterion_rules,
     build_repository_data,
     render_section,
@@ -23,7 +24,7 @@ from app.prompts.prior_analysis import project_repository_analyses
 from app.validators.report_validator import PolicyViolationCode
 
 if TYPE_CHECKING:
-    from app.services import CriterionEvidenceContext
+    from app.services import CriterionContextRepairHint, CriterionEvidenceContext
 
 _PORTFOLIO_TASK_TEMPLATE = """
 BACKEND × ENTRY × 최대 {analysis_depth} 범위에서 Repository별 분석을 종합한
@@ -67,6 +68,7 @@ _CORRECTION_TASK_TEMPLATE = """
 
 이전 생성 결과가 다음 정책 위반 코드로 거절되었다.
 {violation_codes}
+{criterion_context_repair_guidance}
 
 - 이전 결과를 수정하거나 일부 항목을 삭제하지 않는다.
 - 입력 Evidence, UserClaim과 검증된 RepositoryAnalysis만 사용해 PortfolioSynthesis 전체를
@@ -110,8 +112,9 @@ def build_portfolio_correction_prompt(
     violation_codes: Sequence[PolicyViolationCode],
     *,
     criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
+    criterion_repair_hints: Sequence[CriterionContextRepairHint] = (),
 ) -> str:
-    """Build a full-regeneration prompt using only stable policy codes."""
+    """Build a full-regeneration prompt with safe Criterion mismatch IDs."""
 
     unique_codes = tuple(dict.fromkeys(violation_codes))
     if not unique_codes:
@@ -129,6 +132,9 @@ def build_portfolio_correction_prompt(
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=base_task,
         violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
+        criterion_context_repair_guidance=build_criterion_context_repair_guidance(
+            criterion_repair_hints
+        ),
     )
     return _render_portfolio_prompt(
         ordered_contexts,

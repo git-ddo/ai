@@ -39,6 +39,7 @@ from app.prompts.context import (
     TASK_SECTION,
     serialize_untrusted_data,
 )
+from app.services import CriterionContextRepairHint
 from app.validators import PolicyViolationCode
 
 RESERVED_SECTION_MARKERS = tuple(
@@ -385,6 +386,30 @@ def test_repository_correction_prompt_rejects_empty_violation_codes(
         build_repository_correction_prompt(make_context(), criteria, ())
 
 
+def test_repository_correction_prompt_includes_safe_criterion_repair_ids(
+    criteria: CriteriaSet,
+) -> None:
+    prompt = build_repository_correction_prompt(
+        make_context(),
+        criteria,
+        (PolicyViolationCode.CRITERION_CONTEXT_EVIDENCE_MISMATCH,),
+        criterion_repair_hints=(
+            CriterionContextRepairHint(
+                field_path="summary.evidence_refs",
+                selected_context_refs=("ctx_001",),
+                outside_evidence_refs=("ev_005",),
+                eligible_context_refs_by_evidence=(("ev_005", ("ctx_002",)),),
+            ),
+        ),
+    )
+    task = extract_section(prompt, TASK_SECTION)
+
+    assert '"field_path":"summary.evidence_refs"' in task
+    assert '"outside_evidence_refs":["ev_005"]' in task
+    assert '"selected_context_refs":["ctx_001"]' in task
+    assert '"eligible_context_refs_by_evidence":{"ev_005":["ctx_002"]}' in task
+
+
 def test_repository_prompt_separates_criteria_data_and_task(criteria: CriteriaSet) -> None:
     prompt = build_repository_prompt(make_context(), criteria)
 
@@ -463,6 +488,8 @@ def test_all_normal_and_correction_tasks_require_criterion_context_refs() -> Non
         assert "criterion_context_refs" in task
         assert "criterionKey를 생성하거나 수정하지 않는다" in task
         assert "실제 인용한 Evidence 또는" in task
+        assert "Criterion Context ID의 합집합" in task
+        assert "Criterion별 항목으로 분리" in task
         assert "허용된 Criterion Context가 없는 Evidence" in task
         assert "analysisDepth와 evidenceType만으로" in task
 
@@ -968,7 +995,35 @@ def test_portfolio_correction_prompt_does_not_accept_previous_synthesis() -> Non
         "criteria",
         "violation_codes",
         "criterion_contexts",
+        "criterion_repair_hints",
     )
+
+
+def test_portfolio_correction_prompt_includes_safe_criterion_repair_ids(
+    criteria: CriteriaSet,
+) -> None:
+    sensitive_previous_content = "이 문장은 correction prompt에 포함되면 안 됩니다."
+    prompt = build_portfolio_correction_prompt(
+        (make_context(),),
+        (make_analysis(),),
+        criteria,
+        (PolicyViolationCode.CRITERION_CONTEXT_EVIDENCE_MISMATCH,),
+        criterion_repair_hints=(
+            CriterionContextRepairHint(
+                field_path="strengths[0].evidence_refs",
+                selected_context_refs=("ctx_001",),
+                outside_evidence_refs=("ev_002",),
+                eligible_context_refs_by_evidence=(("ev_002", ("ctx_002",)),),
+            ),
+        ),
+    )
+    task = extract_section(prompt, TASK_SECTION)
+
+    assert '"field_path":"strengths[0].evidence_refs"' in task
+    assert '"selected_context_refs":["ctx_001"]' in task
+    assert '"outside_evidence_refs":["ev_002"]' in task
+    assert '"eligible_context_refs_by_evidence":{"ev_002":["ctx_002"]}' in task
+    assert sensitive_previous_content not in task
 
 
 def test_portfolio_correction_prompt_preserves_untrusted_serialization_and_rules(

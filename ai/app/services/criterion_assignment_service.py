@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from app.core.exceptions import ReportPolicyError
@@ -29,6 +30,16 @@ class _ContextGroundedDraft(Protocol):
     criterion_context_refs: tuple[str, ...]
     evidence_refs: tuple[str, ...]
     claim_refs: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CriterionContextRepairHint:
+    """Safe IDs that explain one Criterion Context and Evidence mismatch."""
+
+    field_path: str
+    selected_context_refs: tuple[str, ...]
+    outside_evidence_refs: tuple[str, ...]
+    eligible_context_refs_by_evidence: tuple[tuple[str, tuple[str, ...]], ...]
 
 
 class CriterionAssignmentService:
@@ -77,6 +88,84 @@ class CriterionAssignmentService:
             ),
             limitations=draft.limitations,
         )
+
+    def build_repository_repair_hints(
+        self,
+        draft: RepositoryAnalysisDraft,
+        contexts: Sequence[CriterionEvidenceContext],
+        violations: Sequence[PolicyViolation],
+    ) -> tuple[CriterionContextRepairHint, ...]:
+        """Describe repository Evidence mismatches without exposing generated content."""
+
+        context_items = self._validate_contexts(contexts)
+        drafts_by_path: dict[str, _ContextGroundedDraft] = {"summary": draft.summary}
+        drafts_by_path.update(
+            (f"observations[{index}]", item) for index, item in enumerate(draft.observations)
+        )
+        drafts_by_path.update(
+            (f"strengths[{index}]", item) for index, item in enumerate(draft.strengths)
+        )
+        drafts_by_path.update(
+            (f"recommendations[{index}]", item) for index, item in enumerate(draft.recommendations)
+        )
+
+        return self._build_repair_hints(drafts_by_path, context_items, violations)
+
+    def build_portfolio_repair_hints(
+        self,
+        draft: PortfolioSynthesisDraft,
+        contexts: Sequence[CriterionEvidenceContext],
+        violations: Sequence[PolicyViolation],
+    ) -> tuple[CriterionContextRepairHint, ...]:
+        """Describe portfolio Evidence mismatches without exposing generated content."""
+
+        context_items = self._validate_contexts(contexts)
+        drafts_by_path: dict[str, _ContextGroundedDraft] = {
+            "overall_summary": draft.overall_summary,
+            "job_appeal": draft.job_appeal,
+        }
+        drafts_by_path.update(
+            (f"strengths[{index}]", item) for index, item in enumerate(draft.strengths)
+        )
+        drafts_by_path.update((f"gaps[{index}]", item) for index, item in enumerate(draft.gaps))
+        drafts_by_path.update(
+            (f"next_actions[{index}]", item) for index, item in enumerate(draft.next_actions)
+        )
+        return self._build_repair_hints(drafts_by_path, context_items, violations)
+
+    def _build_repair_hints(
+        self,
+        drafts_by_path: dict[str, _ContextGroundedDraft],
+        contexts: tuple[CriterionEvidenceContext, ...],
+        violations: Sequence[PolicyViolation],
+    ) -> tuple[CriterionContextRepairHint, ...]:
+        hints: list[CriterionContextRepairHint] = []
+        seen_paths: set[str] = set()
+        evidence_suffix = ".evidence_refs"
+        for violation in violations:
+            if (
+                violation.code is not PolicyViolationCode.CRITERION_CONTEXT_EVIDENCE_MISMATCH
+                or violation.field_path is None
+                or not violation.field_path.endswith(evidence_suffix)
+            ):
+                continue
+
+            item_path = violation.field_path[: -len(evidence_suffix)]
+            if item_path in seen_paths:
+                continue
+            item = drafts_by_path.get(item_path)
+            if item is None:
+                continue
+
+            hint = self._evidence_repair_hint(
+                item,
+                contexts,
+                violation.field_path,
+            )
+            if hint is not None:
+                hints.append(hint)
+                seen_paths.add(item_path)
+        return tuple(hints)
 
     def assign_portfolio(
         self,
@@ -269,6 +358,49 @@ class CriterionAssignmentService:
 
         return tuple(context.criterion_key for context in selected)
 
+    def _evidence_repair_hint(
+        self,
+        draft: _ContextGroundedDraft,
+        contexts: tuple[CriterionEvidenceContext, ...],
+        field_path: str,
+    ) -> CriterionContextRepairHint | None:
+        context_by_id = {context.context_id: context for context in contexts}
+        selected_context_refs = self._context_refs(draft, contexts)
+        selected = tuple(
+            context_by_id[ref] for ref in selected_context_refs if ref in context_by_id
+        )
+        known_evidence_refs = {
+            ref for context in contexts for ref in context.eligible_evidence_refs
+        }
+        allowed_evidence_refs = {
+            ref for context in selected for ref in context.eligible_evidence_refs
+        }
+        outside_evidence_refs = tuple(
+            ref
+            for ref in draft.evidence_refs
+            if ref in known_evidence_refs and ref not in allowed_evidence_refs
+        )
+        if not outside_evidence_refs:
+            return None
+
+        eligible_context_refs_by_evidence = tuple(
+            (
+                evidence_ref,
+                tuple(
+                    context.context_id
+                    for context in contexts
+                    if evidence_ref in context.eligible_evidence_refs
+                ),
+            )
+            for evidence_ref in outside_evidence_refs
+        )
+        return CriterionContextRepairHint(
+            field_path=field_path,
+            selected_context_refs=selected_context_refs,
+            outside_evidence_refs=outside_evidence_refs,
+            eligible_context_refs_by_evidence=eligible_context_refs_by_evidence,
+        )
+
     @staticmethod
     def _context_refs(
         draft: _ContextGroundedDraft,
@@ -305,4 +437,4 @@ class CriterionAssignmentService:
         raise ReportPolicyError((PolicyViolation(code, message, field_path),))
 
 
-__all__ = ["CriterionAssignmentService"]
+__all__ = ["CriterionAssignmentService", "CriterionContextRepairHint"]
