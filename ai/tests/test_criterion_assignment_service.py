@@ -124,6 +124,58 @@ def test_rejects_evidence_outside_selected_context_without_rewriting() -> None:
     )
 
 
+def test_builds_portfolio_repair_hint_for_failed_strength() -> None:
+    repository, context_ids = _context_id_by_key(AnalysisDepth.P1)
+    criteria = CriteriaLoader().load("BACKEND", "P1")
+    contexts = CriterionContextService().build((repository,), criteria)
+    evidence_ref = repository.evidence[0].evidence_id
+    valid_item = EvidenceGroundedAnalysisDraft(
+        content="공개 기술 근거를 설명할 수 있습니다.",
+        confidence=EvidenceConfidence.HIGH,
+        evidence_refs=(evidence_ref,),
+        criterion_context_refs=(context_ids["TECH_STACK_EVIDENCE"],),
+    )
+    invalid_strength = EvidenceGroundedAnalysisDraft(
+        content="기술 근거와 활동 범위를 함께 설명합니다.",
+        confidence=EvidenceConfidence.HIGH,
+        evidence_refs=(evidence_ref,),
+        criterion_context_refs=(context_ids["ACTIVITY_SCOPE"],),
+    )
+    draft = PortfolioSynthesisDraft(
+        overall_summary=valid_item,
+        representative_projects=(
+            RepresentativeProject(
+                repository_full_name=repository.repository_full_name,
+                reason="공개 근거가 있습니다.",
+                confidence=EvidenceConfidence.HIGH,
+                evidence_refs=(evidence_ref,),
+            ),
+        ),
+        strengths=(invalid_strength,),
+        job_appeal=valid_item,
+        limitations=("공개 근거 범위만 분석했습니다.",),
+    )
+    assignment = CriterionAssignmentService()
+
+    with pytest.raises(ReportPolicyError) as exc_info:
+        assignment.assign_portfolio(draft, contexts)
+
+    assert assignment.build_portfolio_repair_hints(
+        draft,
+        contexts,
+        exc_info.value.violations,
+    ) == (
+        CriterionContextRepairHint(
+            field_path="strengths[0].evidence_refs",
+            selected_context_refs=(context_ids["ACTIVITY_SCOPE"],),
+            outside_evidence_refs=(evidence_ref,),
+            eligible_context_refs_by_evidence=(
+                (evidence_ref, (context_ids["TECH_STACK_EVIDENCE"],)),
+            ),
+        ),
+    )
+
+
 def test_rejects_unknown_and_unused_contexts_explicitly() -> None:
     repository, context_ids = _context_id_by_key(AnalysisDepth.P1)
     criteria = CriteriaLoader().load("BACKEND", "P1")

@@ -10,6 +10,7 @@ from app.prompts.context import (
     REPOSITORY_DATA_SECTION,
     TASK_SECTION,
     PromptContextError,
+    build_criterion_context_repair_guidance,
     build_evidence_criterion_rules,
     build_repository_data,
     build_user_claim_rules,
@@ -137,7 +138,7 @@ def build_repository_correction_prompt(
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=_build_repository_task(context, criteria),
         violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
-        criterion_context_repair_guidance=_build_criterion_context_repair_guidance(
+        criterion_context_repair_guidance=build_criterion_context_repair_guidance(
             criterion_repair_hints
         ),
     )
@@ -151,41 +152,6 @@ def build_repository_correction_prompt(
                 ),
             ),
             render_section(TASK_SECTION, task),
-        )
-    )
-
-
-def _build_criterion_context_repair_guidance(
-    hints: Sequence[CriterionContextRepairHint],
-) -> str:
-    hint_items = tuple(hints)
-    if not hint_items:
-        return ""
-
-    serialized = serialize_untrusted_data(
-        {
-            "criterion_context_repairs": tuple(
-                {
-                    "field_path": hint.field_path,
-                    "selected_context_refs": hint.selected_context_refs,
-                    "outside_evidence_refs": hint.outside_evidence_refs,
-                    "eligible_context_refs_by_evidence": {
-                        evidence_ref: context_refs
-                        for evidence_ref, context_refs in hint.eligible_context_refs_by_evidence
-                    },
-                }
-                for hint in hint_items
-            )
-        }
-    )
-    return "\n".join(
-        (
-            "다음은 생성 문장을 포함하지 않는 구조화된 Criterion Context 교정 정보이다.",
-            serialized,
-            "- field_path의 항목을 다시 생성할 때 outside_evidence_refs를 유지한다면 "
-            "eligible_context_refs_by_evidence에 표시된 Context를 빠짐없이 선택한다.",
-            "- 하나의 항목에 필요한 Context 합집합을 선택하기 어렵다면 Criterion별 항목으로 "
-            "분리한다.",
         )
     )
 

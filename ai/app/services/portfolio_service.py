@@ -89,12 +89,18 @@ class PortfolioSynthesisService:
                 criteria,
             )
         except ReportPolicyError as policy_error:
+            repair_hints = self._criterion_assignment_service.build_portfolio_repair_hints(
+                initial_generation.value,
+                criterion_contexts,
+                policy_error.violations,
+            )
             correction_prompt = build_portfolio_correction_prompt(
                 context_items,
                 analysis_items,
                 criteria,
                 tuple(violation.code for violation in policy_error.violations),
                 criterion_contexts=criterion_contexts,
+                criterion_repair_hints=repair_hints,
             )
             corrected_generation = await self._llm_provider.generate_structured(
                 system_prompt=system_prompt,

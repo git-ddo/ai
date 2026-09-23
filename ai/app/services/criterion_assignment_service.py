@@ -109,6 +109,36 @@ class CriterionAssignmentService:
             (f"recommendations[{index}]", item) for index, item in enumerate(draft.recommendations)
         )
 
+        return self._build_repair_hints(drafts_by_path, context_items, violations)
+
+    def build_portfolio_repair_hints(
+        self,
+        draft: PortfolioSynthesisDraft,
+        contexts: Sequence[CriterionEvidenceContext],
+        violations: Sequence[PolicyViolation],
+    ) -> tuple[CriterionContextRepairHint, ...]:
+        """Describe portfolio Evidence mismatches without exposing generated content."""
+
+        context_items = self._validate_contexts(contexts)
+        drafts_by_path: dict[str, _ContextGroundedDraft] = {
+            "overall_summary": draft.overall_summary,
+            "job_appeal": draft.job_appeal,
+        }
+        drafts_by_path.update(
+            (f"strengths[{index}]", item) for index, item in enumerate(draft.strengths)
+        )
+        drafts_by_path.update((f"gaps[{index}]", item) for index, item in enumerate(draft.gaps))
+        drafts_by_path.update(
+            (f"next_actions[{index}]", item) for index, item in enumerate(draft.next_actions)
+        )
+        return self._build_repair_hints(drafts_by_path, context_items, violations)
+
+    def _build_repair_hints(
+        self,
+        drafts_by_path: dict[str, _ContextGroundedDraft],
+        contexts: tuple[CriterionEvidenceContext, ...],
+        violations: Sequence[PolicyViolation],
+    ) -> tuple[CriterionContextRepairHint, ...]:
         hints: list[CriterionContextRepairHint] = []
         seen_paths: set[str] = set()
         evidence_suffix = ".evidence_refs"
@@ -129,7 +159,7 @@ class CriterionAssignmentService:
 
             hint = self._evidence_repair_hint(
                 item,
-                context_items,
+                contexts,
                 violation.field_path,
             )
             if hint is not None:

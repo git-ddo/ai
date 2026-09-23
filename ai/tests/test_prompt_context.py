@@ -995,7 +995,35 @@ def test_portfolio_correction_prompt_does_not_accept_previous_synthesis() -> Non
         "criteria",
         "violation_codes",
         "criterion_contexts",
+        "criterion_repair_hints",
     )
+
+
+def test_portfolio_correction_prompt_includes_safe_criterion_repair_ids(
+    criteria: CriteriaSet,
+) -> None:
+    sensitive_previous_content = "이 문장은 correction prompt에 포함되면 안 됩니다."
+    prompt = build_portfolio_correction_prompt(
+        (make_context(),),
+        (make_analysis(),),
+        criteria,
+        (PolicyViolationCode.CRITERION_CONTEXT_EVIDENCE_MISMATCH,),
+        criterion_repair_hints=(
+            CriterionContextRepairHint(
+                field_path="strengths[0].evidence_refs",
+                selected_context_refs=("ctx_001",),
+                outside_evidence_refs=("ev_002",),
+                eligible_context_refs_by_evidence=(("ev_002", ("ctx_002",)),),
+            ),
+        ),
+    )
+    task = extract_section(prompt, TASK_SECTION)
+
+    assert '"field_path":"strengths[0].evidence_refs"' in task
+    assert '"selected_context_refs":["ctx_001"]' in task
+    assert '"outside_evidence_refs":["ev_002"]' in task
+    assert '"eligible_context_refs_by_evidence":{"ev_002":["ctx_002"]}' in task
+    assert sensitive_previous_content not in task
 
 
 def test_portfolio_correction_prompt_preserves_untrusted_serialization_and_rules(
