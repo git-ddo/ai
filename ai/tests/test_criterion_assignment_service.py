@@ -25,6 +25,7 @@ from app.services import (
     CriterionAssignmentService,
     CriterionContextRepairHint,
     CriterionContextService,
+    CriterionEvidenceContext,
 )
 from app.validators import PolicyViolationCode
 from tests.test_repository_service import make_context
@@ -87,24 +88,78 @@ def test_assigns_context_owned_key_to_repository_draft() -> None:
     assert "criterion_context_refs" not in analysis.summary.model_dump()
 
 
-def test_rejects_evidence_outside_selected_context_without_rewriting() -> None:
+def test_completes_unique_context_for_outside_evidence_without_rewriting() -> None:
     repository, context_ids = _context_id_by_key(AnalysisDepth.P1)
     criteria = CriteriaLoader().load("BACKEND", "P1")
     contexts = CriterionContextService().build((repository,), criteria)
-    draft = _analysis_draft(
-        repository.repository_full_name,
+    evidence_refs = (
+        repository.evidence[1].evidence_id,
         repository.evidence[0].evidence_id,
-        (context_ids["ACTIVITY_SCOPE"],),
+    )
+    draft = RepositoryAnalysisDraft(
+        repository_full_name=repository.repository_full_name,
+        summary=GroundedAnalysisDraft(
+            content="활동 근거와 기술 구성을 함께 설명할 수 있습니다.",
+            confidence=EvidenceConfidence.HIGH,
+            evidence_refs=evidence_refs,
+            criterion_context_refs=(context_ids["ACTIVITY_SCOPE"],),
+        ),
     )
 
+    analysis = CriterionAssignmentService().assign_repository(draft, contexts)
+
+    assert analysis.summary.criterion_keys == (
+        "ACTIVITY_SCOPE",
+        "TECH_STACK_EVIDENCE",
+    )
+    assert analysis.summary.evidence_refs == evidence_refs
+    assert draft.summary.criterion_context_refs == (context_ids["ACTIVITY_SCOPE"],)
+
+
+def test_rejects_ambiguous_evidence_context_without_rewriting() -> None:
+    contexts = (
+        CriterionEvidenceContext(
+            context_id="ctx_001",
+            criterion_key="PRIMARY",
+            analysis_depth=AnalysisDepth.P0,
+            title="Primary",
+            description="Primary context",
+            eligible_evidence_refs=("ev_001",),
+            eligible_claim_refs=(),
+        ),
+        CriterionEvidenceContext(
+            context_id="ctx_002",
+            criterion_key="AMBIGUOUS_A",
+            analysis_depth=AnalysisDepth.P0,
+            title="Ambiguous A",
+            description="First ambiguous context",
+            eligible_evidence_refs=("ev_002",),
+            eligible_claim_refs=(),
+        ),
+        CriterionEvidenceContext(
+            context_id="ctx_003",
+            criterion_key="AMBIGUOUS_B",
+            analysis_depth=AnalysisDepth.P0,
+            title="Ambiguous B",
+            description="Second ambiguous context",
+            eligible_evidence_refs=("ev_002",),
+            eligible_claim_refs=(),
+        ),
+    )
+    draft = _analysis_draft(
+        "git-ddo/repository-1",
+        "ev_002",
+        ("ctx_001",),
+    )
     assignment = CriterionAssignmentService()
+
     with pytest.raises(ReportPolicyError) as exc_info:
         assignment.assign_repository(draft, contexts)
 
     assert exc_info.value.violations[0].code is (
         PolicyViolationCode.CRITERION_CONTEXT_EVIDENCE_MISMATCH
     )
-    assert draft.summary.criterion_context_refs == (context_ids["ACTIVITY_SCOPE"],)
+    assert draft.summary.criterion_context_refs == ("ctx_001",)
     assert assignment.build_repository_repair_hints(
         draft,
         contexts,
@@ -112,34 +167,55 @@ def test_rejects_evidence_outside_selected_context_without_rewriting() -> None:
     ) == (
         CriterionContextRepairHint(
             field_path="summary.evidence_refs",
-            selected_context_refs=(context_ids["ACTIVITY_SCOPE"],),
-            outside_evidence_refs=(repository.evidence[0].evidence_id,),
-            eligible_context_refs_by_evidence=(
-                (
-                    repository.evidence[0].evidence_id,
-                    (context_ids["TECH_STACK_EVIDENCE"],),
-                ),
-            ),
+            selected_context_refs=("ctx_001",),
+            outside_evidence_refs=("ev_002",),
+            eligible_context_refs_by_evidence=(("ev_002", ("ctx_002", "ctx_003")),),
         ),
     )
 
 
 def test_builds_portfolio_repair_hint_for_failed_strength() -> None:
-    repository, context_ids = _context_id_by_key(AnalysisDepth.P1)
-    criteria = CriteriaLoader().load("BACKEND", "P1")
-    contexts = CriterionContextService().build((repository,), criteria)
-    evidence_ref = repository.evidence[0].evidence_id
+    repository, _ = _context_id_by_key(AnalysisDepth.P0)
+    contexts = (
+        CriterionEvidenceContext(
+            context_id="ctx_001",
+            criterion_key="PRIMARY",
+            analysis_depth=AnalysisDepth.P0,
+            title="Primary",
+            description="Primary context",
+            eligible_evidence_refs=("ev_001",),
+            eligible_claim_refs=(),
+        ),
+        CriterionEvidenceContext(
+            context_id="ctx_002",
+            criterion_key="AMBIGUOUS_A",
+            analysis_depth=AnalysisDepth.P0,
+            title="Ambiguous A",
+            description="First ambiguous context",
+            eligible_evidence_refs=("ev_002",),
+            eligible_claim_refs=(),
+        ),
+        CriterionEvidenceContext(
+            context_id="ctx_003",
+            criterion_key="AMBIGUOUS_B",
+            analysis_depth=AnalysisDepth.P0,
+            title="Ambiguous B",
+            description="Second ambiguous context",
+            eligible_evidence_refs=("ev_002",),
+            eligible_claim_refs=(),
+        ),
+    )
     valid_item = EvidenceGroundedAnalysisDraft(
         content="공개 기술 근거를 설명할 수 있습니다.",
         confidence=EvidenceConfidence.HIGH,
-        evidence_refs=(evidence_ref,),
-        criterion_context_refs=(context_ids["TECH_STACK_EVIDENCE"],),
+        evidence_refs=("ev_001",),
+        criterion_context_refs=("ctx_001",),
     )
     invalid_strength = EvidenceGroundedAnalysisDraft(
         content="기술 근거와 활동 범위를 함께 설명합니다.",
         confidence=EvidenceConfidence.HIGH,
-        evidence_refs=(evidence_ref,),
-        criterion_context_refs=(context_ids["ACTIVITY_SCOPE"],),
+        evidence_refs=("ev_002",),
+        criterion_context_refs=("ctx_001",),
     )
     draft = PortfolioSynthesisDraft(
         overall_summary=valid_item,
@@ -148,7 +224,7 @@ def test_builds_portfolio_repair_hint_for_failed_strength() -> None:
                 repository_full_name=repository.repository_full_name,
                 reason="공개 근거가 있습니다.",
                 confidence=EvidenceConfidence.HIGH,
-                evidence_refs=(evidence_ref,),
+                evidence_refs=("ev_001",),
             ),
         ),
         strengths=(invalid_strength,),
@@ -167,11 +243,9 @@ def test_builds_portfolio_repair_hint_for_failed_strength() -> None:
     ) == (
         CriterionContextRepairHint(
             field_path="strengths[0].evidence_refs",
-            selected_context_refs=(context_ids["ACTIVITY_SCOPE"],),
-            outside_evidence_refs=(evidence_ref,),
-            eligible_context_refs_by_evidence=(
-                (evidence_ref, (context_ids["TECH_STACK_EVIDENCE"],)),
-            ),
+            selected_context_refs=("ctx_001",),
+            outside_evidence_refs=("ev_002",),
+            eligible_context_refs_by_evidence=(("ev_002", ("ctx_002", "ctx_003")),),
         ),
     )
 

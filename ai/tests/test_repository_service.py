@@ -320,12 +320,18 @@ async def test_regenerates_once_after_reference_policy_failure() -> None:
 @pytest.mark.asyncio
 async def test_correction_prompt_identifies_context_needed_by_outside_evidence() -> None:
     context = make_context(AnalysisDepth.P1)
-    p0_evidence = context.evidence[0]
+    p1_evidence = context.evidence[1]
     invalid_content = "문서와 활동 의미를 섞은 이전 생성 문장"
-    invalid = make_analysis(
-        context,
-        content=invalid_content,
-        evidence_ref=p0_evidence.evidence_id,
+    invalid = RepositoryAnalysis(
+        repository_full_name=context.repository_full_name,
+        summary=GroundedAnalysisItem(
+            item_type=AnalysisItemType.INTERPRETATION,
+            content=invalid_content,
+            confidence=EvidenceConfidence.HIGH,
+            evidence_refs=(p1_evidence.evidence_id,),
+            criterion_keys=("TECH_STACK_EVIDENCE",),
+            file_paths=("src/main/java/OrderService.java",),
+        ),
     )
     corrected = make_analysis(context)
     provider = SequencedProvider([generation(invalid), generation(corrected)])
@@ -339,12 +345,21 @@ async def test_correction_prompt_identifies_context_needed_by_outside_evidence()
         CriteriaLoader().load("BACKEND", AnalysisDepth.P1.value),
     )
     context_ids = {item.criterion_key: item.context_id for item in contexts}
-    assert '"field_path":"summary.evidence_refs"' in correction_prompt
-    assert f'"outside_evidence_refs":["{p0_evidence.evidence_id}"]' in correction_prompt
-    assert f'"selected_context_refs":["{context_ids["ACTIVITY_SCOPE"]}"]' in correction_prompt
-    assert (
-        f'"{p0_evidence.evidence_id}":["{context_ids["TECH_STACK_EVIDENCE"]}"]' in correction_prompt
+    eligible_context_ids = tuple(
+        item.context_id
+        for item in contexts
+        if p1_evidence.evidence_id in item.eligible_evidence_refs
     )
+    assert '"field_path":"summary.evidence_refs"' in correction_prompt
+    assert f'"outside_evidence_refs":["{p1_evidence.evidence_id}"]' in correction_prompt
+    assert f'"selected_context_refs":["{context_ids["TECH_STACK_EVIDENCE"]}"]' in (
+        correction_prompt
+    )
+    serialized_context_ids = ",".join(f'"{context_id}"' for context_id in eligible_context_ids)
+    assert (
+        f'"eligible_context_refs_by_evidence":{{"{p1_evidence.evidence_id}":'
+        f"[{serialized_context_ids}]}}"
+    ) in correction_prompt
     assert invalid_content not in correction_prompt
 
 

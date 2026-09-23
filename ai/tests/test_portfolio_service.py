@@ -28,7 +28,7 @@ from app.domain import (
 )
 from app.llm import GenerationMetadata, StructuredGeneration
 from app.llm.provider import GenerationCall
-from app.services import PortfolioSynthesisService
+from app.services import CriterionContextService, PortfolioSynthesisService
 from app.validators import PolicyViolationCode
 from tests.provider_drafts import project_provider_result
 
@@ -467,14 +467,14 @@ async def test_regenerates_after_portfolio_strength_references_user_claim() -> N
 @pytest.mark.asyncio
 async def test_correction_prompt_identifies_context_needed_by_outside_evidence() -> None:
     context = make_context(depth=AnalysisDepth.P1)
-    evidence_ref = context.evidence[0].evidence_id
+    evidence_ref = context.evidence[1].evidence_id
     invalid_content = "기술 근거를 활동 Criterion으로 잘못 연결한 첫 응답입니다."
     invalid_strength = GroundedAnalysisItem(
         item_type=AnalysisItemType.INTERPRETATION,
         content=invalid_content,
         confidence=EvidenceConfidence.HIGH,
         evidence_refs=(evidence_ref,),
-        criterion_keys=("ACTIVITY_SCOPE",),
+        criterion_keys=("TECH_STACK_EVIDENCE",),
     )
     provider = SequencedProvider(
         [
@@ -489,12 +489,23 @@ async def test_correction_prompt_identifies_context_needed_by_outside_evidence()
     )
 
     correction_prompt = provider.calls[1].user_prompt
-    assert '"field_path":"strengths[0].evidence_refs"' in correction_prompt
-    assert '"selected_context_refs":["ctx_006"]' in correction_prompt
-    assert f'"outside_evidence_refs":["{evidence_ref}"]' in correction_prompt
-    assert (
-        f'"eligible_context_refs_by_evidence":{{"{evidence_ref}":["ctx_002"]}}' in correction_prompt
+    contexts = CriterionContextService().build(
+        (context,),
+        CriteriaLoader().load("BACKEND", AnalysisDepth.P1.value),
     )
+    context_ids = {item.criterion_key: item.context_id for item in contexts}
+    eligible_context_ids = tuple(
+        item.context_id for item in contexts if evidence_ref in item.eligible_evidence_refs
+    )
+    assert '"field_path":"strengths[0].evidence_refs"' in correction_prompt
+    assert f'"selected_context_refs":["{context_ids["TECH_STACK_EVIDENCE"]}"]' in (
+        correction_prompt
+    )
+    assert f'"outside_evidence_refs":["{evidence_ref}"]' in correction_prompt
+    serialized_context_ids = ",".join(f'"{context_id}"' for context_id in eligible_context_ids)
+    assert (
+        f'"eligible_context_refs_by_evidence":{{"{evidence_ref}":[{serialized_context_ids}]}}'
+    ) in correction_prompt
     assert invalid_content not in correction_prompt
 
 
