@@ -712,6 +712,95 @@ def test_portfolio_prompt_accepts_one_to_five_repositories(
     assert len(prior_data) == repository_count
 
 
+def test_portfolio_prompt_excludes_evidence_unused_by_repository_analysis() -> None:
+    context = make_context(analysis_depth=AnalysisDepth.P1)
+    criteria = CriteriaLoader().load("BACKEND", "P1")
+
+    prompt = build_portfolio_prompt((context,), (make_analysis(),), criteria)
+    repository_data = json.loads(extract_section(prompt, REPOSITORY_DATA_SECTION))
+    projected_repository = repository_data["repositories"][0]
+
+    assert [
+        evidence["evidence_id"] for evidence in projected_repository["evidence_by_depth"]["P0"]
+    ] == ["ev_001"]
+    assert projected_repository["evidence_by_depth"]["P1"] == []
+    assert "PR에서 Service 변경 경로가 관찰되었습니다." not in json.dumps(
+        projected_repository,
+        ensure_ascii=False,
+    )
+
+
+def test_portfolio_prompt_keeps_referenced_evidence_source_chain() -> None:
+    context = make_context(analysis_depth=AnalysisDepth.P2)
+    code_evidence_id = context.evidence[-1].evidence_id
+    code_item = GroundedAnalysisItem(
+        item_type=AnalysisItemType.INTERPRETATION,
+        content="제공된 코드 snippet의 검증 흐름을 설명할 수 있습니다.",
+        confidence=EvidenceConfidence.HIGH,
+        evidence_refs=(code_evidence_id,),
+        criterion_keys=("CODE_QUALITY",),
+        file_paths=("src/main/java/Service.java",),
+    )
+    analysis = RepositoryAnalysis(
+        repository_full_name=context.repository_full_name,
+        summary=code_item,
+        limitations=("제공된 snippet 범위만 분석했습니다.",),
+    )
+    criteria = CriteriaLoader().load("BACKEND", "P2")
+
+    prompt = build_portfolio_prompt((context,), (analysis,), criteria)
+    repository_data = json.loads(extract_section(prompt, REPOSITORY_DATA_SECTION))
+    evidence_by_depth = repository_data["repositories"][0]["evidence_by_depth"]
+
+    assert evidence_by_depth["P0"] == []
+    assert [item["evidence_id"] for item in evidence_by_depth["P1"]] == ["ev_101"]
+    assert [item["evidence_id"] for item in evidence_by_depth["P2"]] == ["ev_201"]
+    assert evidence_by_depth["P2"][0]["source_evidence_refs"] == ["ev_101"]
+
+
+def test_portfolio_prompt_keeps_referenced_backend_derived_gap_evidence() -> None:
+    context = make_context()
+    derived_evidence = InternalEvidence(
+        evidence_id="ev_901",
+        repository_full_name=context.repository_full_name,
+        evidence_type=InternalEvidenceType.BACKEND_DERIVED,
+        key="PROJECT_STRUCTURE",
+        summary="hasCi=false",
+        derived_from_level=AnalysisDepth.P0,
+    )
+    context = context.model_copy(update={"evidence": (*context.evidence, derived_evidence)})
+    derived_item = GroundedAnalysisItem(
+        item_type=AnalysisItemType.INTERPRETATION,
+        content="CI 설정이 관찰되지 않아 보완 근거로 사용할 수 있습니다.",
+        confidence=EvidenceConfidence.HIGH,
+        evidence_refs=(derived_evidence.evidence_id,),
+        criterion_keys=("PROJECT_STRUCTURE",),
+    )
+    analysis = RepositoryAnalysis(
+        repository_full_name=context.repository_full_name,
+        summary=derived_item,
+        recommendations=(
+            GroundedAnalysisItem(
+                item_type=AnalysisItemType.RECOMMENDATION,
+                content="CI 설정 근거를 보완하는 것이 좋습니다.",
+                confidence=EvidenceConfidence.HIGH,
+                evidence_refs=(derived_evidence.evidence_id,),
+                criterion_keys=("PROJECT_STRUCTURE",),
+                priority=RecommendationPriority.HIGH,
+            ),
+        ),
+        limitations=("공개 구조 근거만 사용했습니다.",),
+    )
+
+    prompt = build_portfolio_prompt((context,), (analysis,), CriteriaLoader().load("BACKEND", "P0"))
+    repository_data = json.loads(extract_section(prompt, REPOSITORY_DATA_SECTION))
+    evidence = repository_data["repositories"][0]["evidence_by_depth"]["P0"]
+
+    assert [item["evidence_id"] for item in evidence] == ["ev_901"]
+    assert evidence[0]["evidence_type"] == "BACKEND_DERIVED"
+    assert evidence[0]["summary"] == "hasCi=false"
+
+
 @pytest.mark.parametrize(
     ("contexts", "analyses"),
     [

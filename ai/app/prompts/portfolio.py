@@ -20,7 +20,10 @@ from app.prompts.context import (
     serialize_criteria,
     serialize_untrusted_data,
 )
-from app.prompts.prior_analysis import project_repository_analyses
+from app.prompts.prior_analysis import (
+    collect_repository_analysis_evidence_refs,
+    project_repository_analyses,
+)
 from app.validators.report_validator import PolicyViolationCode
 
 if TYPE_CHECKING:
@@ -179,12 +182,8 @@ def _render_portfolio_prompt(
         criterion_contexts,
     )
     repository_data = [
-        build_repository_data(
-            context,
-            criteria,
-            include_criterion_contexts=False,
-        )
-        for context in ordered_contexts
+        _build_portfolio_repository_data(context, analysis, criteria)
+        for context, analysis in zip(ordered_contexts, ordered_analyses, strict=True)
     ]
 
     return "\n\n".join(
@@ -206,6 +205,52 @@ def _render_portfolio_prompt(
             render_section(TASK_SECTION, task),
         )
     )
+
+
+def _build_portfolio_repository_data(
+    context: NormalizedRepositoryContext,
+    analysis: RepositoryAnalysis,
+    criteria: CriteriaSet,
+) -> dict[str, object]:
+    """Project one repository to Evidence already selected by its validated analysis."""
+
+    referenced_ids = collect_repository_analysis_evidence_refs(analysis)
+    evidence_by_id = {evidence.evidence_id: evidence for evidence in context.evidence}
+    missing_ids = tuple(
+        evidence_id for evidence_id in referenced_ids if evidence_id not in evidence_by_id
+    )
+    if missing_ids:
+        raise PromptContextError(
+            "RepositoryAnalysis references Evidence outside its repository context."
+        )
+
+    selected_ids = set(referenced_ids)
+    pending_ids = list(referenced_ids)
+    while pending_ids:
+        evidence_id = pending_ids.pop()
+        for source_id in evidence_by_id[evidence_id].source_evidence_refs:
+            if source_id not in evidence_by_id:
+                raise PromptContextError(
+                    "Referenced Evidence source is outside its repository context."
+                )
+            if source_id not in selected_ids:
+                selected_ids.add(source_id)
+                pending_ids.append(source_id)
+
+    repository_data = build_repository_data(
+        context,
+        criteria,
+        include_criterion_contexts=False,
+    )
+    repository_data["evidence_by_depth"] = {
+        depth.value: tuple(
+            evidence
+            for evidence in context.evidence
+            if evidence.analysis_depth is depth and evidence.evidence_id in selected_ids
+        )
+        for depth in context.completed_evidence_levels
+    }
+    return repository_data
 
 
 def _validate_and_order_inputs(

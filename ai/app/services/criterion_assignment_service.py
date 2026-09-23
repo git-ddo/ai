@@ -43,7 +43,7 @@ class CriterionContextRepairHint:
 
 
 class CriterionAssignmentService:
-    """Validate Criterion Context references and inject service-owned roles and keys."""
+    """Complete deterministic Context refs and inject service-owned roles and keys."""
 
     def assign_repository(
         self,
@@ -297,7 +297,11 @@ class CriterionAssignmentService:
                 f"{field_path}.criterion_context_refs",
             )
 
-        selected = tuple(context_by_id[ref] for ref in context_refs)
+        selected = self._complete_unique_evidence_contexts(
+            draft.evidence_refs,
+            tuple(context_by_id[ref] for ref in context_refs),
+            contexts,
+        )
         known_evidence_refs = {
             ref for context in contexts for ref in context.eligible_evidence_refs
         }
@@ -357,6 +361,30 @@ class CriterionAssignmentService:
             )
 
         return tuple(context.criterion_key for context in selected)
+
+    @staticmethod
+    def _complete_unique_evidence_contexts(
+        evidence_refs: tuple[str, ...],
+        selected: tuple[CriterionEvidenceContext, ...],
+        contexts: tuple[CriterionEvidenceContext, ...],
+    ) -> tuple[CriterionEvidenceContext, ...]:
+        """Add only the single possible Context for uncovered Evidence references."""
+
+        completed = {context.context_id: context for context in selected}
+        for evidence_ref in evidence_refs:
+            if any(
+                evidence_ref in context.eligible_evidence_refs for context in completed.values()
+            ):
+                continue
+
+            candidates = tuple(
+                context for context in contexts if evidence_ref in context.eligible_evidence_refs
+            )
+            if len(candidates) == 1:
+                context = candidates[0]
+                completed[context.context_id] = context
+
+        return tuple(completed.values())
 
     def _evidence_repair_hint(
         self,

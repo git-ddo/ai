@@ -1,0 +1,1270 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Gitddo P2 스모크 결과를 사용한 두 Repository 카드형 포트폴리오 리포트"
+    />
+    <title>Gitddo · P2 Repository 비교 리포트</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --canvas: #0d1117;
+        --surface: #161b22;
+        --surface-soft: #1c2128;
+        --border: #30363d;
+        --border-strong: #484f58;
+        --text: #f0f6fc;
+        --text-soft: #c9d1d9;
+        --muted: #8b949e;
+        --green: #3fb950;
+        --green-bg: rgba(46, 160, 67, 0.12);
+        --blue: #58a6ff;
+        --blue-bg: rgba(56, 139, 253, 0.12);
+        --purple: #bc8cff;
+        --purple-bg: rgba(163, 113, 247, 0.12);
+        --amber: #e3b341;
+        --amber-bg: rgba(210, 153, 34, 0.12);
+        --radius: 10px;
+        --shadow: 0 14px 35px rgba(0, 0, 0, 0.22);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 82% 0%, rgba(56, 139, 253, 0.08), transparent 26rem),
+          var(--canvas);
+        color: var(--text);
+        font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .topbar {
+        position: fixed;
+        inset: 0 0 auto;
+        z-index: 50;
+        height: 64px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(22, 27, 34, 0.95);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.28);
+      }
+
+      .topbar-inner,
+      main {
+        width: min(1200px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .topbar-inner {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand-side,
+      .brand,
+      .nav,
+      .user,
+      .hero-badges,
+      .card-meta,
+      .refs,
+      .depth-counts,
+      .section-label {
+        display: flex;
+        align-items: center;
+      }
+
+      .brand-side {
+        height: 100%;
+        gap: 32px;
+      }
+
+      .brand {
+        gap: 9px;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .brand-icon {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(63, 185, 80, 0.4);
+        border-radius: 9px;
+        background: var(--green-bg);
+      }
+
+      .nav {
+        align-self: stretch;
+      }
+
+      .nav a {
+        display: flex;
+        align-items: center;
+        height: 100%;
+        padding: 0 15px;
+        border-bottom: 2px solid transparent;
+        color: var(--muted);
+        text-decoration: none;
+        font-weight: 650;
+      }
+
+      .nav a.active {
+        border-color: #238636;
+        color: var(--text);
+      }
+
+      .user {
+        gap: 9px;
+        color: var(--text-soft);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .avatar {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--border-strong);
+        border-radius: 50%;
+        background: #238636;
+        color: white;
+        font-weight: 800;
+      }
+
+      main {
+        padding: 103px 0 80px;
+      }
+
+      .breadcrumb {
+        margin-bottom: 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .breadcrumb strong {
+        color: var(--text-soft);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 28px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .eyebrow {
+        margin-bottom: 9px;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 10px;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.17;
+        letter-spacing: -0.04em;
+      }
+
+      .hero p {
+        max-width: 760px;
+        margin-bottom: 17px;
+        color: var(--muted);
+      }
+
+      .hero-badges,
+      .refs,
+      .depth-counts {
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .badge,
+      .ref,
+      .depth,
+      .source-tag {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        border-radius: 999px;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 780;
+      }
+
+      .badge {
+        padding: 4px 9px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-soft);
+      }
+
+      .badge.green {
+        border-color: rgba(63, 185, 80, 0.35);
+        background: var(--green-bg);
+        color: var(--green);
+      }
+
+      .badge.blue {
+        border-color: rgba(88, 166, 255, 0.35);
+        background: var(--blue-bg);
+        color: var(--blue);
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .button {
+        padding: 8px 13px;
+        border: 1px solid var(--border-strong);
+        border-radius: 7px;
+        background: var(--surface);
+        color: var(--text-soft);
+        transition: 160ms ease;
+      }
+
+      .button:hover {
+        border-color: var(--muted);
+        background: var(--surface-soft);
+      }
+
+      .button.primary {
+        border-color: #2ea043;
+        background: #238636;
+        color: white;
+        font-weight: 750;
+      }
+
+      .report-nav {
+        position: sticky;
+        top: 64px;
+        z-index: 40;
+        display: flex;
+        gap: 4px;
+        margin: 22px 0 32px;
+        padding: 6px;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: rgba(22, 27, 34, 0.96);
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+      }
+
+      .report-nav a {
+        flex: 0 0 auto;
+        padding: 7px 12px;
+        border-radius: 6px;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .report-nav a:hover {
+        background: var(--surface-soft);
+        color: var(--text);
+      }
+
+      .report-section {
+        scroll-margin-top: 126px;
+        margin-top: 48px;
+      }
+
+      .section-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 18px;
+        margin-bottom: 16px;
+      }
+
+      .section-label {
+        gap: 10px;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+      }
+
+      .section-number {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        background: var(--surface-soft);
+        color: var(--blue);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .section-heading h2 {
+        margin-bottom: 2px;
+        font-size: 23px;
+        letter-spacing: -0.03em;
+      }
+
+      .section-heading p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .repo-cover {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(250px, 0.55fr);
+        min-height: 270px;
+        overflow: hidden;
+      }
+
+      .repo-cover::after {
+        content: attr(data-index);
+        position: absolute;
+        right: 24px;
+        bottom: -40px;
+        color: rgba(88, 166, 255, 0.04);
+        font-size: 180px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .repo-cover-main {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 34px;
+      }
+
+      .source-tag {
+        margin-bottom: 17px;
+        padding: 4px 9px;
+        border: 1px solid rgba(63, 185, 80, 0.35);
+        background: var(--green-bg);
+        color: var(--green);
+      }
+
+      .repo-cover h3 {
+        margin-bottom: 13px;
+        color: var(--blue);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 16px;
+      }
+
+      .repo-summary {
+        max-width: 760px;
+        margin-bottom: 18px;
+        color: var(--text);
+        font-size: 22px;
+        font-weight: 780;
+        line-height: 1.55;
+        letter-spacing: -0.025em;
+      }
+
+      .repo-cover-side {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 1fr;
+        border-left: 1px solid var(--border);
+        background: rgba(13, 17, 23, 0.54);
+      }
+
+      .scope-stat {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 19px 24px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .scope-stat:last-child {
+        border-bottom: 0;
+      }
+
+      .scope-stat span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .scope-stat strong {
+        font-size: 18px;
+      }
+
+      .story-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .story-card {
+        min-height: 252px;
+        padding: 23px;
+      }
+
+      .story-card.highlight {
+        border-top: 3px solid var(--green);
+      }
+
+      .story-card.improvement {
+        border-top: 3px solid var(--amber);
+      }
+
+      .story-card.interview {
+        border-top: 3px solid var(--purple);
+      }
+
+      .story-kind {
+        display: block;
+        margin-bottom: 16px;
+        font-size: 12px;
+        font-weight: 850;
+        letter-spacing: 0.05em;
+      }
+
+      .highlight .story-kind {
+        color: var(--green);
+      }
+
+      .improvement .story-kind {
+        color: var(--amber);
+      }
+
+      .interview .story-kind {
+        color: var(--purple);
+      }
+
+      .story-content {
+        margin-bottom: 20px;
+        color: var(--text-soft);
+        font-size: 15px;
+        font-weight: 620;
+        line-height: 1.72;
+      }
+
+      .refs {
+        margin-top: auto;
+      }
+
+      .ref {
+        padding: 3px 8px;
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .evidence-shell {
+        margin-top: 14px;
+        overflow: hidden;
+      }
+
+      .evidence-toggle {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 18px 22px;
+        border: 0;
+        background: var(--surface);
+        color: var(--text-soft);
+        text-align: left;
+        font-weight: 750;
+      }
+
+      .evidence-toggle:hover {
+        background: var(--surface-soft);
+      }
+
+      .toggle-arrow {
+        color: var(--muted);
+        transition: transform 160ms ease;
+      }
+
+      .evidence-shell.open .toggle-arrow {
+        transform: rotate(180deg);
+      }
+
+      .evidence-content {
+        display: none;
+        padding: 0 18px 18px;
+        border-top: 1px solid var(--border);
+      }
+
+      .evidence-shell.open .evidence-content {
+        display: block;
+      }
+
+      .evidence-filter {
+        display: flex;
+        gap: 6px;
+        padding: 16px 0 13px;
+      }
+
+      .filter-button {
+        padding: 5px 10px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--canvas);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 760;
+      }
+
+      .filter-button.active {
+        border-color: rgba(88, 166, 255, 0.45);
+        background: var(--blue-bg);
+        color: var(--blue);
+      }
+
+      .evidence-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .evidence-item {
+        display: grid;
+        grid-template-columns: 80px minmax(0, 1fr);
+        gap: 14px;
+        padding: 15px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--canvas);
+      }
+
+      .evidence-id {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
+      }
+
+      .depth {
+        padding: 3px 8px;
+        border: 1px solid currentColor;
+      }
+
+      .depth.p0 {
+        color: var(--blue);
+      }
+
+      .depth.p1 {
+        color: var(--purple);
+      }
+
+      .depth.p2 {
+        color: var(--green);
+      }
+
+      .evidence-text p {
+        margin-bottom: 6px;
+        color: var(--text-soft);
+      }
+
+      .evidence-text code {
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+
+      .final-card {
+        position: relative;
+        padding: 34px;
+        overflow: hidden;
+        border-color: rgba(63, 185, 80, 0.38);
+        background:
+          linear-gradient(135deg, rgba(46, 160, 67, 0.14), rgba(56, 139, 253, 0.06)),
+          var(--surface);
+      }
+
+      .final-card::after {
+        content: "★";
+        position: absolute;
+        right: 36px;
+        bottom: -55px;
+        color: rgba(63, 185, 80, 0.07);
+        font-size: 170px;
+      }
+
+      .final-card .source-tag {
+        position: relative;
+        z-index: 1;
+      }
+
+      .final-label {
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .final-repo {
+        margin-bottom: 15px;
+        color: var(--green);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 21px;
+      }
+
+      .final-reason {
+        position: relative;
+        z-index: 1;
+        max-width: 930px;
+        margin-bottom: 18px;
+        font-size: 20px;
+        font-weight: 750;
+        line-height: 1.65;
+        letter-spacing: -0.02em;
+      }
+
+      .comparison-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .comparison-card {
+        padding: 22px;
+      }
+
+      .comparison-card h4 {
+        margin-bottom: 10px;
+        color: var(--blue);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+      }
+
+      .comparison-card p {
+        margin-bottom: 0;
+        color: var(--text-soft);
+      }
+
+      .limitation {
+        margin-top: 14px;
+        padding: 21px 23px;
+        border-color: rgba(210, 153, 34, 0.32);
+        background: var(--amber-bg);
+      }
+
+      .limitation h3 {
+        margin-bottom: 6px;
+        color: var(--amber);
+        font-size: 13px;
+      }
+
+      .limitation p {
+        margin-bottom: 0;
+        color: var(--text-soft);
+      }
+
+      .source-footer {
+        margin-top: 30px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .toast {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        z-index: 80;
+        padding: 11px 15px;
+        border: 1px solid rgba(63, 185, 80, 0.4);
+        border-radius: 8px;
+        background: #1b4721;
+        color: white;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition: 180ms ease;
+      }
+
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .repo-cover,
+        .story-grid,
+        .comparison-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .repo-cover-side {
+          grid-template-columns: repeat(3, 1fr);
+          border-top: 1px solid var(--border);
+          border-left: 0;
+        }
+
+        .scope-stat {
+          flex-direction: column;
+          align-items: flex-start;
+          border-right: 1px solid var(--border);
+          border-bottom: 0;
+        }
+
+        .scope-stat:last-child {
+          border-right: 0;
+        }
+      }
+
+      @media (max-width: 660px) {
+        .topbar-inner,
+        main {
+          width: min(100% - 24px, 1200px);
+        }
+
+        .nav,
+        .user span {
+          display: none;
+        }
+
+        main {
+          padding-top: 90px;
+        }
+
+        .hero-actions {
+          width: 100%;
+        }
+
+        .hero-actions button {
+          flex: 1;
+        }
+
+        .repo-cover-main,
+        .final-card {
+          padding: 25px;
+        }
+
+        .repo-summary {
+          font-size: 18px;
+        }
+
+        .repo-cover-side {
+          grid-template-columns: 1fr;
+        }
+
+        .scope-stat {
+          flex-direction: row;
+          align-items: center;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .evidence-item {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media print {
+        :root {
+          color-scheme: light;
+        }
+
+        body {
+          background: white;
+        }
+
+        .topbar,
+        .report-nav,
+        .hero-actions,
+        .evidence-toggle,
+        .evidence-filter {
+          display: none !important;
+        }
+
+        main {
+          width: 100%;
+          padding: 18px;
+        }
+
+        .card,
+        .story-card,
+        .evidence-item {
+          break-inside: avoid;
+          box-shadow: none;
+        }
+
+        .evidence-content {
+          display: block !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand-side">
+          <div class="brand"><span class="brand-icon">🤖</span> Gitddo</div>
+          <nav class="nav" aria-label="주요 메뉴">
+            <a href="#top">대시보드</a>
+            <a href="#top" class="active">AI 리포트</a>
+            <a href="#final">최종 평가</a>
+          </nav>
+        </div>
+        <div class="user"><span class="avatar">이</span><span>이주현 (@leevvw)</span></div>
+      </div>
+    </header>
+
+    <main id="top">
+      <div class="breadcrumb">대시보드 / 분석 기록 / <strong>P2 Repository 비교</strong></div>
+
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <div class="eyebrow">P2 evidence-based report</div>
+          <h1 id="page-title">AI 포트폴리오 코칭 리포트</h1>
+          <p>
+            두 Repository의 P0 구조 근거, P1 활동 근거와 P2 코드 구간을 바탕으로 생성된
+            Gemini 스모크 결과입니다.
+          </p>
+          <div class="hero-badges">
+            <span class="badge green">분석 완료</span>
+            <span class="badge">BACKEND</span>
+            <span class="badge blue">P0 + P1 + P2</span>
+            <span class="badge">Repository 2개</span>
+            <span class="badge">Evidence 16개</span>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <button class="button" type="button" onclick="toggleAllEvidence(true)">전체 근거 보기</button>
+          <button class="button primary" type="button" onclick="window.print()">PDF로 저장</button>
+        </div>
+      </section>
+
+      <nav class="report-nav" aria-label="리포트 바로가기">
+        <a href="#repo-1">01 · git-ddo/backend</a>
+        <a href="#repo-2">02 · congraduation-backend</a>
+        <a href="#final">최종 평가</a>
+      </nav>
+
+      <div id="repository-reports"></div>
+
+      <section id="final" class="report-section" aria-labelledby="final-title">
+        <div class="section-heading">
+          <div>
+            <div class="section-label"><span class="section-number">03</span> PORTFOLIO SYNTHESIS</div>
+            <h2 id="final-title">최종 평가</h2>
+            <p>두 Repository를 함께 입력한 Gemini 응답입니다.</p>
+          </div>
+        </div>
+
+        <article class="card final-card">
+          <span class="source-tag">Gemini 응답 원문</span>
+          <div class="final-label">대표 Repository</div>
+          <h3 class="final-repo" id="representative-repository"></h3>
+          <p class="final-reason" id="representative-reason"></p>
+          <div class="refs" id="representative-refs"></div>
+        </article>
+
+        <div class="comparison-grid" id="comparison-grid"></div>
+
+        <article class="card limitation">
+          <h3>분석 한계</h3>
+          <p id="limitation-text"></p>
+        </article>
+      </section>
+
+      <p class="source-footer">
+        평가 문장은 <code>smoke_lightweight_report.output.json</code>, 근거 문장은
+        <code>smoke_internal_report.py</code>의 P2 입력을 사용했습니다.
+      </p>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+      const report = {
+        representative_repository: "git-ddo/backend",
+        representative_reason: {
+          content:
+            "P1EvidenceCollector 및 AiAnalysisResponseValidator를 통한 요청 데이터 순차 검증 및 AI 응답 처리 구조가 P2 코드 구간에서 명확히 확인되었습니다.",
+          evidence_refs: ["ev_007", "ev_008"],
+        },
+        repositories: [
+          {
+            repository_full_name: "git-ddo/backend",
+            summary: {
+              content:
+                "Java 21, Spring Boot, PostgreSQL 기반 백엔드로, 분석 요청 검증 및 PR 제한 수집 흐름이 코드 수준에서 관찰되었습니다.",
+              evidence_refs: ["ev_001", "ev_007"],
+            },
+            highlight: {
+              content:
+                "AiAnalysisResponseValidator 코드 구간에서 요청 저장소, Evidence, UserClaim ID 집합을 순차적으로 검증하는 로직을 확인할 수 있습니다.",
+              evidence_refs: ["ev_008"],
+            },
+            improvement: {
+              content:
+                "현재 수집 스냅샷 상에서 .github/workflows 파일이 포함되어 있지 않으므로 배포 자동화 구성을 포트폴리오에 명시적으로 추가하여 설명 가능성을 높일 수 있습니다.",
+              evidence_refs: ["ev_005"],
+            },
+            interview_question: {
+              content:
+                "P1EvidenceCollector에서 PR을 영향도 기준으로 제한할 때, 초과 처리 경고와 백엔드 수집 안정성을 어떤 방식으로 설계했는지 설명해주세요.",
+              evidence_refs: ["ev_007"],
+            },
+          },
+          {
+            repository_full_name: "congraduation-team/congraduation-backend",
+            summary: {
+              content:
+                "Java 21, Spring Boot, MySQL 기반 서비스로, 2021학번 교양 정책 구현 및 관련 테스트 코드 변경이 직접 관찰되었습니다.",
+              evidence_refs: ["ev_009", "ev_014"],
+            },
+            highlight: {
+              content:
+                "GraduationProgressServiceTest 코드 구간에서 2021학번 학생의 교양 이수 데이터를 구성하고 조건 검증하는 테스트 사례가 확인되었습니다.",
+              evidence_refs: ["ev_016"],
+            },
+            improvement: {
+              content:
+                "deploy.yml 파일에서 bootJar 빌드 시 테스트가 제외되도록 설정되어 있어, 배포 파이프라인 내 테스트 실행 단계를 검토할 수 있습니다.",
+              evidence_refs: ["ev_013"],
+            },
+            interview_question: {
+              content:
+                "BalancedLiberalCoursePolicyService 코드에서 교양 필수 과목 목록을 상수로 분리한 이유와 향후 학번별 정책 변경 시 확장성을 어떻게 고려했는지 설명해주세요.",
+              evidence_refs: ["ev_015"],
+            },
+          },
+        ],
+        limitation:
+          "수집된 코드 스냅샷 및 특정 코드 구간(P2)만을 바탕으로 분석하였으므로 전체 시스템 아키텍처나 사용자 개인의 전체 기여율을 단정할 수 없습니다.",
+      };
+
+      const evidenceByRepository = {
+        "git-ddo/backend": [
+          {
+            id: "ev_001",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary:
+              "build.gradle에서 Java 21, Spring Boot 4.1, Spring Data JPA, Spring Security OAuth2 Client, PostgreSQL, Flyway와 Testcontainers 의존성이 관찰되었습니다.",
+            source: "build.gradle",
+          },
+          {
+            id: "ev_002",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary:
+              "README에서 기술 구성, GitHub OAuth 설정, 로컬 실행, 환경 변수, Swagger, 저장소 조회 API와 포트폴리오 평가 흐름이 관찰되었습니다.",
+            source: "README.md",
+          },
+          {
+            id: "ev_003",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary:
+              "src/test 아래에서 분석 수집기, 요청 조립기, 응답 Validator, HTTP Client 등을 대상으로 한 테스트 파일 15개가 관찰되었습니다.",
+            source: "src/test/java",
+          },
+          {
+            id: "ev_004",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary:
+              "compose.yml에서 PostgreSQL 17 컨테이너, healthcheck와 영속 볼륨 구성이 관찰되었습니다.",
+            source: "compose.yml",
+          },
+          {
+            id: "ev_005",
+            depth: "P0",
+            type: "BACKEND_DERIVED",
+            summary:
+              "고정된 snapshot의 수집 대상 파일 트리에서 .github/workflows의 Workflow 파일이 관찰되지 않았습니다. 실제 부재를 뜻하지 않습니다.",
+            source: "snapshot file tree",
+          },
+          {
+            id: "ev_006",
+            depth: "P1",
+            type: "GITHUB_ACTIVITY",
+            summary:
+              "커밋 0f33058에서 P1 Evidence 수집기, 활동 영향도 정책, AI 요청 조립기와 AI 응답 Validator의 변경이 관찰되었습니다. 이는 활동 범위 후보이며 개인 기여도나 숙련도를 뜻하지 않습니다.",
+            source: "commit 0f33058",
+          },
+          {
+            id: "ev_007",
+            depth: "P2",
+            type: "CODE_EVIDENCE",
+            summary:
+              "P1EvidenceCollector.java 113~153행에서 PR을 영향도 기준으로 제한해 선택하고, 제한 초과 Warning과 PR Evidence를 생성하는 흐름이 직접 관찰되었습니다. 판단 범위는 이 코드 구간으로 제한됩니다.",
+            source: "P1EvidenceCollector.java:113-153",
+          },
+          {
+            id: "ev_008",
+            depth: "P2",
+            type: "CODE_EVIDENCE",
+            summary:
+              "AiAnalysisResponseValidator.java 47~60행에서 요청의 Repository, Evidence, UserClaim ID 집합을 구성하고 사용 깊이·저장소·코칭 참조를 순차 검증하는 흐름이 직접 관찰되었습니다.",
+            source: "AiAnalysisResponseValidator.java:47-60",
+          },
+        ],
+        "congraduation-team/congraduation-backend": [
+          {
+            id: "ev_009",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary:
+              "build.gradle에서 Java 21, Spring Boot 3.3, Spring Data JPA, MySQL, Apache POI, Jsoup와 Spring Boot Test 의존성이 관찰되었습니다.",
+            source: "build.gradle",
+          },
+          {
+            id: "ev_010",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary:
+              "README에서 문제 정의, 핵심 기능, 기술 스택, 아키텍처, 실행 방법, 테스트 명령, 주요 API와 프로젝트 구조가 관찰되었습니다.",
+            source: "README.md",
+          },
+          {
+            id: "ev_011",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary:
+              "src/test에서 졸업요건 정책, 로드맵, 인증, ABEEK, 파서 및 서비스에 대한 테스트 파일들이 관찰되었습니다.",
+            source: "src/test/java",
+          },
+          {
+            id: "ev_012",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary: "docker-compose.yml에서 로컬 MySQL 실행 구성이 관찰되었습니다.",
+            source: "docker-compose.yml",
+          },
+          {
+            id: "ev_013",
+            depth: "P0",
+            type: "GITHUB_STATIC",
+            summary:
+              ".github/workflows/deploy.yml에서 main push 시 Java 21 환경에서 bootJar를 빌드하고 EC2로 전송한 뒤 서비스를 재시작하는 Workflow가 관찰되었습니다. 해당 Workflow는 테스트를 제외하고 빌드합니다.",
+            source: ".github/workflows/deploy.yml",
+          },
+          {
+            id: "ev_014",
+            depth: "P1",
+            type: "GITHUB_ACTIVITY",
+            summary:
+              "커밋 8c8f619에서 2021학번 공통교양 필수 정책과 대응 테스트의 동시 변경이 관찰되었습니다. 이는 활동 범위 후보이며 개인 기여도나 숙련도를 뜻하지 않습니다.",
+            source: "commit 8c8f619",
+          },
+          {
+            id: "ev_015",
+            depth: "P2",
+            type: "CODE_EVIDENCE",
+            summary:
+              "BalancedLiberalCoursePolicyService.java 34~43행에서 2021학번에 적용할 공통교양 필수 과목 목록이 상수로 분리되어 직접 관찰되었습니다. 판단 범위는 이 코드 구간으로 제한됩니다.",
+            source: "BalancedLiberalCoursePolicyService.java:34-43",
+          },
+          {
+            id: "ev_016",
+            depth: "P2",
+            type: "CODE_EVIDENCE",
+            summary:
+              "GraduationProgressServiceTest.java 891~936행에서 2021학번 학생과 8개 공통교양 이수 데이터를 구성하고 추출 결과를 검증하는 테스트 사례가 직접 관찰되었습니다.",
+            source: "GraduationProgressServiceTest.java:891-936",
+          },
+        ],
+      };
+
+      const cardTypes = [
+        ["highlight", "확인된 어필 포인트"],
+        ["improvement", "보완 제안"],
+        ["interview_question", "예상 면접 질문"],
+      ];
+
+      function refsHtml(refs) {
+        return refs.map((ref) => `<span class="ref">${ref}</span>`).join("");
+      }
+
+      function depthCounts(evidence) {
+        return ["P0", "P1", "P2"]
+          .map((depth) => `<span class="badge">${depth} · ${evidence.filter((item) => item.depth === depth).length}</span>`)
+          .join("");
+      }
+
+      function evidenceHtml(repositoryName, evidence) {
+        return `
+          <article class="card evidence-shell" data-repository="${repositoryName}">
+            <button class="evidence-toggle" type="button" aria-expanded="false" onclick="toggleEvidence(this)">
+              <span>Backend 전달 Evidence 전체 보기</span>
+              <span class="toggle-arrow">⌄</span>
+            </button>
+            <div class="evidence-content">
+              <div class="evidence-filter" aria-label="Evidence 깊이 필터">
+                <button class="filter-button active" type="button" onclick="filterEvidence(this, 'ALL')">전체</button>
+                <button class="filter-button" type="button" onclick="filterEvidence(this, 'P0')">P0</button>
+                <button class="filter-button" type="button" onclick="filterEvidence(this, 'P1')">P1</button>
+                <button class="filter-button" type="button" onclick="filterEvidence(this, 'P2')">P2</button>
+              </div>
+              <div class="evidence-list">
+                ${evidence
+                  .map(
+                    (item) => `
+                      <div class="evidence-item" data-depth="${item.depth}">
+                        <div class="evidence-id">
+                          <span class="ref">${item.id}</span>
+                          <span class="depth ${item.depth.toLowerCase()}">${item.depth}</span>
+                        </div>
+                        <div class="evidence-text">
+                          <p>${item.summary}</p>
+                          <code>${item.type} · ${item.source}</code>
+                        </div>
+                      </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      function repositoryHtml(repository, index) {
+        const evidence = evidenceByRepository[repository.repository_full_name];
+        const sectionId = `repo-${index + 1}`;
+        return `
+          <section id="${sectionId}" class="report-section" aria-labelledby="${sectionId}-title">
+            <div class="section-heading">
+              <div>
+                <div class="section-label"><span class="section-number">0${index + 1}</span> REPOSITORY REPORT</div>
+                <h2 id="${sectionId}-title">Repository별 평가</h2>
+                <p>${repository.repository_full_name}</p>
+              </div>
+              <div class="depth-counts">${depthCounts(evidence)}</div>
+            </div>
+
+            <article class="card repo-cover" data-index="0${index + 1}">
+              <div class="repo-cover-main">
+                <span class="source-tag">Gemini 응답 원문</span>
+                <h3>${repository.repository_full_name}</h3>
+                <p class="repo-summary">${repository.summary.content}</p>
+                <div class="refs">${refsHtml(repository.summary.evidence_refs)}</div>
+              </div>
+              <aside class="repo-cover-side" aria-label="분석 범위">
+                <div class="scope-stat"><span>Evidence</span><strong>${evidence.length}</strong></div>
+                <div class="scope-stat"><span>최대 깊이</span><strong>P2</strong></div>
+                <div class="scope-stat"><span>Gemini 결과</span><strong>4</strong></div>
+              </aside>
+            </article>
+
+            <div class="story-grid">
+              ${cardTypes
+                .map(
+                  ([key, label]) => `
+                    <article class="card story-card ${key === "interview_question" ? "interview" : key}">
+                      <span class="story-kind">${label}</span>
+                      <p class="story-content">${repository[key].content}</p>
+                      <div class="refs">${refsHtml(repository[key].evidence_refs)}</div>
+                    </article>
+                  `,
+                )
+                .join("")}
+            </div>
+
+            ${evidenceHtml(repository.repository_full_name, evidence)}
+          </section>
+        `;
+      }
+
+      document.querySelector("#repository-reports").innerHTML = report.repositories
+        .map(repositoryHtml)
+        .join("");
+
+      document.querySelector("#representative-repository").textContent = report.representative_repository;
+      document.querySelector("#representative-reason").textContent = report.representative_reason.content;
+      document.querySelector("#representative-refs").innerHTML = refsHtml(
+        report.representative_reason.evidence_refs,
+      );
+      document.querySelector("#limitation-text").textContent = report.limitation;
+      document.querySelector("#comparison-grid").innerHTML = report.repositories
+        .map(
+          (repository) => `
+            <article class="card comparison-card">
+              <h4>${repository.repository_full_name}</h4>
+              <p>${repository.summary.content}</p>
+            </article>
+          `,
+        )
+        .join("");
+
+      function toggleEvidence(button) {
+        const shell = button.closest(".evidence-shell");
+        const isOpen = shell.classList.toggle("open");
+        button.setAttribute("aria-expanded", String(isOpen));
+      }
+
+      function toggleAllEvidence(open) {
+        document.querySelectorAll(".evidence-shell").forEach((shell) => {
+          shell.classList.toggle("open", open);
+          shell.querySelector(".evidence-toggle").setAttribute("aria-expanded", String(open));
+        });
+        document.querySelector("#repo-1").scrollIntoView({ behavior: "smooth" });
+      }
+
+      function filterEvidence(button, depth) {
+        const shell = button.closest(".evidence-shell");
+        shell.querySelectorAll(".filter-button").forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        shell.querySelectorAll(".evidence-item").forEach((item) => {
+          item.hidden = depth !== "ALL" && item.dataset.depth !== depth;
+        });
+      }
+    </script>
+  </body>
+</html>
