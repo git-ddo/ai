@@ -1,5 +1,8 @@
 from app.services.analysis_service import PortfolioAnalysisAssembler
-from app.services.criterion_assignment_service import CriterionAssignmentService
+from app.services.criterion_assignment_service import (
+    CriterionAssignmentService,
+    CriterionContextRepairHint,
+)
 from app.services.criterion_context_service import (
     CriterionContextError,
     CriterionContextService,
@@ -14,6 +17,7 @@ from app.services.statement_service import PortfolioStatementService
 
 __all__ = [
     "CriterionAssignmentService",
+    "CriterionContextRepairHint",
     "CriterionContextError",
     "CriterionContextService",
     "CriterionEvidenceContext",

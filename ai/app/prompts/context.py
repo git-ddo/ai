@@ -84,6 +84,10 @@ def build_evidence_criterion_rules() -> str:
         (
             "- 각 생성 항목은 인용한 모든 evidence_refs와 claim_refs를 허용하는 "
             "criterionContexts의 context_id를 criterion_context_refs에 반환한다.",
+            "- 한 생성 항목이 복수 Criterion의 의미를 함께 다루면 인용한 모든 참조를 "
+            "포괄하는 Criterion Context ID의 합집합을 criterion_context_refs에 반환한다.",
+            "- 필요한 Criterion Context 합집합을 확실히 선택할 수 없으면 서로 다른 "
+            "Criterion의 내용을 하나의 항목에 섞지 않고 Criterion별 항목으로 분리한다.",
             "- criterionKey를 생성하거나 수정하지 않는다. 서비스가 검증된 "
             "criterion_context_refs로부터 criterionKey를 주입한다.",
             "- 선택한 각 Criterion Context는 생성 항목이 실제 인용한 Evidence 또는 "

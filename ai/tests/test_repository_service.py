@@ -28,7 +28,7 @@ from app.domain import (
 from app.llm import GenerationMetadata, StructuredGeneration
 from app.llm.provider import GenerationCall
 from app.prompts import PromptContextError
-from app.services import RepositoryAnalysisService
+from app.services import CriterionContextService, RepositoryAnalysisService
 from tests.provider_drafts import project_provider_result
 
 
@@ -315,6 +315,37 @@ async def test_regenerates_once_after_reference_policy_failure() -> None:
     assert result.value == corrected
     assert provider.call_count == 2
     assert "UNKNOWN_EVIDENCE_REF" in provider.calls[1].user_prompt
+
+
+@pytest.mark.asyncio
+async def test_correction_prompt_identifies_context_needed_by_outside_evidence() -> None:
+    context = make_context(AnalysisDepth.P1)
+    p0_evidence = context.evidence[0]
+    invalid_content = "문서와 활동 의미를 섞은 이전 생성 문장"
+    invalid = make_analysis(
+        context,
+        content=invalid_content,
+        evidence_ref=p0_evidence.evidence_id,
+    )
+    corrected = make_analysis(context)
+    provider = SequencedProvider([generation(invalid), generation(corrected)])
+
+    result = await RepositoryAnalysisService(provider).analyze(context, (context,))
+
+    assert result.value == corrected
+    correction_prompt = provider.calls[1].user_prompt
+    contexts = CriterionContextService().build(
+        (context,),
+        CriteriaLoader().load("BACKEND", AnalysisDepth.P1.value),
+    )
+    context_ids = {item.criterion_key: item.context_id for item in contexts}
+    assert '"field_path":"summary.evidence_refs"' in correction_prompt
+    assert f'"outside_evidence_refs":["{p0_evidence.evidence_id}"]' in correction_prompt
+    assert f'"selected_context_refs":["{context_ids["ACTIVITY_SCOPE"]}"]' in correction_prompt
+    assert (
+        f'"{p0_evidence.evidence_id}":["{context_ids["TECH_STACK_EVIDENCE"]}"]' in correction_prompt
+    )
+    assert invalid_content not in correction_prompt
 
 
 @pytest.mark.asyncio

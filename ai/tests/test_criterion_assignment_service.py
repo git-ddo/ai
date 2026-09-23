@@ -21,7 +21,11 @@ from app.domain import (
     RepositoryAnalysisDraft,
     RepresentativeProject,
 )
-from app.services import CriterionAssignmentService, CriterionContextService
+from app.services import (
+    CriterionAssignmentService,
+    CriterionContextRepairHint,
+    CriterionContextService,
+)
 from app.validators import PolicyViolationCode
 from tests.test_repository_service import make_context
 
@@ -93,13 +97,31 @@ def test_rejects_evidence_outside_selected_context_without_rewriting() -> None:
         (context_ids["ACTIVITY_SCOPE"],),
     )
 
+    assignment = CriterionAssignmentService()
     with pytest.raises(ReportPolicyError) as exc_info:
-        CriterionAssignmentService().assign_repository(draft, contexts)
+        assignment.assign_repository(draft, contexts)
 
     assert exc_info.value.violations[0].code is (
         PolicyViolationCode.CRITERION_CONTEXT_EVIDENCE_MISMATCH
     )
     assert draft.summary.criterion_context_refs == (context_ids["ACTIVITY_SCOPE"],)
+    assert assignment.build_repository_repair_hints(
+        draft,
+        contexts,
+        exc_info.value.violations,
+    ) == (
+        CriterionContextRepairHint(
+            field_path="summary.evidence_refs",
+            selected_context_refs=(context_ids["ACTIVITY_SCOPE"],),
+            outside_evidence_refs=(repository.evidence[0].evidence_id,),
+            eligible_context_refs_by_evidence=(
+                (
+                    repository.evidence[0].evidence_id,
+                    (context_ids["TECH_STACK_EVIDENCE"],),
+                ),
+            ),
+        ),
+    )
 
 
 def test_rejects_unknown_and_unused_contexts_explicitly() -> None:

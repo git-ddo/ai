@@ -20,7 +20,7 @@ from app.prompts.context import (
 from app.validators.report_validator import PolicyViolationCode
 
 if TYPE_CHECKING:
-    from app.services import CriterionEvidenceContext
+    from app.services import CriterionContextRepairHint, CriterionEvidenceContext
 
 _REPOSITORY_TASK_TEMPLATE = """
 BACKEND × ENTRY × {analysis_depth} 범위에서 제공된 Repository 하나의 RepositoryAnalysis를 생성한다.
@@ -77,6 +77,7 @@ _CORRECTION_TASK_TEMPLATE = """
 
 이전 생성 결과가 다음 정책 위반 코드로 거절되었다.
 {violation_codes}
+{criterion_context_repair_guidance}
 
 - 이전 결과를 수정하거나 일부 항목을 삭제하지 않는다.
 - 입력 Evidence와 UserClaim만 사용해 RepositoryAnalysis 전체를 처음부터 다시 생성한다.
@@ -120,8 +121,9 @@ def build_repository_correction_prompt(
     violation_codes: Sequence[PolicyViolationCode],
     *,
     criterion_contexts: Sequence[CriterionEvidenceContext] | None = None,
+    criterion_repair_hints: Sequence[CriterionContextRepairHint] = (),
 ) -> str:
-    """Build a full-regeneration prompt using only stable policy codes."""
+    """Build a full-regeneration prompt with safe Criterion mismatch IDs."""
 
     if context.analysis_depth is not criteria.analysis_depth:
         raise PromptContextError(
@@ -135,6 +137,9 @@ def build_repository_correction_prompt(
     task = _CORRECTION_TASK_TEMPLATE.format(
         base_task=_build_repository_task(context, criteria),
         violation_codes="\n".join(f"- {code.value}" for code in unique_codes),
+        criterion_context_repair_guidance=_build_criterion_context_repair_guidance(
+            criterion_repair_hints
+        ),
     )
     return "\n\n".join(
         (
@@ -146,6 +151,41 @@ def build_repository_correction_prompt(
                 ),
             ),
             render_section(TASK_SECTION, task),
+        )
+    )
+
+
+def _build_criterion_context_repair_guidance(
+    hints: Sequence[CriterionContextRepairHint],
+) -> str:
+    hint_items = tuple(hints)
+    if not hint_items:
+        return ""
+
+    serialized = serialize_untrusted_data(
+        {
+            "criterion_context_repairs": tuple(
+                {
+                    "field_path": hint.field_path,
+                    "selected_context_refs": hint.selected_context_refs,
+                    "outside_evidence_refs": hint.outside_evidence_refs,
+                    "eligible_context_refs_by_evidence": {
+                        evidence_ref: context_refs
+                        for evidence_ref, context_refs in hint.eligible_context_refs_by_evidence
+                    },
+                }
+                for hint in hint_items
+            )
+        }
+    )
+    return "\n".join(
+        (
+            "다음은 생성 문장을 포함하지 않는 구조화된 Criterion Context 교정 정보이다.",
+            serialized,
+            "- field_path의 항목을 다시 생성할 때 outside_evidence_refs를 유지한다면 "
+            "eligible_context_refs_by_evidence에 표시된 Context를 빠짐없이 선택한다.",
+            "- 하나의 항목에 필요한 Context 합집합을 선택하기 어렵다면 Criterion별 항목으로 "
+            "분리한다.",
         )
     )
 
