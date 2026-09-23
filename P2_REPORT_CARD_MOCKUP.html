@@ -1,0 +1,1320 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Gitddo P2 분석 결과를 카드형 포트폴리오 리포트로 배치한 단일 HTML 시안"
+    />
+    <title>Gitddo · P2 포트폴리오 코칭 리포트</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --canvas: #0d1117;
+        --surface: #161b22;
+        --surface-soft: #1c2128;
+        --surface-raised: #20262e;
+        --border: #30363d;
+        --border-strong: #484f58;
+        --text: #f0f6fc;
+        --text-secondary: #c9d1d9;
+        --muted: #8b949e;
+        --green: #3fb950;
+        --green-bg: rgba(46, 160, 67, 0.12);
+        --blue: #58a6ff;
+        --blue-bg: rgba(56, 139, 253, 0.12);
+        --purple: #bc8cff;
+        --purple-bg: rgba(163, 113, 247, 0.12);
+        --amber: #d29922;
+        --amber-bg: rgba(210, 153, 34, 0.12);
+        --danger: #f85149;
+        --radius: 10px;
+        --shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 78% 2%, rgba(56, 139, 253, 0.08), transparent 25rem),
+          var(--canvas);
+        color: var(--text);
+        font-family:
+          Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .topbar {
+        position: fixed;
+        inset: 0 0 auto;
+        z-index: 30;
+        height: 64px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(22, 27, 34, 0.94);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.28);
+      }
+
+      .topbar-inner {
+        width: min(1200px, calc(100% - 40px));
+        height: 100%;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand-group,
+      .topbar-actions,
+      .user {
+        display: flex;
+        align-items: center;
+      }
+
+      .brand-group {
+        gap: 32px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
+      .brand-mark {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(63, 185, 80, 0.45);
+        border-radius: 9px;
+        background: var(--green-bg);
+      }
+
+      .top-nav {
+        display: flex;
+        align-self: stretch;
+      }
+
+      .top-nav a {
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        border-bottom: 2px solid transparent;
+        color: var(--muted);
+        text-decoration: none;
+        font-weight: 650;
+      }
+
+      .top-nav a.active {
+        border-color: #238636;
+        color: var(--text);
+      }
+
+      .topbar-actions {
+        gap: 18px;
+      }
+
+      .user {
+        gap: 9px;
+        color: var(--text-secondary);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .avatar {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--border-strong);
+        border-radius: 50%;
+        background: #238636;
+        color: white;
+        font-weight: 800;
+      }
+
+      .ghost-button,
+      .primary-button,
+      .copy-button {
+        border: 1px solid var(--border-strong);
+        border-radius: 7px;
+        transition: 160ms ease;
+      }
+
+      .ghost-button {
+        padding: 7px 12px;
+        background: var(--surface);
+        color: var(--text-secondary);
+      }
+
+      .ghost-button:hover {
+        border-color: var(--muted);
+        background: var(--surface-soft);
+      }
+
+      .primary-button {
+        padding: 8px 14px;
+        border-color: rgba(46, 160, 67, 0.7);
+        background: #238636;
+        color: white;
+        font-weight: 700;
+      }
+
+      .primary-button:hover {
+        background: #2ea043;
+      }
+
+      main {
+        width: min(1200px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 104px 0 80px;
+      }
+
+      .breadcrumb {
+        margin-bottom: 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .breadcrumb b {
+        color: var(--text-secondary);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 32px;
+        align-items: end;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .eyebrow,
+      .badges,
+      .refs,
+      .tech-list,
+      .section-kicker {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .eyebrow {
+        margin-bottom: 10px;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 10px;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.17;
+        letter-spacing: -0.04em;
+      }
+
+      .hero-description {
+        max-width: 760px;
+        margin-bottom: 18px;
+        color: var(--muted);
+      }
+
+      .badge,
+      .ref,
+      .tech,
+      .confidence,
+      .depth-chip {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 750;
+      }
+
+      .badge {
+        padding: 4px 9px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-secondary);
+      }
+
+      .badge.green {
+        border-color: rgba(63, 185, 80, 0.35);
+        background: var(--green-bg);
+        color: var(--green);
+      }
+
+      .badge.blue {
+        border-color: rgba(88, 166, 255, 0.35);
+        background: var(--blue-bg);
+        color: var(--blue);
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .section-nav {
+        position: sticky;
+        top: 64px;
+        z-index: 20;
+        display: flex;
+        gap: 3px;
+        margin: 22px 0 26px;
+        padding: 6px;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: rgba(22, 27, 34, 0.96);
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+      }
+
+      .section-nav a {
+        flex: 0 0 auto;
+        padding: 7px 12px;
+        border-radius: 6px;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .section-nav a:hover {
+        background: var(--surface-raised);
+        color: var(--text);
+      }
+
+      .card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .overview-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+        gap: 18px;
+      }
+
+      .overview-copy {
+        padding: 30px;
+      }
+
+      .card-label {
+        margin-bottom: 12px;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+      }
+
+      .overview-copy h2 {
+        max-width: 830px;
+        margin-bottom: 15px;
+        font-size: 22px;
+        line-height: 1.45;
+        letter-spacing: -0.025em;
+      }
+
+      .overview-copy p {
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      .metric-panel {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        overflow: hidden;
+      }
+
+      .metric {
+        min-height: 112px;
+        padding: 22px;
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .metric:nth-child(2n) {
+        border-right: 0;
+      }
+
+      .metric:nth-last-child(-n + 2) {
+        border-bottom: 0;
+      }
+
+      .metric strong {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--text);
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .metric span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .report-section {
+        scroll-margin-top: 126px;
+        margin-top: 42px;
+      }
+
+      .section-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 15px;
+      }
+
+      .section-heading h2 {
+        margin-bottom: 3px;
+        font-size: 20px;
+        letter-spacing: -0.025em;
+      }
+
+      .section-heading p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .depth-grid,
+      .two-column,
+      .three-column {
+        display: grid;
+        gap: 16px;
+      }
+
+      .depth-grid,
+      .three-column {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .two-column {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .depth-card {
+        position: relative;
+        min-height: 235px;
+        padding: 23px;
+        overflow: hidden;
+      }
+
+      .depth-card::after {
+        content: "";
+        position: absolute;
+        inset: auto -26px -42px auto;
+        width: 130px;
+        height: 130px;
+        border: 22px solid currentColor;
+        border-radius: 50%;
+        opacity: 0.045;
+      }
+
+      .depth-card.p0 {
+        color: var(--blue);
+      }
+
+      .depth-card.p1 {
+        color: var(--purple);
+      }
+
+      .depth-card.p2 {
+        color: var(--green);
+      }
+
+      .depth-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+
+      .depth-title strong {
+        color: var(--text);
+        font-size: 16px;
+      }
+
+      .depth-chip {
+        padding: 3px 8px;
+        border: 1px solid currentColor;
+        color: inherit;
+      }
+
+      .depth-card ul,
+      .answer-list,
+      .compact-list {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .depth-card li {
+        margin: 8px 0;
+        color: var(--text-secondary);
+      }
+
+      .tech-list {
+        margin-top: 18px;
+      }
+
+      .tech {
+        padding: 5px 9px;
+        border: 1px solid rgba(88, 166, 255, 0.25);
+        background: var(--blue-bg);
+        color: var(--blue);
+      }
+
+      .finding-card {
+        padding: 23px;
+      }
+
+      .finding-card + .finding-card {
+        margin-top: 12px;
+      }
+
+      .finding-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .finding-kind {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .finding-kind::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 0 0 4px currentColor;
+        opacity: 0.8;
+      }
+
+      .finding-kind.strength {
+        color: var(--green);
+      }
+
+      .finding-kind.action {
+        color: var(--amber);
+      }
+
+      .finding-card p {
+        margin-bottom: 15px;
+        color: var(--text-secondary);
+      }
+
+      .confidence {
+        padding: 3px 8px;
+        border: 1px solid rgba(63, 185, 80, 0.25);
+        background: var(--green-bg);
+        color: var(--green);
+      }
+
+      .confidence.medium {
+        border-color: rgba(210, 153, 34, 0.32);
+        background: var(--amber-bg);
+        color: #e3b341;
+      }
+
+      details {
+        border-top: 1px solid var(--border);
+        padding-top: 12px;
+      }
+
+      summary {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .evidence-detail {
+        margin-top: 12px;
+        padding: 13px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--canvas);
+      }
+
+      .refs {
+        margin-top: 8px;
+      }
+
+      .ref {
+        padding: 3px 7px;
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      code {
+        color: var(--blue);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+      }
+
+      .appeal-card {
+        position: relative;
+        padding: 30px;
+        border-color: rgba(63, 185, 80, 0.35);
+        background:
+          linear-gradient(135deg, rgba(46, 160, 67, 0.14), rgba(56, 139, 253, 0.06)),
+          var(--surface);
+        overflow: hidden;
+      }
+
+      .appeal-card::before {
+        content: "“";
+        position: absolute;
+        top: -24px;
+        right: 26px;
+        color: rgba(63, 185, 80, 0.13);
+        font-family: Georgia, serif;
+        font-size: 154px;
+        line-height: 1;
+      }
+
+      .appeal-card h3 {
+        margin-bottom: 12px;
+        color: var(--green);
+        font-size: 14px;
+      }
+
+      .appeal-card p {
+        position: relative;
+        max-width: 900px;
+        margin-bottom: 18px;
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.65;
+        letter-spacing: -0.02em;
+      }
+
+      .observation-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .observation {
+        display: grid;
+        grid-template-columns: 52px minmax(0, 1fr) auto;
+        gap: 15px;
+        align-items: start;
+        padding: 17px 18px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .observation-index {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: var(--surface-soft);
+        color: var(--blue);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .observation p {
+        margin-bottom: 7px;
+        color: var(--text-secondary);
+      }
+
+      .observation small {
+        display: block;
+        color: var(--muted);
+      }
+
+      .interview-card {
+        overflow: hidden;
+      }
+
+      .question {
+        padding: 26px;
+        border-bottom: 1px solid var(--border);
+        background: var(--canvas);
+      }
+
+      .question-label {
+        display: block;
+        margin-bottom: 10px;
+        color: var(--blue);
+        font-weight: 850;
+      }
+
+      .question h3 {
+        margin-bottom: 0;
+        font-size: 18px;
+        line-height: 1.6;
+      }
+
+      .interview-body {
+        display: grid;
+        grid-template-columns: 0.8fr 1.2fr;
+      }
+
+      .interview-pane {
+        padding: 24px 26px;
+      }
+
+      .interview-pane + .interview-pane {
+        border-left: 1px solid var(--border);
+      }
+
+      .interview-pane h4 {
+        margin: 0 0 10px;
+        color: var(--green);
+        font-size: 13px;
+      }
+
+      .interview-pane p,
+      .answer-list li {
+        color: var(--text-secondary);
+      }
+
+      .answer-list li + li {
+        margin-top: 8px;
+      }
+
+      .follow-up {
+        margin-top: 18px;
+        padding: 14px;
+        border-left: 3px solid var(--purple);
+        border-radius: 0 7px 7px 0;
+        background: var(--purple-bg);
+        color: var(--text-secondary);
+      }
+
+      .statement-card {
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr) auto;
+        gap: 20px;
+        align-items: start;
+        padding: 27px;
+      }
+
+      .statement-type {
+        padding: 6px 10px;
+        border: 1px solid rgba(188, 140, 255, 0.35);
+        border-radius: 7px;
+        background: var(--purple-bg);
+        color: var(--purple);
+        text-align: center;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .statement-copy {
+        margin-bottom: 11px;
+        color: var(--text);
+        font-size: 16px;
+        font-weight: 650;
+        line-height: 1.7;
+      }
+
+      .copy-button {
+        padding: 7px 12px;
+        background: var(--surface-soft);
+        color: var(--text-secondary);
+      }
+
+      .copy-button.copied {
+        border-color: var(--green);
+        color: var(--green);
+      }
+
+      .limitations {
+        padding: 22px 24px;
+        border-color: rgba(210, 153, 34, 0.3);
+        background: var(--amber-bg);
+      }
+
+      .limitations h3 {
+        margin-bottom: 8px;
+        color: #e3b341;
+        font-size: 14px;
+      }
+
+      .limitations p {
+        margin-bottom: 0;
+        color: var(--text-secondary);
+      }
+
+      .source-note {
+        margin-top: 28px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .toast {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 50;
+        padding: 11px 15px;
+        border: 1px solid rgba(63, 185, 80, 0.4);
+        border-radius: 8px;
+        background: #1b4721;
+        color: white;
+        box-shadow: var(--shadow);
+        opacity: 0;
+        transform: translateY(10px);
+        pointer-events: none;
+        transition: 180ms ease;
+      }
+
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      @media (max-width: 900px) {
+        .overview-grid,
+        .depth-grid,
+        .three-column,
+        .two-column,
+        .interview-body {
+          grid-template-columns: 1fr;
+        }
+
+        .interview-pane + .interview-pane {
+          border-top: 1px solid var(--border);
+          border-left: 0;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-actions {
+          justify-content: flex-start;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .topbar-inner,
+        main {
+          width: min(100% - 24px, 1200px);
+        }
+
+        .top-nav,
+        .user span,
+        .ghost-button.top-action {
+          display: none;
+        }
+
+        main {
+          padding-top: 90px;
+        }
+
+        .hero-actions {
+          width: 100%;
+        }
+
+        .hero-actions button {
+          flex: 1;
+        }
+
+        .metric-panel {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .observation {
+          grid-template-columns: 42px minmax(0, 1fr);
+        }
+
+        .observation .confidence {
+          grid-column: 2;
+          justify-self: start;
+        }
+
+        .statement-card {
+          grid-template-columns: 1fr;
+        }
+
+        .copy-button {
+          justify-self: start;
+        }
+      }
+
+      @media print {
+        :root {
+          color-scheme: light;
+        }
+
+        body {
+          background: white;
+          color: #111;
+        }
+
+        .topbar,
+        .section-nav,
+        .hero-actions,
+        .copy-button,
+        .toast {
+          display: none !important;
+        }
+
+        main {
+          width: 100%;
+          padding: 20px;
+        }
+
+        .card,
+        .observation {
+          break-inside: avoid;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand-group">
+          <div class="brand"><span class="brand-mark">🤖</span> Gitddo</div>
+          <nav class="top-nav" aria-label="주요 메뉴">
+            <a href="#overview">대시보드</a>
+            <a href="#overview" class="active">AI 리포트</a>
+            <a href="#evidence">근거</a>
+          </nav>
+        </div>
+        <div class="topbar-actions">
+          <button class="ghost-button top-action" type="button" onclick="window.print()">PDF로 저장</button>
+          <div class="user"><span class="avatar">이</span><span>이주현 (@leevvw)</span></div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="breadcrumb">대시보드 / 분석 기록 / <b>git-ddo/backend</b></div>
+
+      <section class="hero" aria-labelledby="report-title">
+        <div>
+          <div class="eyebrow">Evidence-based portfolio report</div>
+          <h1 id="report-title">AI 포트폴리오 코칭 리포트</h1>
+          <p class="hero-description">
+            공개 GitHub 근거를 P0·P1·P2 깊이로 분석한 결과입니다. 점수나 합격 가능성이 아니라,
+            현재 확인되는 사실과 포트폴리오에서 설명할 수 있는 범위를 보여줍니다.
+          </p>
+          <div class="badges">
+            <span class="badge green">분석 완료</span>
+            <span class="badge">BACKEND</span>
+            <span class="badge">ENTRY</span>
+            <span class="badge blue">P0 + P1 + P2</span>
+            <span class="badge">git-ddo/backend</span>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <button class="ghost-button" type="button" onclick="expandEvidence()">근거 모두 보기</button>
+          <button class="primary-button" type="button" onclick="document.querySelector('#statement').scrollIntoView()">
+            문장 복사하기
+          </button>
+        </div>
+      </section>
+
+      <nav class="section-nav" aria-label="리포트 섹션">
+        <a href="#overview">종합 진단</a>
+        <a href="#depth">분석 범위</a>
+        <a href="#coaching">강점·보완점</a>
+        <a href="#evidence">근거 상세</a>
+        <a href="#interview">면접 대비</a>
+        <a href="#statement">포트폴리오 문장</a>
+      </nav>
+
+      <section id="overview" class="overview-grid" aria-labelledby="overview-title">
+        <article class="card overview-copy">
+          <div class="card-label">전체 진단</div>
+          <h2 id="overview-title">
+            git-ddo/backend 저장소는 Java 21과 Spring Boot 기반의 백엔드 프로젝트로,
+            build.gradle, README.md, compose.yml 및 소스 코드와 테스트 코드가 확인되었습니다.
+          </h2>
+          <p>
+            대표 프로젝트로 선택된 이유는 Java 21, Spring Boot, Spring Data JPA, Docker Compose와
+            테스트 파일이 공개 근거에서 확인되기 때문입니다.
+          </p>
+        </article>
+
+        <aside class="card metric-panel" aria-label="분석 요약 지표">
+          <div class="metric"><strong>1</strong><span>분석 Repository</span></div>
+          <div class="metric"><strong>8</strong><span>참조 Evidence</span></div>
+          <div class="metric"><strong>P2</strong><span>최대 분석 깊이</span></div>
+          <div class="metric"><strong>HIGH</strong><span>종합 근거 직접성</span></div>
+        </aside>
+      </section>
+
+      <section id="depth" class="report-section" aria-labelledby="depth-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="depth-title">분석 범위</h2>
+            <p>P2 결과는 P0와 P1 근거를 누적하여 보여줍니다.</p>
+          </div>
+          <span class="badge green">3개 깊이 모두 사용</span>
+        </div>
+
+        <div class="depth-grid">
+          <article class="card depth-card p0">
+            <div class="depth-title"><strong>프로젝트 구조</strong><span class="depth-chip">P0</span></div>
+            <ul>
+              <li>README에 기술 구성·실행·환경 변수·API 정보 관찰</li>
+              <li>Java 21, Spring Boot, JPA, Security 의존성 관찰</li>
+              <li>테스트 파일 15개와 PostgreSQL Compose 구성 관찰</li>
+              <li>Workflow 파일은 수집 범위에서 관찰되지 않음</li>
+            </ul>
+          </article>
+
+          <article class="card depth-card p1">
+            <div class="depth-title"><strong>개발 활동</strong><span class="depth-chip">P1</span></div>
+            <ul>
+              <li>커밋 <code>0f33058</code>의 변경 경로 관찰</li>
+              <li><code>P1EvidenceCollector.java</code> 변경 확인</li>
+              <li><code>AiAnalysisResponseValidator.java</code> 변경 확인</li>
+              <li>활동 근거를 기여율이나 실력으로 해석하지 않음</li>
+            </ul>
+          </article>
+
+          <article class="card depth-card p2">
+            <div class="depth-title"><strong>코드 구간</strong><span class="depth-chip">P2</span></div>
+            <ul>
+              <li>PR 영향도 제한·Warning·Evidence 생성 흐름 관찰</li>
+              <li>ID 집합·깊이·Repository·참조 검증 흐름 관찰</li>
+              <li>판단 범위는 제공된 두 코드 snippet으로 한정</li>
+              <li>저장소 전체 품질이나 사용자 역량은 판단하지 않음</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="tech-list" aria-label="확인된 기술">
+          <span class="tech">Java 21</span>
+          <span class="tech">Spring Boot</span>
+          <span class="tech">Spring Data JPA</span>
+          <span class="tech">Spring Security</span>
+          <span class="tech">PostgreSQL</span>
+          <span class="tech">Flyway</span>
+          <span class="tech">Testcontainers</span>
+          <span class="tech">Docker Compose</span>
+        </div>
+      </section>
+
+      <section id="coaching" class="report-section" aria-labelledby="coaching-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="coaching-title">강점과 다음 보완점</h2>
+            <p>확인된 근거와 실행 가능한 다음 행동을 분리해 보여줍니다.</p>
+          </div>
+        </div>
+
+        <div class="two-column">
+          <div>
+            <article class="card finding-card">
+              <div class="finding-head">
+                <span class="finding-kind strength">확인된 강점</span>
+                <span class="confidence">HIGH</span>
+              </div>
+              <p>
+                README.md에 기술 구성, 로컬 실행 방법, 환경 변수 및 API 정보가 명시되어 있어
+                프로젝트 구조를 파악하기 용이합니다.
+              </p>
+              <details>
+                <summary>연결된 근거 보기</summary>
+                <div class="evidence-detail">
+                  <code>README.md</code>
+                  <div class="refs"><span class="ref">ev_002</span><span class="ref">README_READINESS</span></div>
+                </div>
+              </details>
+            </article>
+
+            <article class="card finding-card">
+              <div class="finding-head">
+                <span class="finding-kind strength">확인된 강점</span>
+                <span class="confidence">HIGH</span>
+              </div>
+              <p>
+                Flyway, Testcontainers 및 PostgreSQL 설정이 build.gradle과 compose.yml에서 확인되어
+                데이터베이스 관리 및 테스트 환경 구성의 근거를 제공합니다.
+              </p>
+              <details>
+                <summary>연결된 근거 보기</summary>
+                <div class="evidence-detail">
+                  <code>build.gradle · compose.yml</code>
+                  <div class="refs"><span class="ref">ev_001</span><span class="ref">ev_004</span></div>
+                </div>
+              </details>
+            </article>
+          </div>
+
+          <div>
+            <article class="card finding-card">
+              <div class="finding-head">
+                <span class="finding-kind action">다음 보완점 · MEDIUM</span>
+                <span class="confidence medium">MEDIUM</span>
+              </div>
+              <p>
+                고정된 파일 트리에서 GitHub Actions Workflow 파일이 관찰되지 않았으므로,
+                CI/CD 자동화 구성을 문서화하거나 추가할 경우 포트폴리오 설명 범위를 넓힐 수 있습니다.
+              </p>
+              <details>
+                <summary>왜 이 추천이 나왔나요?</summary>
+                <div class="evidence-detail">
+                  <span>수집 범위에서 Workflow가 관찰되지 않았다는 백엔드 파생 근거를 사용했습니다.</span>
+                  <div class="refs"><span class="ref">ev_005</span><span class="ref">GITHUB_ACTIONS_CONFIGURATION</span></div>
+                </div>
+              </details>
+            </article>
+
+            <article class="card finding-card">
+              <div class="finding-head">
+                <span class="finding-kind action">해석 주의</span>
+                <span class="confidence">HIGH</span>
+              </div>
+              <p>
+                “관찰되지 않음”은 실제 부재나 미기여를 뜻하지 않습니다. 현재 Snapshot과 수집 범위에서
+                근거를 확인하지 못했다는 의미로만 사용합니다.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-section" aria-label="직무 어필 포인트">
+        <article class="card appeal-card">
+          <h3>백엔드 직무 어필 포인트</h3>
+          <p>
+            Java와 Spring Boot 기반의 백엔드 서비스 개발에서 데이터베이스 마이그레이션 도구(Flyway)와
+            테스트 격리 구성(Testcontainers)을 활용한 환경 구축 경험을 어필할 수 있습니다.
+          </p>
+          <div class="refs">
+            <span class="ref">ev_001</span><span class="ref">ev_004</span>
+            <span class="confidence">HIGH</span>
+          </div>
+        </article>
+      </section>
+
+      <section id="evidence" class="report-section" aria-labelledby="evidence-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="evidence-title">근거 상세</h2>
+            <p>AI 문장을 실제 파일·활동·코드 구간 근거와 함께 확인합니다.</p>
+          </div>
+          <span class="badge">Evidence 8개</span>
+        </div>
+
+        <div class="observation-list">
+          <article class="observation">
+            <span class="observation-index">P0</span>
+            <div><p>build.gradle에서 Java, Spring Boot, Spring Data JPA, Spring Security, PostgreSQL, Flyway, Testcontainers 의존성이 관찰되었습니다.</p><small><code>build.gradle</code> · ev_001</small></div>
+            <span class="confidence">HIGH</span>
+          </article>
+          <article class="observation">
+            <span class="observation-index">P0</span>
+            <div><p>README.md에서 기술 구성, GitHub OAuth 설정, 로컬 실행, 환경 변수, Swagger, 저장소 조회 API 및 포트폴리오 평가 흐름이 관찰되었습니다.</p><small><code>README.md</code> · ev_002</small></div>
+            <span class="confidence">HIGH</span>
+          </article>
+          <article class="observation">
+            <span class="observation-index">P0</span>
+            <div><p>src/test 아래에서 분석 수집기, 요청 조립기, 응답 Validator 등을 대상으로 한 테스트 파일 15개가 관찰되었습니다.</p><small><code>src/test/java</code> · ev_003</small></div>
+            <span class="confidence">HIGH</span>
+          </article>
+          <article class="observation">
+            <span class="observation-index">P0</span>
+            <div><p>compose.yml에서 PostgreSQL 17 컨테이너와 영속 볼륨 구성이 관찰되었습니다.</p><small><code>compose.yml</code> · ev_004</small></div>
+            <span class="confidence">HIGH</span>
+          </article>
+          <article class="observation">
+            <span class="observation-index">P0</span>
+            <div><p>수집된 파일 트리에서 .github/workflows 경로의 Workflow 파일은 관찰되지 않았습니다.</p><small>BACKEND_DERIVED · ev_005</small></div>
+            <span class="confidence">HIGH</span>
+          </article>
+          <article class="observation">
+            <span class="observation-index">P1</span>
+            <div><p>P1EvidenceCollector.java 및 AiAnalysisResponseValidator.java 파일 등의 변경 내역이 커밋 0f33058에서 관찰되었습니다.</p><small><code>commit 0f33058</code> · ev_006</small></div>
+            <span class="confidence">HIGH</span>
+          </article>
+          <article class="observation">
+            <span class="observation-index">P2</span>
+            <div><p>P1EvidenceCollector.java 코드 구간에서 PR을 영향도 기준으로 제한해 선택하고 Warning과 PR Evidence를 생성하는 흐름이 관찰되었습니다. 본 판단은 제공된 snippet 범위로 한정됩니다.</p><small><code>.../P1EvidenceCollector.java</code> · ev_007</small></div>
+            <span class="confidence">HIGH</span>
+          </article>
+          <article class="observation">
+            <span class="observation-index">P2</span>
+            <div><p>AiAnalysisResponseValidator.java 코드 구간에서 ID 집합 구성 및 사용 깊이·저장소·코칭 참조를 순차 검증하는 흐름이 관찰되었습니다. 본 판단은 제공된 snippet 범위로 한정됩니다.</p><small><code>.../AiAnalysisResponseValidator.java</code> · ev_008</small></div>
+            <span class="confidence">HIGH</span>
+          </article>
+        </div>
+      </section>
+
+      <section id="interview" class="report-section" aria-labelledby="interview-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="interview-title">프로젝트 기반 면접 대비</h2>
+            <p>P2 코드 구간에서 확인되는 구현 흐름을 질문으로 연결했습니다.</p>
+          </div>
+          <span class="badge blue">예상 질문 1개</span>
+        </div>
+
+        <article class="card interview-card">
+          <div class="question">
+            <span class="question-label">Q1 · git-ddo/backend</span>
+            <h3>
+              P1EvidenceCollector 클래스에서 PR을 영향도 기준으로 제한하여 선택하고 Warning 및 PR Evidence를
+              생성하는 흐름이 관찰되는데, 이 코드 구간에서 처리되는 PR 영향도 제한 및 Evidence 생성 로직의
+              구조를 어떻게 설명하시겠습니까?
+            </h3>
+          </div>
+          <div class="interview-body">
+            <div class="interview-pane">
+              <h4>면접관 의도</h4>
+              <p>
+                제공된 P2 코드 snippet 범주 안에서 PR 영향도에 따른 제한 조건 처리와 Evidence 생성 흐름에
+                대한 이해도를 확인하기 위함입니다.
+              </p>
+              <div class="refs"><span class="ref">ev_007</span><span class="ref">P2 snippet</span></div>
+            </div>
+            <div class="interview-pane">
+              <h4>답변에 포함할 내용</h4>
+              <ol class="answer-list">
+                <li>제공된 P1EvidenceCollector.java의 113~153행 snippet 범위 내 흐름</li>
+                <li>PR을 영향도 기준으로 제한하여 선택하는 조건문 또는 관련 메서드 호출 방식</li>
+                <li>제한 초과 시 Warning 처리와 PR Evidence가 생성되는 절차</li>
+              </ol>
+              <div class="follow-up">
+                <strong>꼬리질문</strong><br />
+                해당 snippet에서 PR 영향도를 제한할 때 사용된 조건식이나 임계값 처리는 어떤 방식으로 구현되어 있나요?
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="statement" class="report-section" aria-labelledby="statement-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="statement-title">포트폴리오 문장 초안</h2>
+            <p>근거 참조를 유지한 채 복사해 다듬을 수 있는 문장입니다.</p>
+          </div>
+        </div>
+
+        <article class="card statement-card">
+          <span class="statement-type">PORTFOLIO</span>
+          <div>
+            <p class="statement-copy" id="portfolio-statement">
+              Java 21과 Spring Boot 기반의 백엔드 서비스 개발에서 build.gradle과 compose.yml을 통해
+              PostgreSQL 및 Testcontainers, Flyway 의존성과 컨테이너 실행 환경이 구성되어 있음을 확인했습니다.
+            </p>
+            <div class="refs">
+              <span class="ref">ev_001</span><span class="ref">ev_004</span>
+              <span class="ref">build.gradle</span><span class="ref">compose.yml</span>
+            </div>
+          </div>
+          <button class="copy-button" type="button" onclick="copyStatement(this)">문장 복사</button>
+        </article>
+      </section>
+
+      <section class="report-section" aria-label="분석 한계">
+        <article class="card limitations">
+          <h3>분석 한계 및 주의사항</h3>
+          <p>
+            본 분석은 제공된 P0, P1, P2 Evidence 범위 내에서만 수행되었으며, snippet에 포함되지 않은 코드
+            영역이나 전체 시스템 아키텍처, 성능, 보안, 사용자의 실제 역량은 확인할 수 없습니다.
+          </p>
+        </article>
+      </section>
+
+      <p class="source-note">
+        이 화면은 <code>ai/scripts/smoke_full_report_p2.output.json</code>의 실제 문장을 카드 UI로 배치한 시안입니다.
+        별도의 Narrative AI 문장은 추가하지 않았습니다.
+      </p>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite">포트폴리오 문장을 복사했습니다.</div>
+
+    <script>
+      function expandEvidence() {
+        document.querySelectorAll("details").forEach((detail) => {
+          detail.open = true;
+        });
+        document.querySelector("#evidence").scrollIntoView({ behavior: "smooth" });
+      }
+
+      async function copyStatement(button) {
+        const text = document.querySelector("#portfolio-statement").textContent.replace(/\s+/g, " ").trim();
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (_error) {
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+        }
+
+        button.textContent = "복사 완료";
+        button.classList.add("copied");
+        const toast = document.querySelector("#toast");
+        toast.classList.add("show");
+        window.setTimeout(() => {
+          toast.classList.remove("show");
+          button.textContent = "문장 복사";
+          button.classList.remove("copied");
+        }, 1800);
+      }
+    </script>
+  </body>
+</html>
