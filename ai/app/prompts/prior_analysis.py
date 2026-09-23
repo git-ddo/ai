@@ -76,6 +76,22 @@ def project_repository_analyses(
     return tuple(project_repository_analysis(analysis) for analysis in analyses)
 
 
+def collect_repository_analysis_evidence_refs(
+    analysis: RepositoryAnalysis,
+) -> tuple[str, ...]:
+    """Collect Evidence IDs used by one validated RepositoryAnalysis in stable order."""
+
+    items = (
+        analysis.summary,
+        *analysis.observations,
+        *analysis.strengths,
+        *analysis.recommendations,
+    )
+    return tuple(
+        dict.fromkeys(evidence_ref for item in items for evidence_ref in item.evidence_refs)
+    )
+
+
 def project_portfolio_synthesis(
     synthesis: PortfolioSynthesis,
 ) -> PriorPortfolioSynthesisDTO:
@@ -109,6 +125,7 @@ def _project_grounded_analysis(item: object) -> PriorGroundedAnalysisDTO:
 __all__ = [
     "PriorPortfolioSynthesisDTO",
     "PriorRepositoryAnalysisDTO",
+    "collect_repository_analysis_evidence_refs",
     "project_portfolio_synthesis",
     "project_repository_analyses",
     "project_repository_analysis",
